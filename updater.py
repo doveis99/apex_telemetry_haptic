@@ -133,8 +133,10 @@ def apply_on_exit(source: Path) -> Path:
     script = source.parent / "apply-update.ps1"
     script.write_text(UPDATE_SCRIPT, encoding="utf-8-sig")
     log = source.parent / "apply-update.log"
-    subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+    # CREATE_NO_WINDOW, not DETACHED_PROCESS: powershell.exe without any
+    # console exits before running a line of the script.
+    subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
                       "-File", str(script), "-Source", str(source), "-Target", str(install_dir()),
                       "-Log", str(log)],
-                     creationflags=subprocess.DETACHED_PROCESS)
+                     creationflags=subprocess.CREATE_NO_WINDOW)
     return log

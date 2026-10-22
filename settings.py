@@ -56,7 +56,11 @@ def load_gains(path: Path | None = None) -> Gains:
     data = _read(path)
     for f in fields(Gains):
         if f.name in data:
-            setattr(gains, f.name, type(getattr(gains, f.name))(data[f.name]))
+            current = getattr(gains, f.name)
+            if isinstance(current, dict):  # keep defaults for keys an older config lacks
+                current.update(data[f.name] if isinstance(data[f.name], dict) else {})
+            else:
+                setattr(gains, f.name, type(current)(data[f.name]))
     return gains
 
 

@@ -38,6 +38,14 @@ FRAME_PERIOD = SUBFRAMES / SAMPLE_RATE  # 8 ms
 MAX_SAMPLE = 112  # ASB never exceeds this; keeps headroom below the int8 limit
 ENABLE_DELAY = 0.094
 IDLE_KEEPALIVE_FRAMES = 6
+# The firmware drops the motor route when something else configures the
+# motors (the game or Steam initialising the gamepad as it loads) or when the
+# controller sleeps and re-pairs with the dongle. Realtime writes keep
+# succeeding into the void, so nothing fails and only a fresh start used to
+# recover. Re-send the route while streaming: often during silence, where a
+# hiccup cannot be felt, and rarely while vibrating.
+REASSERT_IDLE_S = 1.0
+REASSERT_ACTIVE_S = 4.0
 
 
 class Route(IntEnum):
@@ -203,6 +211,7 @@ class Apex6:
         self._dev = hid.device()
         self.info: DeviceInfo | None = None
         self._enabled = False
+        self._trigger_mode = DEFAULT_TRIGGER_MODE
 
     def __enter__(self) -> "Apex6":
         try:
@@ -254,10 +263,15 @@ class Apex6:
         raise DeviceUnavailable("컨트롤러 응답 없음 (절전 중이면 버튼을 눌러 깨우세요)")
 
     def enable(self, trigger_mode: int = DEFAULT_TRIGGER_MODE) -> None:
-        for report in motor_enable_reports(trigger_mode):
-            self._write(report)
+        self._trigger_mode = trigger_mode
+        self.reassert()
         self._enabled = True
         time.sleep(ENABLE_DELAY)
+
+    def reassert(self) -> None:
+        """Send the motor route again; harmless when it is still in place."""
+        for report in motor_enable_reports(self._trigger_mode):
+            self._write(report)
 
     def reconfigure(self, trigger_mode: int) -> None:
         if self._enabled:
@@ -288,6 +302,7 @@ class Apex6:
         silent_streak = 0
         start = time.perf_counter()
         deadline = start
+        last_reassert = start
         while max_seconds is None or deadline - start < max_seconds:
             block = render(sample_index)
             if block is None:
@@ -307,6 +322,9 @@ class Apex6:
                 stats.total_write_ms += write_ms
                 stats.max_write_ms = max(stats.max_write_ms, write_ms)
                 stats.frames += 1
+            if now - last_reassert >= (REASSERT_IDLE_S if silent_streak else REASSERT_ACTIVE_S):
+                self.reassert()
+                last_reassert = now
             sample_index += SUBFRAMES
             deadline += FRAME_PERIOD
             remaining = deadline - time.perf_counter()

@@ -5,9 +5,10 @@
                             how launch.py starts it alongside the game
   python gui.py --dry-run   no controller, for testing the window
 
-Sliders and on/off boxes change the running effects immediately; 저장
-writes config.json, which ats_haptics.py also reads. Only one window runs
-at a time; a second launch exits quietly.
+Sliders, on/off boxes and the grip/trigger route boxes change the running
+effects immediately; 저장 writes config.json, which ats_haptics.py also
+reads. Only one window runs at a time; a second launch exits quietly. At
+start it looks for a newer GitHub release and offers it in the top bar.
 """
 
 from __future__ import annotations
@@ -16,14 +17,16 @@ import argparse
 import ctypes
 import threading
 import tkinter as tk
+import webbrowser
 from dataclasses import asdict
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 import plugin_install
+import updater
 from ats_haptics import Runner, run
 from version import __version__
-from effects import TOGGLEABLE, Gains
+from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Gains, route_of
 from gamewatch import GameWatcher
 from settings import load_app_options, load_gains, save_app_options, save_gains
 
@@ -56,6 +59,7 @@ EVENT_SLIDERS = (
     ("shifter", "레인지/스플리터", 0, 200, 100, "%"),
     ("game_events", "게임 알림", 0, 200, 100, "%"),
 )
+ROUTE_LABELS = {GRIP: "그립", TRIGGER: "트리거", BOTH: "둘 다"}
 THRESHOLD_SLIDERS = (
     ("bump_threshold", "요철 감지 기준", 5, 100, 100, "cm/s"),
     ("impact_threshold", "충돌 감지 기준", 4, 40, 1, "m/s²"),
@@ -76,17 +80,24 @@ class App:
         self.meter_values = [0.0, 0.0, 0.0]
         self.slider_vars: dict[str, tuple[tk.DoubleVar, ttk.Label, int, str]] = {}
         self.enabled_vars: dict[str, tk.BooleanVar] = {}
+        self.route_vars: dict[str, tk.StringVar] = {}
         self.save_state = tk.StringVar()  # sliders update it while being built
         self.closed = False
         self.options = load_app_options()
         self.watcher = GameWatcher()  # only while this window is open
         self.last_game: str | None = None
+        # set by background threads, picked up by _poll
+        self.update_release: updater.Release | None = None
+        self.update_progress: float | None = None
+        self.update_ready: Path | None = None
+        self.update_error: str | None = None
 
         title = f"ATS 햅틱 {__version__} - APEX 6 Pro" + (" (dry-run)" if dry_run else "")
         root.title(title + (" · 게임 종료 시 닫힘" if exit_with_game else ""))
         root.resizable(False, False)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         self._build()
+        threading.Thread(target=self._check_update, daemon=True).start()
         self._poll()
 
     # -- layout -----------------------------------------------------------------
@@ -106,6 +117,7 @@ class App:
         ttk.Checkbutton(top, text="게임 감지 시 자동 시작", variable=self.auto_start,
                         command=self._on_auto_start).pack(side="left", padx=(16, 0))
         ttk.Button(top, text="텔레메트리 플러그인…", command=self.open_plugin_dialog).pack(side="right")
+        self.update_button = ttk.Button(top, command=self.update)  # packed once a release is found
         # Status lives in its own bar at the bottom so long messages are not cut off.
         self.status = tk.StringVar(value="정지됨")
 
@@ -186,6 +198,13 @@ class App:
         ttk.Scale(parent, from_=low, to=high, length=220, variable=var,
                   command=lambda _=None, k=key: self._on_slider(k)).grid(row=row, column=2, padx=6, pady=2)
         value_label.grid(row=row, column=3, sticky="w")
+        if key in TOGGLEABLE:
+            route = tk.StringVar(value=ROUTE_LABELS[route_of(self.gains, key)])
+            box = ttk.Combobox(parent, textvariable=route, values=list(ROUTE_LABELS.values()),
+                               state="readonly", width=6)
+            box.grid(row=row, column=4, padx=(0, 6))
+            box.bind("<<ComboboxSelected>>", lambda _=None, k=key: self._on_route(k))
+            self.route_vars[key] = route
         self.slider_vars[key] = (var, value_label, scale, unit)
         self._on_slider(key)
 
@@ -208,6 +227,12 @@ class App:
         if not self.enabled_vars[key].get():
             disabled.append(key)
         self.gains.disabled = sorted(disabled)
+        self._changed()
+
+    def _on_route(self, key: str) -> None:
+        label = self.route_vars[key].get()
+        route = next(r for r, text in ROUTE_LABELS.items() if text == label)
+        self.gains.routes = {**self.gains.routes, key: route}
         self._changed()
 
     def open_plugin_dialog(self) -> None:
@@ -243,6 +268,9 @@ class App:
         for var in self.enabled_vars.values():
             var.set(True)
         self.gains.disabled = []
+        for key, var in self.route_vars.items():
+            var.set(ROUTE_LABELS[DEFAULT_ROUTES[key]])
+        self.gains.routes = dict(DEFAULT_ROUTES)
         self.cylinders.set(defaults.cylinders)
         self._set_cylinders()
 
@@ -291,9 +319,64 @@ class App:
         self.closed = True
         self.root.destroy()
 
+    # -- updates --------------------------------------------------------------
+
+    def _check_update(self) -> None:
+        try:
+            self.update_release = updater.newer_release()
+        except Exception:
+            pass  # offline or rate limited: try again next start
+
+    def update(self) -> None:
+        release = self.update_release
+        notes = release.notes[:600] + ("…" if len(release.notes) > 600 else "")
+        text = f"새 버전 {release.version}이 있습니다 (현재 {__version__}).\n\n{notes}".rstrip()
+        if not updater.can_self_update(release):
+            if messagebox.askyesno("업데이트", text + "\n\n릴리스 페이지를 열까요?"):
+                webbrowser.open(release.page)
+            return
+        if self.watcher.game:
+            messagebox.showinfo("업데이트", "게임이 실행 중입니다. 게임을 끝낸 뒤 업데이트하세요.")
+            return
+        if not messagebox.askyesno("업데이트", text + "\n\n내려받아 설치하고 프로그램을 다시 시작할까요?"):
+            return
+        self.update_button.config(state="disabled")
+        self.update_progress = 0.0
+        threading.Thread(target=self._download_update, args=(release,), daemon=True).start()
+
+    def _download_update(self, release: updater.Release) -> None:
+        try:
+            self.update_ready = updater.download(release, lambda done: setattr(self, "update_progress", done))
+        except Exception as exc:
+            self.update_error = str(exc)
+
+    def _poll_update(self) -> None:
+        release = self.update_release
+        if release and not self.update_button.winfo_ismapped():
+            self.update_button.config(text=f"업데이트 {release.version}")
+            self.update_button.pack(side="right", padx=4)
+        if self.update_error:
+            messagebox.showerror("업데이트", f"업데이트하지 못했습니다: {self.update_error}")
+            self.update_error = self.update_progress = None
+            self.update_button.config(state="normal", text=f"업데이트 {release.version}")
+        elif self.update_ready:
+            source, self.update_ready = self.update_ready, None
+            self.update_button.config(text="설치 중…")
+            self.on_close()
+            if self.closed:
+                updater.apply_on_exit(source)  # copies once this process has exited
+            else:  # save prompt cancelled
+                self.update_progress = None
+                self.update_button.config(state="normal", text=f"업데이트 {release.version}")
+        elif self.update_progress is not None:
+            self.update_button.config(text=f"내려받는 중 {self.update_progress:.0%}")
+
     # -- periodic UI refresh ------------------------------------------------------
 
     def _poll(self) -> None:
+        self._poll_update()
+        if self.closed:
+            return
         running = bool(self.thread and self.thread.is_alive())
         # Auto start on the game appearing, not on every poll, so a manual
         # 정지 holds until the next launch.

@@ -1,7 +1,8 @@
 """Turn telemetry frames into 1 kHz waveforms for the APEX 6 Pro.
 
 Outputs: left grip, right grip and one trigger channel (on this firmware the
-trigger channel always drives both triggers). Telemetry arrives once per 8 ms
+trigger channel always drives both triggers). Each effect is routed to the
+grips, the trigger or both (Gains.routes). Telemetry arrives once per 8 ms
 block; amplitudes are ramped across the block and oscillator phases carry
 over, so parameter changes do not click.
 
@@ -40,6 +41,15 @@ def surface_factor(name: str) -> float:
     return DEFAULT_SURFACE
 
 
+TOGGLEABLE = ("engine", "road", "bumps", "gear", "retarder", "impact", "trigger",
+              "pedal", "squeal", "trailer", "park_brake", "blinker", "engine_start",
+              "shifter", "game_events")
+
+GRIP, TRIGGER, BOTH = "grip", "trigger", "both"
+ROUTES = (GRIP, TRIGGER, BOTH)
+DEFAULT_ROUTES = {name: TRIGGER if name in ("trigger", "pedal", "squeal") else GRIP for name in TOGGLEABLE}
+
+
 @dataclass
 class Gains:
     master: float = 1.0
@@ -66,16 +76,18 @@ class Gains:
     game_events: float = 0.5
     # effects switched off; their gains are kept so switching back restores them
     disabled: list[str] = field(default_factory=list)
+    # effect -> GRIP, TRIGGER or BOTH; missing or unknown entries use DEFAULT_ROUTES
+    routes: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_ROUTES))
 
 
-TOGGLEABLE = ("engine", "road", "bumps", "gear", "retarder", "impact", "trigger",
-              "pedal", "squeal", "trailer", "park_brake", "blinker", "engine_start",
-              "shifter", "game_events")
+def route_of(gains: Gains, name: str) -> str:
+    route = gains.routes.get(name)
+    return route if route in ROUTES else DEFAULT_ROUTES[name]
 
 
 def effective_gains(gains: Gains) -> Gains:
     """The gains the synth should use: disabled effects at zero."""
-    result = replace(gains, disabled=list(gains.disabled))
+    result = replace(gains, disabled=list(gains.disabled), routes=dict(gains.routes))
     for name in gains.disabled:
         if name in TOGGLEABLE:
             setattr(result, name, 0.0)
@@ -181,9 +193,9 @@ class Synth:
         self.squeal_mod = Oscillator()
         self.noise_left = BandNoise(80.0, 1.2, seed=1)
         self.noise_right = BandNoise(80.0, 1.2, seed=2)
-        self.bursts_left: list[Burst] = []
-        self.bursts_right: list[Burst] = []
-        self.bursts_trigger: list[Burst] = []
+        # (effect, side, burst); side "L"/"R" is one grip, "C" both. The
+        # trigger has no sides and takes every burst of an effect routed there.
+        self.bursts: list[tuple[str, str, Burst]] = []
         # previous-block state
         self.prev_amp = {"engine": 0.0, "road_l": 0.0, "road_r": 0.0, "retarder": 0.0,
                          "trigger": 0.0, "squeal": 0.0}
@@ -222,12 +234,8 @@ class Synth:
             threshold = self.g.bump_threshold
             if high > threshold:  # a step in suspension travel: pothole, kerb, joint
                 strength = min(1.0, (high - threshold) / 0.8) * self.g.bumps
-                burst = Burst(freq=60.0, amplitude=strength, decay_s=0.035)
-                if abs(wheel.pos_x) < 0.15:
-                    self.bursts_left.append(burst)
-                    self.bursts_right.append(Burst(60.0, strength, 0.035))
-                else:
-                    (self.bursts_left if side == 0 else self.bursts_right).append(burst)
+                where = "C" if abs(wheel.pos_x) < 0.15 else "LR"[side]
+                self.bursts.append(("bumps", where, Burst(freq=60.0, amplitude=strength, decay_s=0.035)))
         for side in (0, 1):
             value = rough[side] / counts[side] if counts[side] else 0.0
             self.roughness[side] = self.roughness[side] * 0.9 + value * 0.1
@@ -236,8 +244,7 @@ class Synth:
         self.gear_cooldown = max(0.0, self.gear_cooldown - DT)
         if frame.gear != self.prev_gear and frame.gear != 0 and self.gear_cooldown == 0.0:
             strength = 0.7 * self.g.gear
-            self.bursts_left.append(Burst(45.0, strength, 0.03))
-            self.bursts_right.append(Burst(45.0, strength, 0.03))
+            self._both("gear", Burst(45.0, strength, 0.03))
             self.gear_cooldown = 0.15
             self.levels.events.append(f"변속 {frame.gear}단")
         if frame.gear != 0:
@@ -254,8 +261,7 @@ class Synth:
             threshold = self.g.impact_threshold
             if jump > threshold:
                 strength = min(1.0, (jump - threshold) / 30.0 + 0.4) * self.g.impact
-                self.bursts_left.append(Burst(50.0, strength, 0.06))
-                self.bursts_right.append(Burst(50.0, strength, 0.06))
+                self._both("impact", Burst(50.0, strength, 0.06))
                 self.impact_cooldown = 0.3
                 self.levels.events.append(f"충돌 {jump:.0f} m/s²")
         self.prev_accel = frame.accel
@@ -266,9 +272,8 @@ class Synth:
         self.prev_state[key] = value
         return old != value
 
-    def _both(self, burst_factory) -> None:
-        self.bursts_left.append(burst_factory())
-        self.bursts_right.append(burst_factory())
+    def _both(self, effect: str, burst: Burst) -> None:
+        self.bursts.append((effect, "C", burst))
 
     def _state_events(self, frame: Frame) -> None:
         g, log = self.g, self.levels.events
@@ -276,32 +281,32 @@ class Synth:
         for key, value in (("throttle", frame.user_throttle), ("brake", frame.user_brake)):
             floored = value >= 0.97
             if self._changed(f"{key}_floor", floored) and floored and g.pedal:
-                self.bursts_trigger.append(Burst(130.0, 0.8 * g.pedal, 0.012))
+                self._both("pedal", Burst(130.0, 0.8 * g.pedal, 0.012))
                 log.append("페달 바닥")
 
         if self._changed("park_brake", frame.park_brake) and g.park_brake:
             s = g.park_brake
-            self._both(lambda: Burst(90.0, 0.6 * s, 0.012))
+            self._both("park_brake", Burst(90.0, 0.6 * s, 0.012))
             hiss = 0.25 if frame.park_brake else 0.1
-            self._both(lambda: NoiseBurst(250.0, 0.5 * s, hiss, delay_s=0.03))
+            self._both("park_brake", NoiseBurst(250.0, 0.5 * s, hiss, delay_s=0.03))
             log.append("파킹 브레이크 " + ("체결" if frame.park_brake else "해제"))
 
         if self._changed("trailer", frame.trailer_attached) and g.trailer:
             s = g.trailer
             if frame.trailer_attached:
-                self._both(lambda: Burst(40.0, 1.0 * s, 0.08))
+                self._both("trailer", Burst(40.0, 1.0 * s, 0.08))
                 log.append("트레일러 연결")
             else:
-                self._both(lambda: Burst(50.0, 0.6 * s, 0.05))
-                self._both(lambda: NoiseBurst(250.0, 0.4 * s, 0.15, delay_s=0.15))
+                self._both("trailer", Burst(50.0, 0.6 * s, 0.05))
+                self._both("trailer", NoiseBurst(250.0, 0.4 * s, 0.15, delay_s=0.15))
                 log.append("트레일러 분리")
 
         # The lamp flag toggles with every flash; the relay clicks on both edges.
         self.blinker_idle += DT
-        for key, on, bursts in (("blinker_l", frame.blinker_left, self.bursts_left),
-                                ("blinker_r", frame.blinker_right, self.bursts_right)):
+        for key, on, side in (("blinker_l", frame.blinker_left, "L"),
+                              ("blinker_r", frame.blinker_right, "R")):
             if self._changed(key, on) and g.blinker:
-                bursts.append(Burst(160.0, (0.5 if on else 0.3) * g.blinker, 0.006))
+                self.bursts.append(("blinker", side, Burst(160.0, (0.5 if on else 0.3) * g.blinker, 0.006)))
                 if self.blinker_idle > 1.5:
                     log.append("방향지시등 " + ("좌" if key == "blinker_l" else "우"))
                 self.blinker_idle = 0.0
@@ -309,17 +314,17 @@ class Synth:
         if self._changed("engine_on", frame.engine_on) and g.engine_start:
             s = g.engine_start
             if frame.engine_on:
-                self._both(lambda: NoiseBurst(60.0, 0.8 * s, 0.35))
-                self._both(lambda: Burst(35.0, 0.9 * s, 0.25, delay_s=0.25))
+                self._both("engine_start", NoiseBurst(60.0, 0.8 * s, 0.35))
+                self._both("engine_start", Burst(35.0, 0.9 * s, 0.25, delay_s=0.25))
                 log.append("시동")
             else:
-                self._both(lambda: Burst(30.0, 0.7 * s, 0.3))
+                self._both("engine_start", Burst(30.0, 0.7 * s, 0.3))
                 log.append("시동 끔")
 
         for i, toggle in enumerate(frame.shifter_toggle):
             if self._changed(f"shifter_{i}", toggle) and g.shifter:
                 s = g.shifter
-                self._both(lambda: Burst(120.0, 0.5 * s, 0.008))
+                self._both("shifter", Burst(120.0, 0.5 * s, 0.008))
                 log.append("레인지 셀렉터" if i == 0 else "스플리터")
 
         previous = self.prev_state.get("game_events", frozenset())
@@ -327,8 +332,8 @@ class Synth:
         for name in sorted(frame.game_events - previous):
             if g.game_events:
                 s = g.game_events
-                self._both(lambda: Burst(80.0, 0.6 * s, 0.03))
-                self._both(lambda: Burst(80.0, 0.6 * s, 0.03, delay_s=0.12))
+                self._both("game_events", Burst(80.0, 0.6 * s, 0.03))
+                self._both("game_events", Burst(80.0, 0.6 * s, 0.03, delay_s=0.12))
             log.append(GAME_EVENT_LABELS.get(name, name))
 
     def _wheel_lock(self, frame: Frame) -> float:
@@ -404,6 +409,7 @@ class Synth:
                 trigger_amp = g.trigger * (0.2 + 0.6 * frame.user_throttle)
 
         self.lock_clock = (self.lock_clock + DT) % (1.0 / 12.0)  # 12 Hz ABS-like chop
+        routes = {name: route_of(g, name) for name in TOGGLEABLE}
         trigger, left, right = [], [], []
         p = self.prev_amp
         for n in range(SUBFRAMES):
@@ -415,10 +421,14 @@ class Synth:
             tr = p["trigger"] + (trigger_amp - p["trigger"]) * k
             sq = p["squeal"] + (squeal_amp - p["squeal"]) * k
 
+            out = [0.0, 0.0, 0.0]  # left grip, right grip, trigger
             engine = e * (self.engine_osc.next(engine_freq) + 0.3 * self.engine_harm.next(engine_freq * 2))
+            _mix(out, routes["engine"], engine, engine, engine)
             retarder = rt * self.retarder_osc.next(50.0)
-            l = engine + retarder + rl * self.noise_left.next() + sum(b.next() for b in self.bursts_left)
-            r = engine + retarder + rr * self.noise_right.next() + sum(b.next() for b in self.bursts_right)
+            _mix(out, routes["retarder"], retarder, retarder, retarder)
+            # Independent noises: 0.7 keeps their sum near one side's strength.
+            noise_l, noise_r = rl * self.noise_left.next(), rr * self.noise_right.next()
+            _mix(out, routes["road"], noise_l, noise_r, 0.7 * (noise_l + noise_r))
 
             if trigger_mode == "brake" and lock > 0:
                 chop = 1.0 if self.lock_clock < 1.0 / 24.0 else 0.0
@@ -429,18 +439,21 @@ class Synth:
                 t = tr * pulse * self.trigger_osc.next(100.0)
             else:
                 t = tr * self.trigger_osc.next(100.0)
+            _mix(out, routes["trigger"], t, t, t)
             if sq:
                 wobble = 0.6 + 0.4 * self.squeal_mod.next(5.0)
-                t += sq * wobble * self.squeal_osc.next(230.0)
-            t += sum(b.next() for b in self.bursts_trigger)
+                squeal = sq * wobble * self.squeal_osc.next(230.0)
+                _mix(out, routes["squeal"], squeal, squeal, squeal)
+            for effect, side, burst in self.bursts:
+                b = burst.next()
+                _mix(out, routes[effect], 0.0 if side == "R" else b, 0.0 if side == "L" else b, b)
 
-            left.append(self._out(l, self.g.grip_level))
-            right.append(self._out(r, self.g.grip_level))
-            trigger.append(self._out(t, self.g.trigger_level))
+            left.append(self._out(out[0], self.g.grip_level))
+            right.append(self._out(out[1], self.g.grip_level))
+            trigger.append(self._out(out[2], self.g.trigger_level))
         self.prev_amp = {"engine": engine_amp, "road_l": road_l, "road_r": road_r,
                          "retarder": retarder_amp, "trigger": trigger_amp, "squeal": squeal_amp}
-        for bursts in (self.bursts_left, self.bursts_right, self.bursts_trigger):
-            bursts[:] = [b for b in bursts if not b.done]
+        self.bursts = [entry for entry in self.bursts if not entry[2].done]
 
         lv = self.levels
         lv.engine, lv.road_left, lv.road_right = engine_amp, road_l, road_r
@@ -453,3 +466,12 @@ class Synth:
         # Soft limit so stacked effects saturate smoothly instead of clipping;
         # never exceeds MAX_SAMPLE.
         return math.tanh(x * self.g.master * channel_level) * MAX_SAMPLE
+
+
+def _mix(out: list[float], route: str, left: float, right: float, trigger: float) -> None:
+    """Add one effect's sample to the channels its route selects."""
+    if route != TRIGGER:
+        out[0] += left
+        out[1] += right
+    if route != GRIP:
+        out[2] += trigger

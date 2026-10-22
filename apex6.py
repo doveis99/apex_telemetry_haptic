@@ -183,7 +183,21 @@ def find_path() -> bytes:
     for entry in hid.enumerate(VENDOR_ID, PRODUCT_ID):
         if entry["usage_page"] == USAGE_PAGE:
             return entry["path"]
+    if _steam_overlay_loaded():
+        raise DeviceUnavailable("컨트롤러 안 보임: Steam이 실행한 프로세스라 Steam Input이 패드를 숨김 "
+                                "(창을 따로 실행하거나 게임의 Steam Input 끄기)")
     raise DeviceUnavailable("컨트롤러 없음 (유선/2.4G 동글 연결, 전원 확인)")
+
+
+def _steam_overlay_loaded() -> bool:
+    """True inside a process Steam injected its overlay into (see app.launch)."""
+    try:
+        import ctypes
+        get_module = ctypes.windll.kernel32.GetModuleHandleW
+        get_module.restype = ctypes.c_void_p
+        return bool(get_module("gameoverlayrenderer64.dll"))
+    except (AttributeError, OSError):
+        return False
 
 
 @dataclass

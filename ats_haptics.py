@@ -176,7 +176,9 @@ def run(runner: Runner, dry_run: bool = False,
                 deadline = time.perf_counter() + RETRY_S
                 while not runner.finished and time.perf_counter() < deadline:
                     time.sleep(0.1)
-                continue
+                if runner.watcher is None or runner.watcher.game:
+                    continue
+                runner.game_ended = True  # quit without ever reaching the pad
         if on_connected:
             on_connected(None)
         if not runner.game_ended or exit_with_game:

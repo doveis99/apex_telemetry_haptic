@@ -23,9 +23,32 @@ def _window_command() -> list[str]:
     return [str(pythonw if pythonw.is_file() else sys.executable), str(here / "app.py"), *WINDOW_FLAGS]
 
 
+def _start_outside_steam(command: list[str]) -> bool:
+    """Start command through WMI so it is not a child of this process.
+
+    Steam injects its overlay into the launch-option process and everything
+    it starts. With Steam Input on for the game, the overlay hides the
+    controller's HID interfaces from those processes, so a window started
+    as our child never finds the pad. A WMI-created process sits outside
+    that tree.
+    """
+    line = subprocess.list2cmdline(command).replace("'", "''")
+    folder = str(Path(command[0]).parent).replace("'", "''")
+    script = (f"$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments "
+              f"@{{CommandLine='{line}'; CurrentDirectory='{folder}'}}; exit $r.ReturnValue")
+    try:
+        result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                                creationflags=subprocess.CREATE_NO_WINDOW, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
 def launch(game_command: list[str]) -> int:
     """Start the window detached, then run the game so Steam keeps tracking it."""
-    subprocess.Popen(_window_command(), creationflags=subprocess.DETACHED_PROCESS)
+    command = _window_command()
+    if not _start_outside_steam(command):
+        subprocess.Popen(command, creationflags=subprocess.DETACHED_PROCESS)
     if not game_command:
         return 0
     return subprocess.call(game_command)

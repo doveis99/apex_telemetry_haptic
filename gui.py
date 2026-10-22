@@ -610,6 +610,10 @@ def main(argv: list[str] | None = None) -> None:
     dark_title_bar(root)
     if args.autostart:
         app.start()
+    # Started via WMI (app.launch), a fixed-size Tk window shrinks to its
+    # title bar when restored from minimized; a minimum size keeps it whole.
+    root.update_idletasks()
+    root.minsize(root.winfo_reqwidth(), root.winfo_reqheight())
     if args.minimized:
         root.iconify()
     else:

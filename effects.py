@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE, SUBFRAMES, Block, Route
 from telemetry import Frame
@@ -62,6 +62,22 @@ class Gains:
     engine_start: float = 0.8
     shifter: float = 0.5
     game_events: float = 0.5
+    # effects switched off; their gains are kept so switching back restores them
+    disabled: list[str] = field(default_factory=list)
+
+
+TOGGLEABLE = ("engine", "road", "bumps", "gear", "retarder", "impact", "trigger",
+              "pedal", "squeal", "trailer", "park_brake", "blinker", "engine_start",
+              "shifter", "game_events")
+
+
+def effective_gains(gains: Gains) -> Gains:
+    """The gains the synth should use: disabled effects at zero."""
+    result = replace(gains, disabled=list(gains.disabled))
+    for name in gains.disabled:
+        if name in TOGGLEABLE:
+            setattr(result, name, 0.0)
+    return result
 
 
 GAME_EVENT_LABELS = {"delivered": "배송 완료", "fined": "벌금", "tollgate": "톨게이트",

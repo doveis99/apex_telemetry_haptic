@@ -167,12 +167,15 @@ def _parse_device_info(data: Sequence[int]) -> DeviceInfo | None:
     return DeviceInfo(device_type=frame[5], connection_mode=frame[6], features=frame[29])
 
 
+class DeviceUnavailable(RuntimeError):
+    """Controller absent, asleep or disconnected; worth retrying later."""
+
+
 def find_path() -> bytes:
     for entry in hid.enumerate(VENDOR_ID, PRODUCT_ID):
         if entry["usage_page"] == USAGE_PAGE:
             return entry["path"]
-    raise RuntimeError("APEX 6 vendor interface (usage page 0xFFA0) not found. "
-                       "Is the controller connected by cable or 2.4 GHz dongle?")
+    raise DeviceUnavailable("컨트롤러 없음 (유선/2.4G 동글 연결, 전원 확인)")
 
 
 @dataclass
@@ -202,36 +205,53 @@ class Apex6:
         self._enabled = False
 
     def __enter__(self) -> "Apex6":
-        self._dev.open_path(find_path())
-        self.info = self.identify()
+        try:
+            self._dev.open_path(find_path())
+        except OSError as exc:
+            raise DeviceUnavailable(f"컨트롤러를 열 수 없음 ({exc})") from exc
+        try:
+            self.info = self.identify()
+        except BaseException:
+            self._dev.close()
+            raise
         return self
 
     def __exit__(self, *exc) -> None:
         try:
             if self._enabled:
                 self.disable()
+        except (DeviceUnavailable, OSError):
+            pass  # unplugged mid-session: nothing left to mute
         finally:
             self._dev.close()
 
     def _write(self, report: bytes) -> None:
-        if self._dev.write(report) < 0:
-            raise RuntimeError(f"HID write failed: {self._dev.error()}")
+        try:
+            written = self._dev.write(report)
+        except OSError as exc:
+            raise DeviceUnavailable(f"컨트롤러 연결 끊김 ({exc})") from exc
+        if written < 0:
+            raise DeviceUnavailable(f"컨트롤러 연결 끊김 ({self._dev.error()})")
 
     def identify(self, timeout: float = 0.6) -> DeviceInfo:
         # Drop stale input before the exchange. cython-hidapi treats a 0 ms
         # timeout as "block forever", so poll with 1 ms instead.
-        for _ in range(128):
-            if not self._dev.read(64, 1):
-                break
-        self._write(build_command(CMD_GET_INFO))
-        deadline = time.perf_counter() + timeout
-        while time.perf_counter() < deadline:
-            data = self._dev.read(64, 50)
-            if data and (info := _parse_device_info(data)):
-                if not info.is_pro:
-                    raise RuntimeError(f"Not an APEX 6 Pro (device type 0x{info.device_type:02X})")
-                return info
-        raise RuntimeError("No identity reply from the APEX 6 vendor interface")
+        try:
+            for _ in range(128):
+                if not self._dev.read(64, 1):
+                    break
+            self._write(build_command(CMD_GET_INFO))
+            deadline = time.perf_counter() + timeout
+            while time.perf_counter() < deadline:
+                data = self._dev.read(64, 50)
+                if data and (info := _parse_device_info(data)):
+                    if not info.is_pro:
+                        raise RuntimeError(f"APEX 6 Pro가 아님 (device type 0x{info.device_type:02X})")
+                    return info
+        except OSError as exc:
+            raise DeviceUnavailable(f"컨트롤러 연결 끊김 ({exc})") from exc
+        # The 2.4 GHz dongle stays enumerated while the controller sleeps.
+        raise DeviceUnavailable("컨트롤러 응답 없음 (절전 중이면 버튼을 눌러 깨우세요)")
 
     def enable(self, trigger_mode: int = DEFAULT_TRIGGER_MODE) -> None:
         for report in motor_enable_reports(trigger_mode):

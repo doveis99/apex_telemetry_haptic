@@ -1,26 +1,31 @@
 """Live tuning window for the ATS -> APEX 6 Pro haptics.
 
   pythonw gui.py            normal use (or double-click start_gui.cmd)
+  pythonw gui.py --autostart --exit-with-game --minimized
+                            how launch.py starts it alongside the game
   python gui.py --dry-run   no controller, for testing the window
 
-Sliders change the running effects immediately; 저장 writes config.json,
-which ats_haptics.py also reads.
+Sliders and on/off boxes change the running effects immediately; 저장
+writes config.json, which ats_haptics.py also reads. Only one window runs
+at a time; a second launch exits quietly.
 """
 
 from __future__ import annotations
 
 import argparse
+import ctypes
 import threading
 import tkinter as tk
 from dataclasses import asdict
 from tkinter import messagebox, ttk
 
 from ats_haptics import Runner, run
-from effects import Gains
+from effects import TOGGLEABLE, Gains
 from settings import load_gains, save_gains
 
 POLL_MS = 100
 METER_DECAY = 0.8
+INSTANCE_MUTEX = "Local\\ApexAtsHapticsGui"
 
 # key, label, slider min, slider max, slider units per gain unit, unit text
 EFFECT_SLIDERS = (
@@ -50,9 +55,10 @@ THRESHOLD_SLIDERS = (
 
 
 class App:
-    def __init__(self, root: tk.Tk, dry_run: bool) -> None:
+    def __init__(self, root: tk.Tk, dry_run: bool = False, exit_with_game: bool = False) -> None:
         self.root = root
         self.dry_run = dry_run
+        self.exit_with_game = exit_with_game
         self.gains = load_gains()
         self.saved = asdict(self.gains)
         self.runner: Runner | None = None
@@ -61,10 +67,12 @@ class App:
         self.connected: str | None = None
         self.meter_values = [0.0, 0.0, 0.0]
         self.slider_vars: dict[str, tuple[tk.DoubleVar, ttk.Label, int, str]] = {}
+        self.enabled_vars: dict[str, tk.BooleanVar] = {}
         self.save_state = tk.StringVar()  # sliders update it while being built
-        self.timing_text: str | None = None
+        self.closed = False
 
-        root.title("ATS 햅틱 - APEX 6 Pro" + (" (dry-run)" if dry_run else ""))
+        title = "ATS 햅틱 - APEX 6 Pro" + (" (dry-run)" if dry_run else "")
+        root.title(title + (" · 게임 종료 시 닫힘" if exit_with_game else ""))
         root.resizable(False, False)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         self._build()
@@ -77,14 +85,14 @@ class App:
         top = ttk.Frame(self.root)
         top.grid(row=0, column=0, columnspan=2, sticky="ew", **pad)
         self.source = tk.StringVar(value="game")
-        ttk.Radiobutton(top, text="ATS 게임", variable=self.source, value="game").pack(side="left")
-        ttk.Radiobutton(top, text="시뮬레이션", variable=self.source, value="sim").pack(side="left", padx=(6, 12))
+        ttk.Radiobutton(top, text="ATS/ETS2 게임", variable=self.source, value="game").pack(side="left")
+        ttk.Radiobutton(top, text="테스트 주행", variable=self.source, value="sim").pack(side="left", padx=(6, 12))
         self.start_button = ttk.Button(top, text="시작", command=self.start)
         self.start_button.pack(side="left")
         self.stop_button = ttk.Button(top, text="정지", command=self.stop, state="disabled")
         self.stop_button.pack(side="left", padx=4)
+        # Status lives in its own bar at the bottom so long messages are not cut off.
         self.status = tk.StringVar(value="정지됨")
-        ttk.Label(top, textvariable=self.status, width=42).pack(side="left", padx=8)
 
         left = ttk.Frame(self.root)
         left.grid(row=1, column=0, sticky="nsew", **pad)
@@ -124,11 +132,11 @@ class App:
         thresholds.pack(fill="x", pady=(8, 0))
         for row, spec in enumerate(THRESHOLD_SLIDERS):
             self._slider(thresholds, row, *spec)
-        ttk.Label(thresholds, text="엔진 기통 수", width=12).grid(row=len(THRESHOLD_SLIDERS), column=0,
+        ttk.Label(thresholds, text="엔진 기통 수", width=15).grid(row=len(THRESHOLD_SLIDERS), column=1,
                                                               sticky="w", padx=6)
         self.cylinders = tk.IntVar(value=self.gains.cylinders)
         ttk.Spinbox(thresholds, from_=4, to=12, increment=2, width=5, textvariable=self.cylinders,
-                    command=self._set_cylinders).grid(row=len(THRESHOLD_SLIDERS), column=1, sticky="w", padx=6)
+                    command=self._set_cylinders).grid(row=len(THRESHOLD_SLIDERS), column=2, sticky="w", padx=6)
 
         log = ttk.LabelFrame(right, text="이벤트")
         log.pack(fill="both", expand=True, pady=(8, 0))
@@ -143,37 +151,54 @@ class App:
         self.timing = tk.StringVar()
         ttk.Label(bottom, textvariable=self.timing).pack(side="right")
 
+        status_bar = ttk.Frame(self.root, relief="sunken", padding=(6, 3))
+        status_bar.grid(row=3, column=0, columnspan=2, sticky="ew")
+        ttk.Label(status_bar, textvariable=self.status, anchor="w", wraplength=1100).pack(fill="x")
+
     def _slider(self, parent: ttk.Frame, row: int, key: str, label: str,
                 low: int, high: int, scale: int, unit: str) -> None:
-        ttk.Label(parent, text=label, width=12).grid(row=row, column=0, sticky="w", padx=6)
+        if key in TOGGLEABLE:
+            enabled = tk.BooleanVar(value=key not in self.gains.disabled)
+            ttk.Checkbutton(parent, variable=enabled,
+                            command=lambda k=key: self._on_toggle(k)).grid(row=row, column=0, padx=(6, 0))
+            self.enabled_vars[key] = enabled
+        ttk.Label(parent, text=label, width=15).grid(row=row, column=1, sticky="w", padx=6)
         var = tk.DoubleVar(value=getattr(self.gains, key) * scale)
         value_label = ttk.Label(parent, width=9)
         ttk.Scale(parent, from_=low, to=high, length=220, variable=var,
-                  command=lambda _=None, k=key: self._on_slider(k)).grid(row=row, column=1, padx=6, pady=2)
-        value_label.grid(row=row, column=2, sticky="w")
+                  command=lambda _=None, k=key: self._on_slider(k)).grid(row=row, column=2, padx=6, pady=2)
+        value_label.grid(row=row, column=3, sticky="w")
         self.slider_vars[key] = (var, value_label, scale, unit)
         self._on_slider(key)
 
     # -- controls -------------------------------------------------------------
+
+    def _changed(self) -> None:
+        if self.runner:
+            self.runner.apply(self.gains)
+        self.save_state.set("" if asdict(self.gains) == self.saved else "변경됨 (저장 안 됨)")
 
     def _on_slider(self, key: str) -> None:
         var, label, scale, unit = self.slider_vars[key]
         value = round(var.get())
         setattr(self.gains, key, value / scale)
         label.config(text=f"{value} {unit}")
-        self._update_save_state()
+        self._changed()
+
+    def _on_toggle(self, key: str) -> None:
+        disabled = [name for name in self.gains.disabled if name != key]
+        if not self.enabled_vars[key].get():
+            disabled.append(key)
+        self.gains.disabled = sorted(disabled)
+        self._changed()
 
     def _set_cylinders(self) -> None:
         self.gains.cylinders = int(self.cylinders.get())
-        self._update_save_state()
-
-    def _update_save_state(self) -> None:
-        self.save_state.set("" if asdict(self.gains) == self.saved else "변경됨 (저장 안 됨)")
+        self._changed()
 
     def save(self) -> None:
         save_gains(self.gains)
         self.saved = asdict(self.gains)
-        self._update_save_state()
         self.save_state.set("저장됨")
 
     def reset(self) -> None:
@@ -181,6 +206,9 @@ class App:
         for key, (var, _, scale, _) in self.slider_vars.items():
             var.set(getattr(defaults, key) * scale)
             self._on_slider(key)
+        for var in self.enabled_vars.values():
+            var.set(True)
+        self.gains.disabled = []
         self.cylinders.set(defaults.cylinders)
         self._set_cylinders()
 
@@ -198,16 +226,18 @@ class App:
 
     def _worker(self, runner: Runner) -> None:
         try:
-            stats = run(runner, dry_run=self.dry_run, on_connected=self._on_connected)
-            if stats:
-                self.timing_text = f"지연 프레임 {stats.late_frames} / 최대 {stats.max_lateness_ms:.1f} ms"
+            run(runner, dry_run=self.dry_run, on_connected=self._on_connected,
+                exit_with_game=self.exit_with_game)
         except Exception as exc:  # shown in the status line
             self.error = str(exc)
         finally:
             runner.close()
 
-    def _on_connected(self, name: str) -> None:
+    def _on_connected(self, name: str | None) -> None:
         self.connected = name
+        stats = self.runner.last_stats if self.runner else None
+        if name is None and stats:
+            self.timing.set(f"지난 세션: 지연 프레임 {stats.late_frames} / 최대 {stats.max_lateness_ms:.1f} ms")
 
     def stop(self) -> None:
         if self.runner:
@@ -223,6 +253,7 @@ class App:
         self.stop()
         if self.thread:
             self.thread.join(timeout=2.0)  # lets the controller release its motors
+        self.closed = True
         self.root.destroy()
 
     # -- periodic UI refresh ------------------------------------------------------
@@ -231,7 +262,7 @@ class App:
         running = bool(self.thread and self.thread.is_alive())
         runner = self.runner
         if running and runner:
-            device = self.connected or ("컨트롤러 없음" if self.dry_run else "연결 중…")
+            device = self.connected or ("컨트롤러 없음" if self.dry_run else "컨트롤러 미사용")
             self.status.set(f"{device} · {runner.state or '시작 중'}")
             self._refresh(runner)
         else:
@@ -244,8 +275,11 @@ class App:
             self.meter_values = [0.0, 0.0, 0.0]
             for bar in self.meters:
                 bar["value"] = 0
-        if self.timing_text:
-            self.timing.set(self.timing_text)
+            if runner and runner.game_ended and self.exit_with_game:
+                self.exit_with_game = False  # ask at most once if the save prompt is cancelled
+                self.on_close()
+                if self.closed:
+                    return
         self.root.after(POLL_MS, self._poll)
 
     def _refresh(self, runner: Runner) -> None:
@@ -269,13 +303,32 @@ class App:
         self.info["accel"].set(f"{runner.take_max_accel():.1f} m/s²")
 
 
+def _claim_single_instance() -> object | None:
+    """Hold a named mutex; None if another window already holds it."""
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateMutexW.restype = ctypes.c_void_p
+    handle = kernel32.CreateMutexW(None, False, INSTANCE_MUTEX)
+    if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
+        return None
+    return handle
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true", help="run without the controller")
+    parser.add_argument("--autostart", action="store_true", help="start the game session immediately")
+    parser.add_argument("--exit-with-game", action="store_true", help="close the window when the game quits")
+    parser.add_argument("--minimized", action="store_true", help="open minimized")
     args = parser.parse_args()
+    if _claim_single_instance() is None:
+        return
     root = tk.Tk()
     root.option_add("*Font", ("Malgun Gothic", 10))
-    App(root, dry_run=args.dry_run)
+    app = App(root, dry_run=args.dry_run, exit_with_game=args.exit_with_game)
+    if args.autostart:
+        app.start()
+    if args.minimized:
+        root.iconify()
     root.mainloop()
 
 

@@ -32,8 +32,16 @@ Python 3.12, Windows에서 테스트했습니다. 컨트롤러는 유선 또는 
 
 실행 전에 **xHaptics Engine을 끄세요.** 같은 모터에 출력해서 섞입니다.
 
-- **튜닝 UI:** `start_gui.cmd` 더블클릭 (또는 `.venv\Scripts\pythonw.exe gui.py`). 슬라이더는 주행 중 즉시 반영되고, "저장"하면 `config.json`에 기록됩니다.
-- **명령줄:** `python ats_haptics.py --monitor` (게임 대기 후 자동 연결), `--simulate`로 게임 없이 40초 시나리오 주행.
+- **튜닝 UI:** `start_gui.cmd` 더블클릭 (또는 `.venv\Scripts\pythonw.exe gui.py`). 슬라이더와 체크박스(효과별 켜기/끄기)는 주행 중 즉시 반영되고, "저장"하면 `config.json`에 기록됩니다. "테스트 주행"은 게임 없이 40초 시나리오를 컨트롤러로 재생합니다.
+- **게임과 함께 실행 (Steam):** ATS/ETS2 속성 → 실행 옵션에 아래를 넣으면 게임을 켤 때 창이 최소화 상태로 함께 뜨고, 게임을 끄면 같이 닫힙니다. 상주 프로그램은 없습니다.
+
+  ```
+  "C:\Users\thdwl\Documents\apex_telemetry_haptic\.venv\Scripts\pythonw.exe" "C:\Users\thdwl\Documents\apex_telemetry_haptic\launch.py" %command%
+  ```
+
+  기존 실행 옵션(예: `-nointro`)은 `%command%` 뒤에 붙입니다. 창이 이미 열려 있으면 두 번째 창은 뜨지 않습니다.
+- **컨트롤러 점유:** 프로그램이 켜져 있어도 ATS/ETS2 프로세스가 있을 때만 컨트롤러를 열고, 게임이 끝나면 놓습니다(2초 간격 확인).
+- **명령줄:** `python ats_haptics.py --monitor`, `--simulate`(테스트 주행), `--exit-with-game`.
 - **진단:** `python tone.py probe | tone | sweep | walk | route-test | diag`
 
 ## 출처

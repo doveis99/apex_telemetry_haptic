@@ -63,7 +63,7 @@ class Runner:
         now = time.perf_counter()
         if frame is None:
             problem = getattr(self.source, "problem", None)
-            self._set_state(f"텔레메트리 없음: {problem} → '플러그인' 버튼으로 설치" if problem
+            self._set_state(f"텔레메트리 없음: {problem} → '텔레메트리 플러그인…'에서 설치" if problem
                             else "텔레메트리 대기 중 (게임 로딩 중이거나 플러그인 없음)")
             return None
         if frame.render_time != self._last_render_time:

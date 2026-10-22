@@ -42,7 +42,6 @@ _FIELDS = {
     "park_brake": (1566, "?"),
     "motor_brake": (1567, "?"),
     "engine_on": (1576, "?"),
-    "wipers": (1577, "?"),
     "blinker_left": (1580, "?"),  # lamp state, toggles with each flash
     "blinker_right": (1581, "?"),
     "accel_x": (1892, "f"),
@@ -99,7 +98,6 @@ class Frame:
     accel: tuple[float, float, float] = (0.0, 0.0, 0.0)
     wheels: list[Wheel] = field(default_factory=list)
     air_pressure: float = 120.0
-    wipers: bool = False
     blinker_left: bool = False
     blinker_right: bool = False
     shifter_toggle: tuple[bool, bool] = (False, False)
@@ -187,7 +185,7 @@ class SharedMemoryTelemetry:
             engine_on=values["engine_on"], motor_brake=values["motor_brake"], park_brake=values["park_brake"],
             accel=(values["accel_x"], values["accel_y"], values["accel_z"]),
             wheels=wheels,
-            air_pressure=values["air_pressure"], wipers=values["wipers"],
+            air_pressure=values["air_pressure"],
             blinker_left=values["blinker_left"], blinker_right=values["blinker_right"],
             shifter_toggle=arrays["shifter_toggle"],
             trailer_attached=any(
@@ -206,7 +204,7 @@ class SimulatedTelemetry:
 
     Events: engine start 0.8 s, trailer coupled 2 s, park brake released
     4.5 s, throttle floored 5-7 s, splitter 10 s / 12 s, left blinker
-    15-22 s, wipers 22-28 s, brake squeal near the stop ~31.5 s, tollgate
+    15-22 s, brake squeal near the stop ~31.5 s, tollgate
     34 s, park brake set 37 s.
     """
 
@@ -253,7 +251,6 @@ class SimulatedTelemetry:
         frame.park_brake = t < 4.5 or t >= 37.0
         frame.shifter_toggle = (False, 10.0 <= t < 12.0)
         frame.blinker_left = 15.0 <= t < 22.0 and int(t / 0.4) % 2 == 0
-        frame.wipers = 22.0 <= t < 28.0
         frame.game_events = frozenset({"tollgate"}) if 34.0 <= t < 34.5 else frozenset()
         if not frame.engine_on:
             frame.rpm = 0.0

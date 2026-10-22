@@ -59,7 +59,6 @@ class Gains:
     trailer: float = 0.9
     park_brake: float = 0.7
     blinker: float = 0.5
-    wipers: float = 0.3
     engine_start: float = 0.8
     shifter: float = 0.5
     game_events: float = 0.5
@@ -171,7 +170,6 @@ class Synth:
         self.prev_amp = {"engine": 0.0, "road_l": 0.0, "road_r": 0.0, "retarder": 0.0,
                          "trigger": 0.0, "squeal": 0.0}
         self.prev_state: dict[str, object] = {}
-        self.wiper_clock = 0.0
         self.blinker_idle = 0.0
         self.prev_deflection: list[float] = []
         self.deflection_rate_avg: list[float] = []
@@ -289,17 +287,6 @@ class Synth:
                 if self.blinker_idle > 1.5:
                     log.append("방향지시등 " + ("좌" if key == "blinker_l" else "우"))
                 self.blinker_idle = 0.0
-
-        if frame.wipers and g.wipers:
-            if self._changed("wipers", True):
-                self.wiper_clock = 1.2  # first sweep soon after switching on
-            self.wiper_clock += DT
-            if self.wiper_clock >= 1.4:
-                self.wiper_clock = 0.0
-                s = g.wipers
-                self._both(lambda: Burst(70.0, 0.5 * s, 0.04))
-        else:
-            self._changed("wipers", False)
 
         if self._changed("engine_on", frame.engine_on) and g.engine_start:
             s = g.engine_start

@@ -5,8 +5,8 @@
                             how launch.py starts it alongside the game
   python gui.py --dry-run   no controller, for testing the window
 
-Sliders, on/off boxes and the grip/trigger route boxes change the running
-effects immediately; 저장 writes config.json, which ats_haptics.py also
+Sliders, on/off boxes and the 그립/트리거 destination toggles change the
+running effects immediately; 저장 writes config.json, which ats_haptics.py also
 reads. Only one window runs at a time; a second launch exits quietly. At
 start it looks for a newer GitHub release and offers it in the top bar.
 """
@@ -59,7 +59,8 @@ EVENT_SLIDERS = (
     ("shifter", "레인지/스플리터", 0, 200, 100, "%"),
     ("game_events", "게임 알림", 0, 200, 100, "%"),
 )
-ROUTE_LABELS = {GRIP: "그립", TRIGGER: "트리거", BOTH: "둘 다"}
+# destination toggle colours when lit: grips blue, trigger orange
+GRIP_COLOR, TRIGGER_COLOR = "#93c5fd", "#fdba74"
 THRESHOLD_SLIDERS = (
     ("bump_threshold", "요철 감지 기준", 5, 100, 100, "cm/s"),
     ("impact_threshold", "충돌 감지 기준", 4, 40, 1, "m/s²"),
@@ -80,7 +81,7 @@ class App:
         self.meter_values = [0.0, 0.0, 0.0]
         self.slider_vars: dict[str, tuple[tk.DoubleVar, ttk.Label, int, str]] = {}
         self.enabled_vars: dict[str, tk.BooleanVar] = {}
-        self.route_vars: dict[str, tk.StringVar] = {}
+        self.route_vars: dict[str, tuple[tk.BooleanVar, tk.BooleanVar]] = {}  # grip, trigger
         self.save_state = tk.StringVar()  # sliders update it while being built
         self.closed = False
         self.options = load_app_options()
@@ -125,11 +126,13 @@ class App:
         left.grid(row=1, column=0, sticky="nsew", **pad)
         effects = ttk.LabelFrame(left, text="주행 효과")
         effects.pack(fill="x")
-        for row, spec in enumerate(EFFECT_SLIDERS):
+        self._route_header(effects)
+        for row, spec in enumerate(EFFECT_SLIDERS, start=1):
             self._slider(effects, row, *spec)
         events = ttk.LabelFrame(left, text="이벤트 효과")
         events.pack(fill="x", pady=(8, 0))
-        for row, spec in enumerate(EVENT_SLIDERS):
+        self._route_header(events)
+        for row, spec in enumerate(EVENT_SLIDERS, start=1):
             self._slider(events, row, *spec)
 
         right = ttk.Frame(self.root)
@@ -199,14 +202,20 @@ class App:
                   command=lambda _=None, k=key: self._on_slider(k)).grid(row=row, column=2, padx=6, pady=2)
         value_label.grid(row=row, column=3, sticky="w")
         if key in TOGGLEABLE:
-            route = tk.StringVar(value=ROUTE_LABELS[route_of(self.gains, key)])
-            box = ttk.Combobox(parent, textvariable=route, values=list(ROUTE_LABELS.values()),
-                               state="readonly", width=6)
-            box.grid(row=row, column=4, padx=(0, 6))
-            box.bind("<<ComboboxSelected>>", lambda _=None, k=key: self._on_route(k))
-            self.route_vars[key] = route
+            pair = (tk.BooleanVar(), tk.BooleanVar())
+            for column, (text, color, toggle) in enumerate((("그립", GRIP_COLOR, pair[0]),
+                                                           ("트리거", TRIGGER_COLOR, pair[1])), start=4):
+                tk.Checkbutton(parent, text=text, variable=toggle, indicatoron=False, width=6, bd=1,
+                               selectcolor=color, cursor="hand2",
+                               command=lambda k=key: self._on_route(k)).grid(
+                    row=row, column=column, padx=(0, 6 if column == 5 else 2), pady=2)
+            self.route_vars[key] = pair
+            self._show_route(key)
         self.slider_vars[key] = (var, value_label, scale, unit)
         self._on_slider(key)
+
+    def _route_header(self, parent: ttk.Frame) -> None:
+        ttk.Label(parent, text="진동 위치", foreground="gray40").grid(row=0, column=4, columnspan=2, pady=(2, 0))
 
     # -- controls -------------------------------------------------------------
 
@@ -227,13 +236,24 @@ class App:
         if not self.enabled_vars[key].get():
             disabled.append(key)
         self.gains.disabled = sorted(disabled)
+        self._show_route(key)
         self._changed()
 
+    def _show_route(self, key: str) -> None:
+        """Light the toggles for where the effect goes now; none while it is off."""
+        grip, trigger = self.route_vars[key]
+        route = route_of(self.gains, key) if key not in self.gains.disabled else None
+        grip.set(route in (GRIP, BOTH))
+        trigger.set(route in (TRIGGER, BOTH))
+
     def _on_route(self, key: str) -> None:
-        label = self.route_vars[key].get()
-        route = next(r for r, text in ROUTE_LABELS.items() if text == label)
-        self.gains.routes = {**self.gains.routes, key: route}
-        self._changed()
+        grip, trigger = (var.get() for var in self.route_vars[key])
+        # Both toggles off switches the effect off and keeps its last route,
+        # so turning it back on restores where it went.
+        self.enabled_vars[key].set(grip or trigger)
+        if grip or trigger:
+            self.gains.routes = {**self.gains.routes, key: BOTH if grip and trigger else GRIP if grip else TRIGGER}
+        self._on_toggle(key)
 
     def open_plugin_dialog(self) -> None:
         PluginDialog(self.root)
@@ -268,9 +288,9 @@ class App:
         for var in self.enabled_vars.values():
             var.set(True)
         self.gains.disabled = []
-        for key, var in self.route_vars.items():
-            var.set(ROUTE_LABELS[DEFAULT_ROUTES[key]])
         self.gains.routes = dict(DEFAULT_ROUTES)
+        for key in self.route_vars:
+            self._show_route(key)
         self.cylinders.set(defaults.cylinders)
         self._set_cylinders()
 

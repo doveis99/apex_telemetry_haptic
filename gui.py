@@ -17,26 +17,34 @@ import ctypes
 import threading
 import tkinter as tk
 from dataclasses import asdict
-from tkinter import messagebox, ttk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
 
+import plugin_install
 from ats_haptics import Runner, run
+from version import __version__
 from effects import TOGGLEABLE, Gains
-from settings import load_gains, save_gains
+from gamewatch import GameWatcher
+from settings import load_app_options, load_gains, save_app_options, save_gains
 
 POLL_MS = 100
 METER_DECAY = 0.8
 INSTANCE_MUTEX = "Local\\ApexAtsHapticsGui"
 
 # key, label, slider min, slider max, slider units per gain unit, unit text
-EFFECT_SLIDERS = (
+OUTPUT_SLIDERS = (
     ("master", "전체", 0, 150, 100, "%"),
+    ("grip_level", "그립", 0, 150, 100, "%"),
+    ("trigger_level", "트리거", 0, 150, 100, "%"),
+)
+EFFECT_SLIDERS = (
     ("engine", "엔진", 0, 200, 100, "%"),
     ("road", "노면", 0, 200, 100, "%"),
     ("bumps", "요철", 0, 200, 100, "%"),
     ("gear", "변속", 0, 200, 100, "%"),
     ("retarder", "리타더", 0, 200, 100, "%"),
     ("impact", "충돌", 0, 200, 100, "%"),
-    ("trigger", "트리거", 0, 100, 100, "%"),
+    ("trigger", "엑셀/브레이크", 0, 100, 100, "%"),
 )
 EVENT_SLIDERS = (
     ("pedal", "페달 바닥", 0, 200, 100, "%"),
@@ -70,8 +78,11 @@ class App:
         self.enabled_vars: dict[str, tk.BooleanVar] = {}
         self.save_state = tk.StringVar()  # sliders update it while being built
         self.closed = False
+        self.options = load_app_options()
+        self.watcher = GameWatcher()  # only while this window is open
+        self.last_game: str | None = None
 
-        title = "ATS 햅틱 - APEX 6 Pro" + (" (dry-run)" if dry_run else "")
+        title = f"ATS 햅틱 {__version__} - APEX 6 Pro" + (" (dry-run)" if dry_run else "")
         root.title(title + (" · 게임 종료 시 닫힘" if exit_with_game else ""))
         root.resizable(False, False)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -91,6 +102,10 @@ class App:
         self.start_button.pack(side="left")
         self.stop_button = ttk.Button(top, text="정지", command=self.stop, state="disabled")
         self.stop_button.pack(side="left", padx=4)
+        self.auto_start = tk.BooleanVar(value=self.options.auto_start_on_game)
+        ttk.Checkbutton(top, text="게임 감지 시 자동 시작", variable=self.auto_start,
+                        command=self._on_auto_start).pack(side="left", padx=(16, 0))
+        ttk.Button(top, text="텔레메트리 플러그인…", command=self.open_plugin_dialog).pack(side="right")
         # Status lives in its own bar at the bottom so long messages are not cut off.
         self.status = tk.StringVar(value="정지됨")
 
@@ -108,13 +123,16 @@ class App:
         right = ttk.Frame(self.root)
         right.grid(row=1, column=1, sticky="nsew", **pad)
 
-        meters = ttk.LabelFrame(right, text="출력")
-        meters.pack(fill="x")
+        output = ttk.LabelFrame(right, text="출력 세기")
+        output.pack(fill="x")
+        for row, spec in enumerate(OUTPUT_SLIDERS):
+            self._slider(output, row, *spec)
+        ttk.Separator(output).grid(row=len(OUTPUT_SLIDERS), column=0, columnspan=4, sticky="ew", pady=4)
         self.meters = []
-        for row, label in enumerate(("왼쪽 그립", "오른쪽 그립", "트리거")):
-            ttk.Label(meters, text=label, width=10).grid(row=row, column=0, sticky="w", padx=6, pady=2)
-            bar = ttk.Progressbar(meters, length=200, maximum=100)
-            bar.grid(row=row, column=1, padx=6, pady=2)
+        for row, label in enumerate(("왼쪽 그립", "오른쪽 그립", "트리거"), start=len(OUTPUT_SLIDERS) + 1):
+            ttk.Label(output, text=label, width=15).grid(row=row, column=1, sticky="w", padx=6, pady=2)
+            bar = ttk.Progressbar(output, length=220, maximum=100)
+            bar.grid(row=row, column=2, padx=6, pady=2)
             self.meters.append(bar)
 
         info = ttk.LabelFrame(right, text="텔레메트리")
@@ -192,6 +210,22 @@ class App:
         self.gains.disabled = sorted(disabled)
         self._changed()
 
+    def open_plugin_dialog(self) -> None:
+        PluginDialog(self.root)
+
+    def check_plugins(self) -> None:
+        """At startup: open the plugin dialog if no installed game can feed telemetry."""
+        games = plugin_install.find_games()
+        if games and not any(game.compatible for game in games):
+            self.status.set("호환되는 텔레메트리 플러그인이 없습니다 → '텔레메트리 플러그인…'")
+            self.open_plugin_dialog()
+
+    def _on_auto_start(self) -> None:
+        # An app option, not a tuning value: saved right away.
+        self.options.auto_start_on_game = self.auto_start.get()
+        save_app_options(self.options)
+        self.last_game = None  # a game that is already running counts as newly detected
+
     def _set_cylinders(self) -> None:
         self.gains.cylinders = int(self.cylinders.get())
         self._changed()
@@ -253,6 +287,7 @@ class App:
         self.stop()
         if self.thread:
             self.thread.join(timeout=2.0)  # lets the controller release its motors
+        self.watcher.close()
         self.closed = True
         self.root.destroy()
 
@@ -260,6 +295,14 @@ class App:
 
     def _poll(self) -> None:
         running = bool(self.thread and self.thread.is_alive())
+        # Auto start on the game appearing, not on every poll, so a manual
+        # 정지 holds until the next launch.
+        game = self.watcher.game
+        if game and not self.last_game and self.auto_start.get() and not running:
+            self.source.set("game")
+            self.start()
+            running = True
+        self.last_game = game
         runner = self.runner
         if running and runner:
             device = self.connected or ("컨트롤러 없음" if self.dry_run else "컨트롤러 미사용")
@@ -303,6 +346,69 @@ class App:
         self.info["accel"].set(f"{runner.take_max_accel():.1f} m/s²")
 
 
+class PluginDialog:
+    """Lists ATS/ETS2 installs with their telemetry plugin and installs the bundled one."""
+
+    def __init__(self, parent: tk.Tk) -> None:
+        self.top = tk.Toplevel(parent)
+        self.top.title("텔레메트리 플러그인")
+        self.top.resizable(False, False)
+        self.top.transient(parent)
+        self.games = plugin_install.find_games()
+        self.body = ttk.Frame(self.top, padding=10)
+        self.body.pack(fill="both")
+        self._render()
+
+    def _render(self) -> None:
+        for child in self.body.winfo_children():
+            child.destroy()
+        ttk.Label(self.body, text="진동은 게임의 텔레메트리 플러그인(RenCloud 계열 rev 12) 데이터를 사용합니다.",
+                  ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        if not self.games:
+            ttk.Label(self.body, text="Steam에서 ATS/ETS2 설치를 찾지 못했습니다. 게임 폴더를 직접 선택하세요.",
+                      ).grid(row=1, column=0, columnspan=3, sticky="w")
+        for row, game in enumerate(self.games, start=1):
+            ttk.Label(self.body, text=game.name, width=24).grid(row=row, column=0, sticky="w")
+            ttk.Label(self.body, text=game.describe(), width=34).grid(row=row, column=1, sticky="w", padx=8)
+            text = "재설치" if game.compatible else "설치"
+            ttk.Button(self.body, text=text, command=lambda g=game: self._install(g)).grid(row=row, column=2, pady=2)
+        bottom = ttk.Frame(self.body)
+        bottom.grid(row=len(self.games) + 2, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        ttk.Button(bottom, text="게임 폴더 직접 선택…", command=self._pick_folder).pack(side="left")
+        ttk.Button(bottom, text="닫기", command=self.top.destroy).pack(side="right")
+
+    def _pick_folder(self) -> None:
+        folder = filedialog.askdirectory(parent=self.top, title="ATS 또는 ETS2 설치 폴더")
+        if not folder:
+            return
+        game = plugin_install.game_from_folder(Path(folder))
+        if game is None:
+            messagebox.showerror("플러그인", "bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 "
+                                 "게임 폴더를 선택하세요.", parent=self.top)
+            return
+        self.games = [g for g in self.games if g.key != game.key] + [game]
+        self._render()
+
+    def _install(self, game: plugin_install.GameInstall) -> None:
+        if not messagebox.askokcancel(
+                "플러그인 설치",
+                f"{game.name}의 plugins 폴더에 RenCloud scs-telemetry.dll(v1.12.1, MIT)을 복사합니다.\n\n"
+                f"{game.plugins_dir}\n\n게임이 실행 중이면 다음 실행부터 적용됩니다.", parent=self.top):
+            return
+        try:
+            target = plugin_install.install(game)
+        except PermissionError:
+            messagebox.showerror("플러그인 설치", "폴더에 쓸 권한이 없습니다. 프로그램을 관리자 권한으로 실행하거나 "
+                                 f"아래 파일을 직접 복사하세요.\n\n{plugin_install.bundled_plugin()}\n→ {game.plugins_dir}",
+                                 parent=self.top)
+            return
+        except OSError as exc:
+            messagebox.showerror("플러그인 설치", f"복사하지 못했습니다: {exc}", parent=self.top)
+            return
+        messagebox.showinfo("플러그인 설치", f"설치했습니다.\n{target}", parent=self.top)
+        self._render()
+
+
 def _claim_single_instance() -> object | None:
     """Hold a named mutex; None if another window already holds it."""
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -313,13 +419,13 @@ def _claim_single_instance() -> object | None:
     return handle
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true", help="run without the controller")
     parser.add_argument("--autostart", action="store_true", help="start the game session immediately")
     parser.add_argument("--exit-with-game", action="store_true", help="close the window when the game quits")
     parser.add_argument("--minimized", action="store_true", help="open minimized")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if _claim_single_instance() is None:
         return
     root = tk.Tk()
@@ -329,6 +435,8 @@ def main() -> None:
         app.start()
     if args.minimized:
         root.iconify()
+    else:
+        root.after(300, app.check_plugins)
     root.mainloop()
 
 

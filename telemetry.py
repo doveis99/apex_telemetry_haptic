@@ -119,11 +119,13 @@ class SharedMemoryTelemetry:
         self._substances: list[str] = []
         self._substances_read_at = 0.0
         self._next_open_attempt = 0.0
+        self.problem: str | None = None  # why no usable mapping was found, for the UI
 
     def _open(self) -> bool:
         if time.monotonic() < self._next_open_attempt:
             return False
         self._next_open_attempt = time.monotonic() + 1.0
+        self.problem = None
         for name in self._names:
             try:
                 mem = SharedMemory(name=name, create=False)
@@ -136,8 +138,10 @@ class SharedMemoryTelemetry:
                 mem.close()
                 continue
             if revision != SUPPORTED_REVISION:
+                # Another plugin build may still be compatible; keep looking.
                 mem.close()
-                raise RuntimeError(f"{name}: plugin revision {revision}, expected {SUPPORTED_REVISION}")
+                self.problem = f"{name.split(chr(92))[-1]} 플러그인 버전 {revision} (지원: {SUPPORTED_REVISION})"
+                continue
             self._mem, self.name = mem, name
             return True
         return False

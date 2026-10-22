@@ -1,27 +1,81 @@
-"""Persist effect gains in config.json next to the scripts."""
+"""Persist effect gains and app options in %APPDATA%\\ATSHaptics\\config.json.
+
+Layout: gain fields at the top level plus an "app" object. Each save
+rewrites only its own part so the two never clobber each other. The
+packaged exe may live in a read-only folder, hence the per-user location;
+a config.json left next to the scripts by earlier versions is moved over
+once.
+"""
 
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, fields
+import os
+import shutil
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 from effects import Gains
 
-CONFIG_PATH = Path(__file__).with_name("config.json")
+CONFIG_PATH = Path(os.environ.get("APPDATA", Path.home())) / "ATSHaptics" / "config.json"
+LEGACY_CONFIG_PATH = Path(__file__).with_name("config.json")
 
 
-def load_gains(path: Path = CONFIG_PATH) -> Gains:
-    gains = Gains()
+def _migrate_legacy() -> None:
+    if CONFIG_PATH.exists() or not LEGACY_CONFIG_PATH.is_file():
+        return
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(LEGACY_CONFIG_PATH, CONFIG_PATH)
+    LEGACY_CONFIG_PATH.unlink()
+
+
+@dataclass
+class AppOptions:
+    auto_start_on_game: bool = False
+
+
+def _read(path: Path | None) -> dict:
+    if path is None:
+        _migrate_legacy()
+    path = path or CONFIG_PATH
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
-        return gains
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write(path: Path | None, data: dict) -> None:
+    path = path or CONFIG_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def load_gains(path: Path | None = None) -> Gains:
+    gains = Gains()
+    data = _read(path)
     for f in fields(Gains):
         if f.name in data:
             setattr(gains, f.name, type(getattr(gains, f.name))(data[f.name]))
     return gains
 
 
-def save_gains(gains: Gains, path: Path = CONFIG_PATH) -> None:
-    path.write_text(json.dumps(asdict(gains), indent=2), encoding="utf-8")
+def save_gains(gains: Gains, path: Path | None = None) -> None:
+    data = _read(path)
+    data.update(asdict(gains))
+    _write(path, data)
+
+
+def load_app_options(path: Path | None = None) -> AppOptions:
+    options = AppOptions()
+    stored = _read(path).get("app", {})
+    for f in fields(AppOptions):
+        if f.name in stored:
+            setattr(options, f.name, type(getattr(options, f.name))(stored[f.name]))
+    return options
+
+
+def save_app_options(options: AppOptions, path: Path | None = None) -> None:
+    data = _read(path)
+    data["app"] = asdict(options)
+    _write(path, data)

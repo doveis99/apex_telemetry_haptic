@@ -62,7 +62,9 @@ class Runner:
         frame = self.source.read()
         now = time.perf_counter()
         if frame is None:
-            self._set_state("게임 대기 중")
+            problem = getattr(self.source, "problem", None)
+            self._set_state(f"텔레메트리 없음: {problem} → '플러그인' 버튼으로 설치" if problem
+                            else "텔레메트리 대기 중 (게임 로딩 중이거나 플러그인 없음)")
             return None
         if frame.render_time != self._last_render_time:
             self._last_render_time = frame.render_time
@@ -190,6 +192,9 @@ def parse_args(defaults: Gains) -> argparse.Namespace:
     parser.add_argument("--seconds", type=float, help="stop after this many seconds")
     parser.add_argument("--exit-with-game", action="store_true", help="quit when ATS/ETS2 quits")
     parser.add_argument("--gain", type=float, default=defaults.master, help="master gain 0..1+")
+    parser.add_argument("--grip-level", type=float, default=defaults.grip_level, help="grip output strength")
+    parser.add_argument("--trigger-level", type=float, default=defaults.trigger_level,
+                        help="trigger output strength")
     for name in ("engine", "road", "bumps", "gear", "retarder", "impact", "trigger"):
         parser.add_argument(f"--{name}", type=float, default=getattr(defaults, name))
     parser.add_argument("--cylinders", type=int, default=defaults.cylinders)
@@ -200,7 +205,8 @@ def main() -> None:
     gains = load_gains()
     args = parse_args(gains)
     gains.master = args.gain
-    for name in ("engine", "road", "bumps", "gear", "retarder", "impact", "trigger", "cylinders"):
+    for name in ("grip_level", "trigger_level", "engine", "road", "bumps", "gear", "retarder", "impact",
+                 "trigger", "cylinders"):
         setattr(gains, name, getattr(args, name))
     runner = Runner(gains, simulate=args.simulate, seconds=args.seconds,
                     on_state=lambda s: print(f"\n[{time.strftime('%H:%M:%S')}] {s}", flush=True))

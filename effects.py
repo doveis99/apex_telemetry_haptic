@@ -43,6 +43,8 @@ def surface_factor(name: str) -> float:
 @dataclass
 class Gains:
     master: float = 1.0
+    grip_level: float = 1.0  # final output strength per channel, after all effects
+    trigger_level: float = 1.0
     engine: float = 0.5
     road: float = 0.6
     bumps: float = 1.0
@@ -432,9 +434,9 @@ class Synth:
                 t += sq * wobble * self.squeal_osc.next(230.0)
             t += sum(b.next() for b in self.bursts_trigger)
 
-            left.append(self._out(l))
-            right.append(self._out(r))
-            trigger.append(self._out(t))
+            left.append(self._out(l, self.g.grip_level))
+            right.append(self._out(r, self.g.grip_level))
+            trigger.append(self._out(t, self.g.trigger_level))
         self.prev_amp = {"engine": engine_amp, "road_l": road_l, "road_r": road_r,
                          "retarder": retarder_amp, "trigger": trigger_amp, "squeal": squeal_amp}
         for bursts in (self.bursts_left, self.bursts_right, self.bursts_trigger):
@@ -447,7 +449,7 @@ class Synth:
         return Block(trigger=trigger, left_grip=left, right_grip=right,
                      route=Route.BOTH if any_trigger else Route.MUTE)
 
-    def _out(self, x: float) -> float:
+    def _out(self, x: float, channel_level: float) -> float:
         # Soft limit so stacked effects saturate smoothly instead of clipping;
         # never exceeds MAX_SAMPLE.
-        return math.tanh(x * self.g.master) * MAX_SAMPLE
+        return math.tanh(x * self.g.master * channel_level) * MAX_SAMPLE

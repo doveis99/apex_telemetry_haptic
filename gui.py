@@ -5,10 +5,11 @@
                             how launch.py starts it alongside the game
   python gui.py --dry-run   no controller, for testing the window
 
-Sliders, on/off boxes and the 그립/트리거 destination toggles change the
+Sliders, on/off switches and the 그립 | 트리거 | 둘 다 selectors change the
 running effects immediately; 저장 writes config.json, which ats_haptics.py also
 reads. Only one window runs at a time; a second launch exits quietly. At
 start it looks for a newer GitHub release and offers it in the top bar.
+The widgets and dark theme live in widgets.py.
 """
 
 from __future__ import annotations
@@ -29,6 +30,9 @@ from version import __version__
 from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Gains, route_of
 from gamewatch import GameWatcher
 from settings import load_app_options, load_gains, save_app_options, save_gains
+from widgets import (ACCENT, BG, BOTH_COLOR, CARD, FAINT, GO, GRIP_COLOR, MUTED, STOP, TEXT, TILE,
+                     TRIGGER_COLOR, WARN, Button, Meter, Segmented, Slider, Switch, apply_theme, card,
+                     dark_title_bar, font)
 
 POLL_MS = 100
 METER_DECAY = 0.8
@@ -59,12 +63,14 @@ EVENT_SLIDERS = (
     ("shifter", "레인지/스플리터", 0, 200, 100, "%"),
     ("game_events", "게임 알림", 0, 200, 100, "%"),
 )
-# destination toggle colours when lit: grips blue, trigger orange
-GRIP_COLOR, TRIGGER_COLOR = "#93c5fd", "#fdba74"
 THRESHOLD_SLIDERS = (
     ("bump_threshold", "요철 감지 기준", 5, 100, 100, "cm/s"),
     ("impact_threshold", "충돌 감지 기준", 4, 40, 1, "m/s²"),
 )
+# where an effect vibrates; each choice has its colour, which its slider takes too
+ROUTE_OPTIONS = ((GRIP, "그립", GRIP_COLOR), (TRIGGER, "트리거", TRIGGER_COLOR), (BOTH, "둘 다", BOTH_COLOR))
+ROUTE_COLORS = {route: color for route, _, color in ROUTE_OPTIONS}
+LEVEL_COLORS = {"master": ACCENT, "grip_level": GRIP_COLOR, "trigger_level": TRIGGER_COLOR}
 
 
 class App:
@@ -79,9 +85,11 @@ class App:
         self.error: str | None = None
         self.connected: str | None = None
         self.meter_values = [0.0, 0.0, 0.0]
-        self.slider_vars: dict[str, tuple[tk.DoubleVar, ttk.Label, int, str]] = {}
+        self.slider_vars: dict[str, tuple[tk.DoubleVar, tk.Label, int, str]] = {}
+        self.sliders: dict[str, Slider] = {}
         self.enabled_vars: dict[str, tk.BooleanVar] = {}
-        self.route_vars: dict[str, tuple[tk.BooleanVar, tk.BooleanVar]] = {}  # grip, trigger
+        self.effect_labels: dict[str, tk.Label] = {}
+        self.route_pickers: dict[str, Segmented] = {}
         self.save_state = tk.StringVar()  # sliders update it while being built
         self.closed = False
         self.options = load_app_options()
@@ -104,131 +112,171 @@ class App:
     # -- layout -----------------------------------------------------------------
 
     def _build(self) -> None:
-        pad = {"padx": 8, "pady": 4}
-        top = ttk.Frame(self.root)
-        top.grid(row=0, column=0, columnspan=2, sticky="ew", **pad)
-        self.source = tk.StringVar(value="game")
-        ttk.Radiobutton(top, text="ATS/ETS2 게임", variable=self.source, value="game").pack(side="left")
-        ttk.Radiobutton(top, text="테스트 주행", variable=self.source, value="sim").pack(side="left", padx=(6, 12))
-        self.start_button = ttk.Button(top, text="시작", command=self.start)
-        self.start_button.pack(side="left")
-        self.stop_button = ttk.Button(top, text="정지", command=self.stop, state="disabled")
-        self.stop_button.pack(side="left", padx=4)
-        self.auto_start = tk.BooleanVar(value=self.options.auto_start_on_game)
-        ttk.Checkbutton(top, text="게임 감지 시 자동 시작", variable=self.auto_start,
-                        command=self._on_auto_start).pack(side="left", padx=(16, 0))
-        ttk.Button(top, text="텔레메트리 플러그인…", command=self.open_plugin_dialog).pack(side="right")
-        self.update_button = ttk.Button(top, command=self.update)  # packed once a release is found
-        # Status lives in its own bar at the bottom so long messages are not cut off.
-        self.status = tk.StringVar(value="정지됨")
+        root = self.root
+        root.columnconfigure(0, weight=1)
+        root.columnconfigure(1, weight=1)
 
-        left = ttk.Frame(self.root)
-        left.grid(row=1, column=0, sticky="nsew", **pad)
-        effects = ttk.LabelFrame(left, text="주행 효과")
-        effects.pack(fill="x")
+        # header: name on the left, plugin/update on the right
+        header = tk.Frame(root, bg=BG)
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=18, pady=(14, 8))
+        tk.Label(header, text="ATS 햅틱", bg=BG, fg=TEXT, font=font(16, "bold")).pack(side="left")
+        subtitle = f"APEX 6 Pro · v{__version__}" + (" · dry-run" if self.dry_run else "")
+        tk.Label(header, text=subtitle, bg=BG, fg=MUTED, font=font(9)).pack(side="left", padx=(10, 0), pady=(6, 0))
+        Button(header, "텔레메트리 플러그인", self.open_plugin_dialog, size=9, height=30).pack(side="right")
+        self.update_button = Button(header, "", self.update, kind="primary", size=9, height=30)  # packed once found
+
+        # control strip: what drives the vibration, start/stop, auto start, status
+        control = card(root, "출력 제어")
+        control.outer.grid(row=1, column=0, columnspan=2, sticky="ew", padx=18)
+        control.head.pack_forget()
+        control.pack_configure(pady=12)
+        tk.Label(control, text="입력", bg=CARD, fg=MUTED, font=font(9)).pack(side="left", padx=(0, 8))
+        self.source = tk.StringVar(value="game")
+        self.source_picker = Segmented(control, (("game", "ATS/ETS2 게임", ACCENT), ("sim", "테스트 주행", ACCENT)),
+                                       self._on_source, segment_width=104, height=32, size=10)
+        self.source_picker.pack(side="left")
+        self.source.trace_add("write", lambda *_: self._show_run_state())
+        self.run_button = Button(control, "▶  시작", self.toggle_run, kind="go", size=11, height=36,
+                                 min_width=120, bg=CARD)
+        self.run_button.pack(side="left", padx=(14, 18))
+        self.auto_start = tk.BooleanVar(value=self.options.auto_start_on_game)
+        Switch(control, self.auto_start, self._on_auto_start, color=ACCENT).pack(side="left")
+        tk.Label(control, text="게임 감지 시 자동 시작", bg=CARD, fg=TEXT).pack(side="left", padx=(8, 0))
+        # Status sits on the right of the strip and wraps, so long messages are not cut off.
+        self.status = tk.StringVar(value="정지됨")
+        tk.Label(control, textvariable=self.status, bg=CARD, fg=TEXT, anchor="e", justify="right",
+                 wraplength=380).pack(side="right")
+        self.status_dot = tk.Canvas(control, width=12, height=12, bg=CARD, highlightthickness=0)
+        self.status_dot.pack(side="right", padx=(0, 8))
+        self._show_dot(FAINT)
+
+        # footer first: _changed (run while the sliders are built) styles the save button
+        footer = tk.Frame(root, bg=BG)
+        footer.grid(row=3, column=0, columnspan=2, sticky="ew", padx=18, pady=(10, 14))
+        self.save_button = Button(footer, "저장", self.save, size=10, min_width=84)
+        self.save_button.pack(side="left")
+        Button(footer, "기본값", self.reset, size=10, min_width=84).pack(side="left", padx=(8, 0))
+        self.save_label = tk.Label(footer, textvariable=self.save_state, bg=BG, fg=WARN, font=font(9))
+        self.save_label.pack(side="left", padx=12)
+        self.timing = tk.StringVar()
+        tk.Label(footer, textvariable=self.timing, bg=BG, fg=FAINT, font=font(9)).pack(side="right")
+
+        left = tk.Frame(root, bg=BG)
+        left.grid(row=2, column=0, sticky="nsew", padx=(18, 6), pady=(12, 0))
+        effects = card(left, "주행 효과", "달리는 동안 계속 나는 진동")
+        effects.outer.pack(fill="x")
         self._route_header(effects)
         for row, spec in enumerate(EFFECT_SLIDERS, start=1):
             self._slider(effects, row, *spec)
-        events = ttk.LabelFrame(left, text="이벤트 효과")
-        events.pack(fill="x", pady=(8, 0))
+        events = card(left, "이벤트 효과", "순간적으로 한 번 나는 진동")
+        events.outer.pack(fill="x", pady=(12, 0))
         self._route_header(events)
         for row, spec in enumerate(EVENT_SLIDERS, start=1):
             self._slider(events, row, *spec)
 
-        right = ttk.Frame(self.root)
-        right.grid(row=1, column=1, sticky="nsew", **pad)
+        right = tk.Frame(root, bg=BG)
+        right.grid(row=2, column=1, sticky="nsew", padx=(6, 18), pady=(12, 0))
 
-        output = ttk.LabelFrame(right, text="출력 세기")
-        output.pack(fill="x")
+        output = card(right, "출력 세기")
+        output.outer.pack(fill="x")
         for row, spec in enumerate(OUTPUT_SLIDERS):
             self._slider(output, row, *spec)
-        ttk.Separator(output).grid(row=len(OUTPUT_SLIDERS), column=0, columnspan=4, sticky="ew", pady=4)
+        tk.Frame(output, bg="#252a34", height=1).grid(row=len(OUTPUT_SLIDERS), column=0, columnspan=4,
+                                                     sticky="ew", pady=8)
         self.meters = []
-        for row, label in enumerate(("왼쪽 그립", "오른쪽 그립", "트리거"), start=len(OUTPUT_SLIDERS) + 1):
-            ttk.Label(output, text=label, width=15).grid(row=row, column=1, sticky="w", padx=6, pady=2)
-            bar = ttk.Progressbar(output, length=220, maximum=100)
-            bar.grid(row=row, column=2, padx=6, pady=2)
-            self.meters.append(bar)
+        for row, (label, color) in enumerate((("왼쪽 그립", GRIP_COLOR), ("오른쪽 그립", GRIP_COLOR),
+                                              ("트리거", TRIGGER_COLOR)), start=len(OUTPUT_SLIDERS) + 1):
+            tk.Label(output, text=label, bg=CARD, fg=MUTED, width=14, anchor="w").grid(row=row, column=1, sticky="w")
+            meter = Meter(output, color, length=200)
+            meter.grid(row=row, column=2, padx=6, pady=4)
+            self.meters.append(meter)
 
-        info = ttk.LabelFrame(right, text="텔레메트리")
-        info.pack(fill="x", pady=(8, 0))
+        info = card(right, "텔레메트리")
+        info.outer.pack(fill="x", pady=(12, 0))
         self.info = {}
-        for row, (key, label) in enumerate((("speed", "속도"), ("rpm", "RPM"), ("gear", "기어"),
-                                            ("pedal", "페달"), ("surface", "노면"), ("trigger", "트리거"),
-                                            ("accel", "가속도 최대"))):
-            ttk.Label(info, text=label, width=10).grid(row=row, column=0, sticky="w", padx=6)
+        tiles = tk.Frame(info, bg=CARD)
+        tiles.pack(fill="x")
+        for column, (key, label) in enumerate((("speed", "속도"), ("rpm", "RPM"), ("gear", "기어"))):
+            tiles.columnconfigure(column, weight=1, uniform="tile")
+            tile = tk.Frame(tiles, bg=TILE)
+            tile.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 6, 0))
+            tk.Label(tile, text=label, bg=TILE, fg=MUTED, font=font(8)).pack(anchor="w", padx=10, pady=(6, 0))
             var = tk.StringVar(value="-")
-            ttk.Label(info, textvariable=var, width=28).grid(row=row, column=1, sticky="w", padx=6)
+            tk.Label(tile, textvariable=var, bg=TILE, fg=TEXT, font=font(15, "bold")).pack(anchor="w", padx=10,
+                                                                                          pady=(0, 6))
+            self.info[key] = var
+        rows = tk.Frame(info, bg=CARD)
+        rows.pack(fill="x", pady=(8, 0))
+        for row, (key, label) in enumerate((("pedal", "페달"), ("surface", "노면"), ("trigger", "트리거"),
+                                            ("accel", "가속도 최대"))):
+            tk.Label(rows, text=label, bg=CARD, fg=MUTED, width=11, anchor="w").grid(row=row, column=0, sticky="w")
+            var = tk.StringVar(value="-")
+            tk.Label(rows, textvariable=var, bg=CARD, fg=TEXT, anchor="w").grid(row=row, column=1, sticky="w")
             self.info[key] = var
 
-        thresholds = ttk.LabelFrame(right, text="감지 기준")
-        thresholds.pack(fill="x", pady=(8, 0))
+        thresholds = card(right, "감지 기준")
+        thresholds.outer.pack(fill="x", pady=(12, 0))
         for row, spec in enumerate(THRESHOLD_SLIDERS):
             self._slider(thresholds, row, *spec)
-        ttk.Label(thresholds, text="엔진 기통 수", width=15).grid(row=len(THRESHOLD_SLIDERS), column=1,
-                                                              sticky="w", padx=6)
+        tk.Label(thresholds, text="엔진 기통 수", bg=CARD, fg=TEXT, width=14, anchor="w").grid(
+            row=len(THRESHOLD_SLIDERS), column=1, sticky="w")
         self.cylinders = tk.IntVar(value=self.gains.cylinders)
         ttk.Spinbox(thresholds, from_=4, to=12, increment=2, width=5, textvariable=self.cylinders,
-                    command=self._set_cylinders).grid(row=len(THRESHOLD_SLIDERS), column=2, sticky="w", padx=6)
+                    command=self._set_cylinders).grid(row=len(THRESHOLD_SLIDERS), column=2, sticky="w",
+                                                      padx=6, pady=(4, 0))
 
-        log = ttk.LabelFrame(right, text="이벤트")
-        log.pack(fill="both", expand=True, pady=(8, 0))
-        self.events = tk.Listbox(log, height=8, width=40)
-        self.events.pack(fill="both", expand=True, padx=4, pady=4)
+        log = card(right, "이벤트")
+        log.outer.pack(fill="both", expand=True, pady=(12, 0))
+        self.events = tk.Listbox(log, height=6, width=40, bg=TILE, fg=TEXT, bd=0, highlightthickness=0,
+                                 selectbackground="#2e3441", selectforeground=TEXT, activestyle="none")
+        self.events.pack(fill="both", expand=True)
 
-        bottom = ttk.Frame(self.root)
-        bottom.grid(row=2, column=0, columnspan=2, sticky="ew", **pad)
-        ttk.Button(bottom, text="저장", command=self.save).pack(side="left")
-        ttk.Button(bottom, text="기본값", command=self.reset).pack(side="left", padx=4)
-        ttk.Label(bottom, textvariable=self.save_state).pack(side="left", padx=8)
-        self.timing = tk.StringVar()
-        ttk.Label(bottom, textvariable=self.timing).pack(side="right")
-
-        status_bar = ttk.Frame(self.root, relief="sunken", padding=(6, 3))
-        status_bar.grid(row=3, column=0, columnspan=2, sticky="ew")
-        ttk.Label(status_bar, textvariable=self.status, anchor="w", wraplength=1100).pack(fill="x")
-
-    def _slider(self, parent: ttk.Frame, row: int, key: str, label: str,
+    def _slider(self, parent: tk.Frame, row: int, key: str, label: str,
                 low: int, high: int, scale: int, unit: str) -> None:
         if key in TOGGLEABLE:
             enabled = tk.BooleanVar(value=key not in self.gains.disabled)
-            ttk.Checkbutton(parent, variable=enabled,
-                            command=lambda k=key: self._on_toggle(k)).grid(row=row, column=0, padx=(6, 0))
+            Switch(parent, enabled, lambda k=key: self._on_toggle(k)).grid(row=row, column=0, padx=(0, 10))
             self.enabled_vars[key] = enabled
-        ttk.Label(parent, text=label, width=15).grid(row=row, column=1, sticky="w", padx=6)
+        name = tk.Label(parent, text=label, bg=CARD, fg=TEXT, width=14, anchor="w")
+        name.grid(row=row, column=1, sticky="w")
         var = tk.DoubleVar(value=getattr(self.gains, key) * scale)
-        value_label = ttk.Label(parent, width=9)
-        ttk.Scale(parent, from_=low, to=high, length=220, variable=var,
-                  command=lambda _=None, k=key: self._on_slider(k)).grid(row=row, column=2, padx=6, pady=2)
-        value_label.grid(row=row, column=3, sticky="w")
-        if key in TOGGLEABLE:
-            pair = (tk.BooleanVar(), tk.BooleanVar())
-            for column, (text, color, toggle) in enumerate((("그립", GRIP_COLOR, pair[0]),
-                                                           ("트리거", TRIGGER_COLOR, pair[1])), start=4):
-                tk.Checkbutton(parent, text=text, variable=toggle, indicatoron=False, width=6, bd=1,
-                               selectcolor=color, cursor="hand2",
-                               command=lambda k=key: self._on_route(k)).grid(
-                    row=row, column=column, padx=(0, 6 if column == 5 else 2), pady=2)
-            self.route_vars[key] = pair
-            self._show_route(key)
+        value_label = tk.Label(parent, bg=CARD, fg=TEXT, width=7, anchor="e", font=font(9, "bold"))
+        slider = Slider(parent, var, low, high, lambda k=key: self._on_slider(k),
+                        color=LEVEL_COLORS.get(key, ACCENT), length=200)
+        slider.grid(row=row, column=2, padx=6, pady=4)
+        value_label.grid(row=row, column=3, sticky="e", padx=(0, 4))
         self.slider_vars[key] = (var, value_label, scale, unit)
+        self.sliders[key] = slider
+        if key in TOGGLEABLE:
+            self.effect_labels[key] = name
+            picker = Segmented(parent, ROUTE_OPTIONS, lambda route, k=key: self._on_route(k, route))
+            picker.grid(row=row, column=4, padx=(10, 0), pady=3)
+            self.route_pickers[key] = picker
+            self._show_effect(key)
         self._on_slider(key)
 
-    def _route_header(self, parent: ttk.Frame) -> None:
-        ttk.Label(parent, text="진동 위치", foreground="gray40").grid(row=0, column=4, columnspan=2, pady=(2, 0))
+    def _route_header(self, parent: tk.Frame) -> None:
+        tk.Label(parent, text="진동 위치", bg=CARD, fg=FAINT, font=font(8)).grid(row=0, column=4, padx=(10, 0))
+
+    def _show_dot(self, color: str) -> None:
+        self.status_dot.delete("all")
+        self.status_dot.create_oval(1, 1, 11, 11, fill=color, outline="")
 
     # -- controls -------------------------------------------------------------
 
     def _changed(self) -> None:
         if self.runner:
             self.runner.apply(self.gains)
-        self.save_state.set("" if asdict(self.gains) == self.saved else "변경됨 (저장 안 됨)")
+        dirty = asdict(self.gains) != self.saved
+        self.save_state.set("변경됨 · 저장 안 됨" if dirty else "")
+        self.save_label.config(fg=WARN)
+        self.save_button.set(kind="primary" if dirty else "ghost")
 
     def _on_slider(self, key: str) -> None:
         var, label, scale, unit = self.slider_vars[key]
         value = round(var.get())
         setattr(self.gains, key, value / scale)
-        label.config(text=f"{value} {unit}")
+        label.config(text=f"{value}{unit}" if unit == "%" else f"{value} {unit}")
         self._changed()
 
     def _on_toggle(self, key: str) -> None:
@@ -236,24 +284,25 @@ class App:
         if not self.enabled_vars[key].get():
             disabled.append(key)
         self.gains.disabled = sorted(disabled)
-        self._show_route(key)
+        self._show_effect(key)
         self._changed()
 
-    def _show_route(self, key: str) -> None:
-        """Light the toggles for where the effect goes now; none while it is off."""
-        grip, trigger = self.route_vars[key]
-        route = route_of(self.gains, key) if key not in self.gains.disabled else None
-        grip.set(route in (GRIP, BOTH))
-        trigger.set(route in (TRIGGER, BOTH))
+    def _show_effect(self, key: str) -> None:
+        """Pick the effect's route and colour its slider; greyed while it is off."""
+        route = route_of(self.gains, key)
+        off = key in self.gains.disabled
+        self.route_pickers[key].set(route, dim=off)
+        self.sliders[key].set_color(FAINT if off else ROUTE_COLORS[route])
+        self.effect_labels[key].config(fg=MUTED if off else TEXT)
 
-    def _on_route(self, key: str) -> None:
-        grip, trigger = (var.get() for var in self.route_vars[key])
-        # Both toggles off switches the effect off and keeps its last route,
-        # so turning it back on restores where it went.
-        self.enabled_vars[key].set(grip or trigger)
-        if grip or trigger:
-            self.gains.routes = {**self.gains.routes, key: BOTH if grip and trigger else GRIP if grip else TRIGGER}
+    def _on_route(self, key: str, route: str) -> None:
+        # Picking a route on an effect that is off turns it back on there.
+        self.gains.routes = {**self.gains.routes, key: route}
+        self.enabled_vars[key].set(True)
         self._on_toggle(key)
+
+    def _on_source(self, source: str) -> None:
+        self.source.set(source)
 
     def open_plugin_dialog(self) -> None:
         PluginDialog(self.root)
@@ -262,7 +311,7 @@ class App:
         """At startup: open the plugin dialog if no installed game can feed telemetry."""
         games = plugin_install.find_games()
         if games and not any(game.compatible for game in games):
-            self.status.set("호환되는 텔레메트리 플러그인이 없습니다 → '텔레메트리 플러그인…'")
+            self.status.set("호환되는 텔레메트리 플러그인이 없습니다 → '텔레메트리 플러그인'")
             self.open_plugin_dialog()
 
     def _on_auto_start(self) -> None:
@@ -278,7 +327,9 @@ class App:
     def save(self) -> None:
         save_gains(self.gains)
         self.saved = asdict(self.gains)
-        self.save_state.set("저장됨")
+        self._changed()
+        self.save_state.set("✓ 저장됨")
+        self.save_label.config(fg=GO)
 
     def reset(self) -> None:
         defaults = Gains()
@@ -289,10 +340,26 @@ class App:
             var.set(True)
         self.gains.disabled = []
         self.gains.routes = dict(DEFAULT_ROUTES)
-        for key in self.route_vars:
-            self._show_route(key)
+        for key in self.route_pickers:
+            self._show_effect(key)
         self.cylinders.set(defaults.cylinders)
         self._set_cylinders()
+
+    def toggle_run(self) -> None:
+        if self.thread and self.thread.is_alive():
+            self.stop()
+        else:
+            self.start()
+
+    def _show_run_state(self) -> None:
+        running = bool(self.thread and self.thread.is_alive())
+        if not running:
+            self.run_button.set("▶  시작", kind="go", state="normal")
+        elif self.runner and self.runner.stop_requested:
+            self.run_button.set("정지 중…", kind="ghost", state="disabled")
+        else:
+            self.run_button.set("■  정지", kind="danger", state="normal")
+        self.source_picker.set(self.source.get(), locked=running)
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
@@ -303,8 +370,7 @@ class App:
         self.runner = Runner(self.gains, simulate=self.source.get() == "sim")
         self.thread = threading.Thread(target=self._worker, args=(self.runner,), daemon=True)
         self.thread.start()
-        self.start_button.config(state="disabled")
-        self.stop_button.config(state="normal")
+        self._show_run_state()
 
     def _worker(self, runner: Runner) -> None:
         try:
@@ -324,6 +390,7 @@ class App:
     def stop(self) -> None:
         if self.runner:
             self.runner.stop_requested = True
+            self._show_run_state()
 
     def on_close(self) -> None:
         if asdict(self.gains) != self.saved:
@@ -360,7 +427,7 @@ class App:
             return
         if not messagebox.askyesno("업데이트", text + "\n\n내려받아 설치하고 프로그램을 다시 시작할까요?"):
             return
-        self.update_button.config(state="disabled")
+        self.update_button.set(state="disabled")
         self.update_progress = 0.0
         threading.Thread(target=self._download_update, args=(release,), daemon=True).start()
 
@@ -373,23 +440,23 @@ class App:
     def _poll_update(self) -> None:
         release = self.update_release
         if release and not self.update_button.winfo_ismapped():
-            self.update_button.config(text=f"업데이트 {release.version}")
-            self.update_button.pack(side="right", padx=4)
+            self.update_button.set(text=f"업데이트 {release.version}")
+            self.update_button.pack(side="right", padx=8)
         if self.update_error:
             messagebox.showerror("업데이트", f"업데이트하지 못했습니다: {self.update_error}")
             self.update_error = self.update_progress = None
-            self.update_button.config(state="normal", text=f"업데이트 {release.version}")
+            self.update_button.set(state="normal", text=f"업데이트 {release.version}")
         elif self.update_ready:
             source, self.update_ready = self.update_ready, None
-            self.update_button.config(text="설치 중…")
+            self.update_button.set(text="설치 중…")
             self.on_close()
             if self.closed:
                 updater.apply_on_exit(source)  # copies once this process has exited
             else:  # save prompt cancelled
                 self.update_progress = None
-                self.update_button.config(state="normal", text=f"업데이트 {release.version}")
+                self.update_button.set(state="normal", text=f"업데이트 {release.version}")
         elif self.update_progress is not None:
-            self.update_button.config(text=f"내려받는 중 {self.update_progress:.0%}")
+            self.update_button.set(text=f"내려받는 중 {self.update_progress:.0%}")
 
     # -- periodic UI refresh ------------------------------------------------------
 
@@ -407,20 +474,23 @@ class App:
             running = True
         self.last_game = game
         runner = self.runner
+        self._show_run_state()
         if running and runner:
             device = self.connected or ("컨트롤러 없음" if self.dry_run else "컨트롤러 미사용")
             self.status.set(f"{device} · {runner.state or '시작 중'}")
+            self._show_dot(GO if self.connected or self.dry_run else WARN)
             self._refresh(runner)
         else:
-            self.start_button.config(state="normal")
-            self.stop_button.config(state="disabled")
             if self.error:
                 self.status.set(f"오류: {self.error}")
-            elif runner:
-                self.status.set("정지됨")
+                self._show_dot(STOP)
+            else:
+                if runner:
+                    self.status.set("정지됨")
+                self._show_dot(FAINT)
             self.meter_values = [0.0, 0.0, 0.0]
-            for bar in self.meters:
-                bar["value"] = 0
+            for meter in self.meters:
+                meter.set(0.0)
             if runner and runner.game_ended and self.exit_with_game:
                 self.exit_with_game = False  # ask at most once if the save prompt is cancelled
                 self.on_close()
@@ -431,7 +501,7 @@ class App:
     def _refresh(self, runner: Runner) -> None:
         for i, peak in enumerate(runner.take_peaks()):
             self.meter_values[i] = max(peak, self.meter_values[i] * METER_DECAY)
-            self.meters[i]["value"] = self.meter_values[i] * 100
+            self.meters[i].set(self.meter_values[i])
         while runner.events:
             self.events.insert(0, runner.events.popleft())
             self.events.delete(50, "end")
@@ -453,12 +523,13 @@ class PluginDialog:
     """Lists ATS/ETS2 installs with their telemetry plugin and installs the bundled one."""
 
     def __init__(self, parent: tk.Tk) -> None:
-        self.top = tk.Toplevel(parent)
+        self.top = tk.Toplevel(parent, bg=BG)
         self.top.title("텔레메트리 플러그인")
         self.top.resizable(False, False)
         self.top.transient(parent)
+        dark_title_bar(self.top)
         self.games = plugin_install.find_games()
-        self.body = ttk.Frame(self.top, padding=10)
+        self.body = ttk.Frame(self.top, padding=14)
         self.body.pack(fill="both")
         self._render()
 
@@ -532,8 +603,9 @@ def main(argv: list[str] | None = None) -> None:
     if _claim_single_instance() is None:
         return
     root = tk.Tk()
-    root.option_add("*Font", ("Malgun Gothic", 10))
+    apply_theme(root)
     app = App(root, dry_run=args.dry_run, exit_with_game=args.exit_with_game)
+    dark_title_bar(root)
     if args.autostart:
         app.start()
     if args.minimized:

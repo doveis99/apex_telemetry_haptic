@@ -1,0 +1,300 @@
+"""Dark theme and the small canvas widgets the tuning window is built from.
+
+Plain tkinter only (no extra packages), so the PyInstaller build stays as it
+is. Every widget draws itself on a Canvas: rounded segment buttons, an on/off
+switch, a slider whose fill shows the route colour, and a level meter.
+"""
+
+from __future__ import annotations
+
+import ctypes
+import tkinter as tk
+import tkinter.font as tkfont
+from tkinter import ttk
+from typing import Callable, Sequence
+
+FONT = "Malgun Gothic"
+
+BG = "#0e1014"          # window
+CARD = "#161a21"        # panels
+TILE = "#1c2029"        # telemetry tiles, log
+FIELD = "#232833"       # tracks, idle segments
+FIELD_HI = "#2e3441"    # hover
+TEXT = "#e7e9ee"
+MUTED = "#8a92a3"
+FAINT = "#555c6b"
+INK = "#0e1014"         # text on a coloured fill
+
+GRIP_COLOR = "#5aa2ff"
+TRIGGER_COLOR = "#ff9a4d"
+BOTH_COLOR = "#b58cff"
+ACCENT = "#5aa2ff"
+GO = "#2ec27e"
+STOP = "#f05252"
+WARN = "#f5b942"
+
+BUTTON_KINDS = {  # fill, hover fill, text
+    "go": (GO, "#3fd590", INK),
+    "danger": (STOP, "#ff6b6b", "#ffffff"),
+    "primary": (ACCENT, "#7ab6ff", INK),
+    "ghost": (FIELD, FIELD_HI, TEXT),
+}
+
+
+def font(size: int = 10, weight: str = "normal") -> tuple[str, int, str]:
+    return (FONT, size, weight)
+
+
+def round_rect(canvas: tk.Canvas, x1: float, y1: float, x2: float, y2: float, r: float, **kw) -> int:
+    r = min(r, (x2 - x1) / 2, (y2 - y1) / 2)
+    points = (x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2,
+              x2 - r, y2, x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1)
+    return canvas.create_polygon(points, smooth=True, **kw)
+
+
+def apply_theme(root: tk.Tk) -> None:
+    """Dark clam theme for the ttk widgets that remain (dialogs, spinbox)."""
+    root.configure(bg=BG)
+    root.option_add("*Font", font())
+    style = ttk.Style(root)
+    style.theme_use("clam")
+    style.configure(".", background=BG, foreground=TEXT, fieldbackground=FIELD, bordercolor=FIELD,
+                    lightcolor=FIELD, darkcolor=FIELD, troughcolor=FIELD, arrowcolor=TEXT,
+                    selectbackground=ACCENT, selectforeground=INK, insertcolor=TEXT, font=font())
+    style.configure("TButton", background=FIELD, padding=(12, 5), relief="flat")
+    style.map("TButton", background=[("disabled", BG), ("active", FIELD_HI)],
+              foreground=[("disabled", FAINT)])
+    style.configure("TSpinbox", background=FIELD, arrowsize=12, padding=(6, 2))
+    style.map("TSpinbox", background=[("active", FIELD_HI)])
+
+
+def dark_title_bar(window: tk.Misc) -> None:
+    """Ask Windows 10/11 for a dark caption; harmless where unsupported."""
+    try:
+        window.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(window.winfo_id())
+        value = ctypes.c_int(1)
+        for attribute in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE, pre-20H1 value
+            if not ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(value), 4):
+                break
+        # repaint the caption now rather than on the next activation
+        ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0027)  # NOSIZE|NOMOVE|NOZORDER|FRAMECHANGED
+    except Exception:
+        pass
+
+
+def card(parent: tk.Misc, title: str, hint: str = "") -> tk.Frame:
+    """A rounded-looking panel with a heading; returns the body frame to fill."""
+    outer = tk.Frame(parent, bg=CARD, highlightthickness=1, highlightbackground="#20252f")
+    head = tk.Frame(outer, bg=CARD)
+    head.pack(fill="x", padx=14, pady=(10, 4))
+    tk.Label(head, text=title, bg=CARD, fg=TEXT, font=font(11, "bold")).pack(side="left")
+    if hint:
+        tk.Label(head, text=hint, bg=CARD, fg=FAINT, font=font(9)).pack(side="left", padx=(8, 0), pady=(2, 0))
+    body = tk.Frame(outer, bg=CARD)
+    body.pack(fill="both", expand=True, padx=14, pady=(0, 12))
+    body.outer = outer  # type: ignore[attr-defined]  # what the caller lays out
+    body.head = head  # type: ignore[attr-defined]
+    return body
+
+
+class Button(tk.Canvas):
+    """Rounded flat button. `set` changes text, colour kind or state in place."""
+
+    def __init__(self, parent: tk.Misc, text: str, command: Callable[[], None], kind: str = "ghost",
+                 size: int = 10, height: int = 32, min_width: int = 0, bg: str = BG) -> None:
+        super().__init__(parent, height=height, bg=bg, highlightthickness=0, bd=0, cursor="hand2")
+        self.command = command
+        self.text, self.kind, self.state = text, kind, "normal"
+        self.font = font(size, "bold")
+        self.min_width = min_width
+        self.hover = False
+        self.bind("<Enter>", lambda _: self._hover(True))
+        self.bind("<Leave>", lambda _: self._hover(False))
+        self.bind("<ButtonRelease-1>", self._click)
+        self._draw()
+
+    def set(self, text: str | None = None, kind: str | None = None, state: str | None = None) -> None:
+        new = (text or self.text, kind or self.kind, state or self.state)
+        if new != (self.text, self.kind, self.state):
+            self.text, self.kind, self.state = new
+            self._draw()
+
+    def _hover(self, on: bool) -> None:
+        self.hover = on
+        self._draw()
+
+    def _click(self, event: tk.Event) -> None:
+        inside = 0 <= event.x < self.winfo_width() and 0 <= event.y < self.winfo_height()
+        if inside and self.state == "normal":
+            self.command()
+
+    def _draw(self) -> None:
+        width = max(self.min_width, tkfont.Font(font=self.font).measure(self.text) + 32)
+        height = int(self["height"])
+        self.config(width=width, cursor="hand2" if self.state == "normal" else "arrow")
+        fill, hover, ink = BUTTON_KINDS[self.kind]
+        if self.state != "normal":
+            fill, ink = FIELD, FAINT
+        elif self.hover:
+            fill = hover
+        self.delete("all")
+        round_rect(self, 1, 1, width - 1, height - 1, 9, fill=fill, outline="")
+        self.create_text(width / 2, height / 2, text=self.text, fill=ink, font=self.font)
+
+
+class Segmented(tk.Canvas):
+    """A row of mutually exclusive segments, each with its own colour when picked.
+
+    `dim` greys the picked segment (the effect is off but remembers its
+    route); `locked` ignores clicks.
+    """
+
+    def __init__(self, parent: tk.Misc, options: Sequence[tuple[str, str, str]],
+                 command: Callable[[str], None], segment_width: int = 54, height: int = 28,
+                 size: int = 9, bg: str = CARD) -> None:
+        self.options = list(options)  # value, text, colour
+        self.segment_width = segment_width
+        width = segment_width * len(self.options) + 6
+        super().__init__(parent, width=width, height=height, bg=bg, highlightthickness=0, bd=0, cursor="hand2")
+        self.command = command
+        self.font = font(size, "bold")
+        self.value: str | None = None
+        self.dim = self.locked = False
+        self.hovered: int | None = None
+        self.bind("<Motion>", lambda e: self._hover(self._index(e.x)))
+        self.bind("<Leave>", lambda _: self._hover(None))
+        self.bind("<Button-1>", self._click)
+        self._draw()
+
+    def set(self, value: str | None, dim: bool = False, locked: bool = False) -> None:
+        if (value, dim, locked) != (self.value, self.dim, self.locked):
+            self.value, self.dim, self.locked = value, dim, locked
+            self.config(cursor="arrow" if locked else "hand2")
+            self._draw()
+
+    def _index(self, x: int) -> int | None:
+        index = (x - 3) // self.segment_width
+        return index if 0 <= index < len(self.options) else None
+
+    def _hover(self, index: int | None) -> None:
+        if index != self.hovered:
+            self.hovered = index
+            self._draw()
+
+    def _click(self, event: tk.Event) -> None:
+        index = self._index(event.x)
+        if index is not None and not self.locked:
+            self.command(self.options[index][0])
+
+    def _draw(self) -> None:
+        self.delete("all")
+        width, height = int(self["width"]), int(self["height"])
+        round_rect(self, 0, 0, width, height, 9, fill=FIELD, outline="")
+        for i, (value, text, color) in enumerate(self.options):
+            x1 = 3 + i * self.segment_width
+            x2 = x1 + self.segment_width
+            picked = value == self.value
+            if picked and not self.dim:
+                round_rect(self, x1, 3, x2, height - 3, 7, fill=FAINT if self.locked else color, outline="")
+                ink = INK
+            elif picked:
+                round_rect(self, x1 + 1, 4, x2 - 1, height - 4, 7, fill=FIELD, outline=FAINT)
+                ink = MUTED
+            else:
+                hover = i == self.hovered and not self.locked
+                if hover:
+                    round_rect(self, x1, 3, x2, height - 3, 7, fill=FIELD_HI, outline="")
+                ink = TEXT if hover else (FAINT if self.dim or self.locked else MUTED)
+            self.create_text((x1 + x2) / 2, height / 2, text=text, fill=ink, font=self.font)
+
+
+class Switch(tk.Canvas):
+    """On/off pill bound to a BooleanVar; `command` runs after a click."""
+
+    def __init__(self, parent: tk.Misc, variable: tk.BooleanVar, command: Callable[[], None],
+                 color: str = GO, bg: str = CARD) -> None:
+        super().__init__(parent, width=36, height=20, bg=bg, highlightthickness=0, bd=0, cursor="hand2")
+        self.variable, self.command, self.color = variable, command, color
+        self.bind("<Button-1>", self._click)
+        variable.trace_add("write", lambda *_: self._draw())
+        self._draw()
+
+    def _click(self, _event: tk.Event) -> None:
+        self.variable.set(not self.variable.get())
+        self.command()
+
+    def _draw(self) -> None:
+        on = self.variable.get()
+        self.delete("all")
+        round_rect(self, 0, 0, 36, 20, 10, fill=self.color if on else FIELD_HI, outline="")
+        x = 25 if on else 11
+        self.create_oval(x - 7, 3, x + 7, 17, fill="#ffffff" if on else MUTED, outline="")
+
+
+class Slider(tk.Canvas):
+    """Horizontal slider on a DoubleVar; the filled part takes `color`.
+
+    Drag or click to set, mouse wheel to step. `command` runs on user changes
+    only; setting the variable from code just redraws.
+    """
+
+    def __init__(self, parent: tk.Misc, variable: tk.DoubleVar, low: float, high: float,
+                 command: Callable[[], None], color: str = ACCENT, length: int = 200, bg: str = CARD) -> None:
+        super().__init__(parent, width=length, height=24, bg=bg, highlightthickness=0, bd=0, cursor="hand2")
+        self.variable, self.low, self.high, self.command = variable, low, high, command
+        self.color = color
+        self.step = 5 if high - low >= 100 else 1
+        self.bind("<Button-1>", self._drag)
+        self.bind("<B1-Motion>", self._drag)
+        self.bind("<MouseWheel>", self._wheel)
+        variable.trace_add("write", lambda *_: self._draw())
+        self._draw()
+
+    def set_color(self, color: str) -> None:
+        if color != self.color:
+            self.color = color
+            self._draw()
+
+    def _put(self, value: float) -> None:
+        value = round(min(self.high, max(self.low, value)))
+        if value != round(self.variable.get()):
+            self.variable.set(value)
+            self.command()
+
+    def _drag(self, event: tk.Event) -> None:
+        span = int(self["width"]) - 16
+        self._put(self.low + (event.x - 8) / span * (self.high - self.low))
+
+    def _wheel(self, event: tk.Event) -> None:
+        self._put(self.variable.get() + (self.step if event.delta > 0 else -self.step))
+
+    def _draw(self) -> None:
+        width, y = int(self["width"]), 12
+        fraction = (self.variable.get() - self.low) / (self.high - self.low)
+        x = 8 + max(0.0, min(1.0, fraction)) * (width - 16)
+        self.delete("all")
+        self.create_line(8, y, width - 8, y, width=4, fill=FIELD_HI, capstyle="round")
+        self.create_line(8, y, x, y, width=4, fill=self.color, capstyle="round")
+        self.create_oval(x - 7, y - 7, x + 7, y + 7, fill="#ffffff", outline=self.color, width=2)
+
+
+class Meter(tk.Canvas):
+    """Thin level bar, 0..1."""
+
+    def __init__(self, parent: tk.Misc, color: str, length: int = 200, bg: str = CARD) -> None:
+        super().__init__(parent, width=length, height=10, bg=bg, highlightthickness=0, bd=0)
+        self.color = color
+        self.shown = -1
+        self.set(0.0)
+
+    def set(self, level: float) -> None:
+        width = int(self["width"])
+        x = round(max(0.0, min(1.0, level)) * width)
+        if x == self.shown:
+            return
+        self.shown = x
+        self.delete("all")
+        round_rect(self, 0, 0, width, 10, 5, fill=FIELD, outline="")
+        if x >= 4:
+            round_rect(self, 0, 0, x, 10, 5, fill=self.color, outline="")

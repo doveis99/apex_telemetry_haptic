@@ -52,6 +52,7 @@ EFFECT_SLIDERS = (
     ("retarder", "리타더", 0, 200, 100, "%"),
     ("impact", "충돌", 0, 200, 100, "%"),
     ("trigger", "엑셀/브레이크", 0, 100, 100, "%"),
+    ("throttle_pulse", "└ 엔진 박자", 0, 100, 100, "%"),
 )
 EVENT_SLIDERS = (
     ("pedal", "페달 바닥", 0, 200, 100, "%"),
@@ -70,7 +71,8 @@ THRESHOLD_SLIDERS = (
 # where an effect vibrates; each choice has its colour, which its slider takes too
 ROUTE_OPTIONS = ((GRIP, "그립", GRIP_COLOR), (TRIGGER, "트리거", TRIGGER_COLOR), (BOTH, "둘 다", BOTH_COLOR))
 ROUTE_COLORS = {route: color for route, _, color in ROUTE_OPTIONS}
-LEVEL_COLORS = {"master": ACCENT, "grip_level": GRIP_COLOR, "trigger_level": TRIGGER_COLOR}
+LEVEL_COLORS = {"master": ACCENT, "grip_level": GRIP_COLOR, "trigger_level": TRIGGER_COLOR,
+                "throttle_pulse": TRIGGER_COLOR}
 
 
 class App:

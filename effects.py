@@ -62,6 +62,9 @@ class Gains:
     retarder: float = 0.5
     impact: float = 1.0
     trigger: float = 0.4  # xHaptics keeps triggers near 36% of full scale
+    # how deep the throttle trigger pulses at the engine firing rate; 0 keeps
+    # it steady, 0.8 is the fixed pulse of earlier versions
+    throttle_pulse: float = 0.0
     cylinders: int = 6
     bump_threshold: float = 0.25  # m/s of sudden suspension travel
     impact_threshold: float = 12.0  # m/s^2 change within one 8 ms block
@@ -434,8 +437,9 @@ class Synth:
                 chop = 1.0 if self.lock_clock < 1.0 / 24.0 else 0.0
                 t = tr * chop * self.trigger_osc.next(110.0)
             elif trigger_mode == "throttle":
-                # 100 Hz carrier pulsed at the engine firing rate.
-                pulse = 0.6 + 0.4 * self.trigger_mod.next(engine_freq)
+                # 100 Hz carrier, optionally pulsed at the engine firing rate.
+                depth = min(1.0, max(0.0, g.throttle_pulse))
+                pulse = 1.0 - depth * 0.5 * (1.0 - self.trigger_mod.next(engine_freq))
                 t = tr * pulse * self.trigger_osc.next(100.0)
             else:
                 t = tr * self.trigger_osc.next(100.0)

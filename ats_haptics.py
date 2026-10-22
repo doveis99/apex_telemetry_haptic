@@ -197,6 +197,8 @@ def parse_args(defaults: Gains) -> argparse.Namespace:
                         help="trigger output strength")
     for name in ("engine", "road", "bumps", "gear", "retarder", "impact", "trigger"):
         parser.add_argument(f"--{name}", type=float, default=getattr(defaults, name))
+    parser.add_argument("--throttle-pulse", type=float, default=defaults.throttle_pulse,
+                        help="engine-rate pulse depth of the throttle trigger, 0..1")
     parser.add_argument("--cylinders", type=int, default=defaults.cylinders)
     return parser.parse_args()
 
@@ -206,7 +208,7 @@ def main() -> None:
     args = parse_args(gains)
     gains.master = args.gain
     for name in ("grip_level", "trigger_level", "engine", "road", "bumps", "gear", "retarder", "impact",
-                 "trigger", "cylinders"):
+                 "trigger", "throttle_pulse", "cylinders"):
         setattr(gains, name, getattr(args, name))
     runner = Runner(gains, simulate=args.simulate, seconds=args.seconds,
                     on_state=lambda s: print(f"\n[{time.strftime('%H:%M:%S')}] {s}", flush=True))

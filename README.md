@@ -4,7 +4,7 @@ American Truck Simulator / Euro Truck Simulator 2의 텔레메트리로 Flydigi 
 
 ![메인 창](docs/screenshot-main.png)
 
-> **English summary** — Drives the Flydigi APEX 6 Pro voice-coil motors directly over HID from ATS/ETS2 telemetry: engine firing pulses, road texture by surface and speed, per-side suspension bumps, gear shifts, retarder, collisions, pedal effects and game events. A tuning window adjusts every effect live; the app can start with the game through a Steam launch option and installs a telemetry plugin if needed. Windows only, wired or 2.4 GHz dongle. Unofficial and unaffiliated with Flydigi or SCS Software. GPL-3.0-or-later.
+> **English summary** — Drives the Flydigi APEX 6 Pro voice-coil motors directly over HID from ATS/ETS2 telemetry: engine firing pulses, road texture by surface and speed, per-side suspension bumps, gear shifts, retarder, collisions, pedal effects and game events. A tuning window adjusts every effect live; the app can start with the game through a Steam launch option and installs a telemetry plugin if needed. The window is available in Korean, English, Japanese, Simplified Chinese, German, French, Spanish, Brazilian Portuguese, Polish and Russian (language menu at the top right; it follows the Windows display language until you pick one), and every control explains itself in a hover tooltip. Windows only, wired or 2.4 GHz dongle. Unofficial and unaffiliated with Flydigi or SCS Software. GPL-3.0-or-later.
 
 ## 목차
 
@@ -39,6 +39,8 @@ American Truck Simulator / Euro Truck Simulator 2의 텔레메트리로 Flydigi 
 
 ## 화면 설명
 
+모든 슬라이더, 스위치, 버튼, 표시값에 마우스를 잠시 올려 두면 무엇을 하는지 설명하는 툴팁이 나옵니다. 아래 표의 내용을 줄여 담은 것입니다.
+
 ### 위쪽 바와 출력 제어
 
 | 항목 | 설명 |
@@ -47,6 +49,8 @@ American Truck Simulator / Euro Truck Simulator 2의 텔레메트리로 Flydigi 
 | **입력: 테스트 주행** | 게임 없이 정해진 40초 시나리오를 재생합니다. 시동 → 트레일러 연결 → 가속·변속 → 왼쪽 포트홀 → 자갈길 → 급제동(휠락, 브레이크 스퀼) → 리타더 → 톨게이트 → 파킹 브레이크 순서입니다. 효과를 확인하거나 튜닝할 때 씁니다. |
 | **▶ 시작 / ■ 정지** | 하나의 버튼입니다. 초록 **시작**을 누르면 진동을 내보내고 버튼이 빨간 **정지**로 바뀝니다. 정지하면 모터를 끄고 컨트롤러를 놓습니다. 실행 중에는 입력(게임/테스트 주행)을 바꿀 수 없습니다. |
 | **게임 감지 시 자동 시작** (스위치) | 켜 두면 창이 정지 상태일 때 게임이 실행되는 순간 자동으로 시작합니다. 게임 도중 직접 정지했다면 그 게임이 끝날 때까지는 다시 켜지지 않습니다. 스위치를 바꾸면 바로 저장됩니다. |
+| **GitHub ↗** | 이 프로그램의 GitHub 저장소(소스, 릴리스, 문의)를 브라우저로 엽니다. |
+| **언어 메뉴** (예: `한국어 ▾`) | 화면 언어를 고릅니다: 한국어, English, 日本語, 简体中文, Deutsch, Français, Español, Português (Brasil), Polski, Русский. 바로 다시 그려지고 튜닝 값과 실행 상태는 그대로이며, 고른 언어는 바로 저장됩니다. 고르기 전에는 Windows 표시 언어를 따르고, 목록에 없는 언어면 영어로 나옵니다. 상태 메시지와 이벤트 로그도 같은 언어로 나옵니다. 이미 기록된 이벤트 줄은 그대로 남습니다. |
 | **텔레메트리 플러그인** | [플러그인 창](#텔레메트리-플러그인-창)을 엽니다. |
 | **업데이트 x.y.z** | GitHub에 더 새 릴리스가 있을 때만 나타납니다. [업데이트](#업데이트)를 보세요. |
 
@@ -221,6 +225,8 @@ Steam 라이브러리에서 게임 **속성 → 일반 → 실행 옵션**에 �
 - 실행 옵션의 경로와 따옴표를 확인하세요.
 - 이미 창이 열려 있으면 새 창은 뜨지 않습니다(작업 표시줄을 확인하세요).
 
+**글자가 잘못된 언어로 나와요.** 오른쪽 위 언어 메뉴에서 고르세요. 고른 언어는 `config.json`의 `app.language`에 저장되고, 이 값을 지우면 다시 Windows 표시 언어를 따릅니다.
+
 **설정을 초기화하고 싶어요.** **기본값** → **저장**을 누르거나, `%APPDATA%\ATSHaptics\config.json`을 지우세요.
 
 **문의할 때 정보를 모으고 싶어요.** `ATSHaptics.exe --selftest`를 실행하면 `%TEMP%\ATSHaptics-selftest.txt`에 버전, 컨트롤러 인식, 게임·플러그인 감지 결과가 기록됩니다.
@@ -240,7 +246,10 @@ python -m venv .venv
 .\.venv\Scripts\python.exe ats_haptics.py --monitor   # 명령줄: --simulate, --exit-with-game, 효과별 세기 옵션
 .\.venv\Scripts\python.exe tone.py probe              # 진단: probe | tone | sweep | walk | route-test | diag
 powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<버전>.zip (소스 포함)
+.\.venv\Scripts\python.exe i18n.py                  # 번역 점검: 빠지거나 안 쓰이거나 {자리} 가 다른 문구
 ```
+
+화면 문구는 코드 안의 한국어 원문이 그대로 키입니다(`t("정지됨")`). 번역은 `locales\<언어>.py`의 `MESSAGES`에 있고, 빠진 번역은 영어, 그다음 한국어로 나옵니다. 문구를 바꾸거나 추가했으면 `i18n.py`를 실행해 모든 언어 표에 반영됐는지 확인하세요.
 
 소스에서 Steam 실행 옵션: `"<repo>\.venv\Scripts\pythonw.exe" "<repo>\launch.py" %command%`
 
@@ -250,6 +259,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<버전>
 ATS ─(scs-telemetry 공유 메모리)─▶ telemetry.py ─▶ effects.py (1 kHz 합성) ─▶ apex6.py ─(HID 0x57, 8 ms)─▶ APEX 6 Pro
                                      gamewatch.py: 게임 실행 감지    plugin_install.py: 플러그인 감지·설치
                                      updater.py: GitHub 릴리스 확인·자동 업데이트
+                                     i18n.py + locales\: 화면 언어    gui.py + widgets.py: 창, 툴팁
 ```
 
 ## 라이선스

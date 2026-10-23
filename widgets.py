@@ -2,7 +2,8 @@
 
 Plain tkinter only (no extra packages), so the PyInstaller build stays as it
 is. Every widget draws itself on a Canvas: rounded segment buttons, an on/off
-switch, a slider whose fill shows the route colour, and a level meter.
+switch, a slider whose fill shows the route colour, a level meter and a
+hover tooltip. The font follows the UI language (i18n.ui_font).
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import tkinter.font as tkfont
 from tkinter import ttk
 from typing import Callable, Sequence
 
-FONT = "Malgun Gothic"
+import i18n
 
 BG = "#0e1014"          # window
 CARD = "#161a21"        # panels
@@ -42,7 +43,7 @@ BUTTON_KINDS = {  # fill, hover fill, text
 
 
 def font(size: int = 10, weight: str = "normal") -> tuple[str, int, str]:
-    return (FONT, size, weight)
+    return (i18n.ui_font(), size, weight)
 
 
 def round_rect(canvas: tk.Canvas, x1: float, y1: float, x2: float, y2: float, r: float, **kw) -> int:
@@ -154,11 +155,13 @@ class Segmented(tk.Canvas):
                  command: Callable[[str], None], segment_width: int = 54, height: int = 28,
                  size: int = 9, bg: str = CARD) -> None:
         self.options = list(options)  # value, text, colour
-        self.segment_width = segment_width
-        width = segment_width * len(self.options) + 6
+        self.font = font(size, "bold")
+        # wide enough for the longest text, which depends on the language
+        measure = tkfont.Font(font=self.font).measure
+        self.segment_width = max(segment_width, *(measure(text) + 16 for _, text, _ in self.options))
+        width = self.segment_width * len(self.options) + 6
         super().__init__(parent, width=width, height=height, bg=bg, highlightthickness=0, bd=0, cursor="hand2")
         self.command = command
-        self.font = font(size, "bold")
         self.value: str | None = None
         self.dim = self.locked = False
         self.hovered: int | None = None
@@ -298,3 +301,74 @@ class Meter(tk.Canvas):
         round_rect(self, 0, 0, width, 10, 5, fill=FIELD, outline="")
         if x >= 4:
             round_rect(self, 0, 0, x, 10, 5, fill=self.color, outline="")
+
+
+class Tooltip:
+    """Explanation shown in a small box once the pointer rests on a widget.
+
+    Hidden again on leaving or clicking, and not shown while a button is
+    held, so dragging a slider is not covered.
+    """
+
+    DELAY_MS = 500
+
+    def __init__(self, widget: tk.Misc, text: str, wraplength: int = 340) -> None:
+        self.widget, self.text, self.wraplength = widget, text, wraplength
+        self.top: tk.Toplevel | None = None
+        self.job: str | None = None
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+        widget.bind("<Destroy>", self._hide, add="+")
+
+    def _schedule(self, event: tk.Event) -> None:
+        self._hide()
+        if self.text and not int(event.state) & 0x700:  # Button1..3 held
+            self.job = self.widget.after(self.DELAY_MS, self._show)
+
+    def _show(self) -> None:
+        self.job = None
+        widget = self.widget
+        self.top = top = tk.Toplevel(widget, bg=FIELD_HI)
+        top.wm_overrideredirect(True)
+        top.attributes("-topmost", True)
+        tk.Label(top, text=self.text, bg=TILE, fg=TEXT, font=font(9), justify="left",
+                 wraplength=self.wraplength, padx=9, pady=6).pack(padx=1, pady=1)
+        top.update_idletasks()
+        x = widget.winfo_pointerx() + 12
+        y = widget.winfo_rooty() + widget.winfo_height() + 6
+        # keep it on the primary screen when the pointer is there
+        if x < widget.winfo_screenwidth():
+            x = min(x, widget.winfo_screenwidth() - top.winfo_reqwidth() - 4)
+        if y + top.winfo_reqheight() > widget.winfo_screenheight():
+            y = widget.winfo_rooty() - top.winfo_reqheight() - 6
+        top.geometry(f"+{x}+{y}")
+
+    def _hide(self, _event: tk.Event | None = None) -> None:
+        if self.job:
+            self.widget.after_cancel(self.job)
+            self.job = None
+        if self.top:
+            try:
+                self.top.destroy()
+            except tk.TclError:  # already gone with its widget
+                pass
+            self.top = None
+
+
+def tip(widget: tk.Misc, text: str) -> tk.Misc:
+    """Attach a tooltip; returns the widget so it can be laid out in one line."""
+    Tooltip(widget, text)
+    return widget
+
+
+class Link(tk.Label):
+    """Text that opens `command` on click, underlined under the pointer."""
+
+    def __init__(self, parent: tk.Misc, text: str, command: Callable[[], None], size: int = 9,
+                 bg: str = BG) -> None:
+        super().__init__(parent, text=text, bg=bg, fg=MUTED, font=font(size), cursor="hand2")
+        self.normal, self.hovered = font(size), font(size) + ("underline",)
+        self.bind("<Enter>", lambda _: self.config(fg=ACCENT, font=self.hovered), add="+")
+        self.bind("<Leave>", lambda _: self.config(fg=MUTED, font=self.normal), add="+")
+        self.bind("<ButtonRelease-1>", lambda _: command())

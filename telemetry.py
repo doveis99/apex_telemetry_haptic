@@ -14,6 +14,8 @@ import time
 from dataclasses import dataclass, field
 from multiprocessing.shared_memory import SharedMemory
 
+from i18n import t
+
 MAPPING_NAMES = ("Local\\SCSTelemetry", "Local\\TruckDashTelemetry", "Local\\SHSCSTelemetry")
 SUPPORTED_REVISION = 12
 MAX_WHEELS = 16
@@ -140,7 +142,8 @@ class SharedMemoryTelemetry:
             if revision != SUPPORTED_REVISION:
                 # Another plugin build may still be compatible; keep looking.
                 mem.close()
-                self.problem = f"{name.split(chr(92))[-1]} 플러그인 버전 {revision} (지원: {SUPPORTED_REVISION})"
+                self.problem = t("{name} 플러그인 버전 {revision} (지원: {supported})", name=name.split(chr(92))[-1],
+                                 revision=revision, supported=SUPPORTED_REVISION)
                 continue
             self._mem, self.name = mem, name
             return True

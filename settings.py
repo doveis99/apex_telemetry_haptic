@@ -32,6 +32,7 @@ def _migrate_legacy() -> None:
 @dataclass
 class AppOptions:
     auto_start_on_game: bool = False
+    language: str = ""  # i18n code; empty follows the Windows display language
 
 
 def _read(path: Path | None) -> dict:

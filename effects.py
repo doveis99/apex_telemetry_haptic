@@ -18,6 +18,7 @@ import random
 from dataclasses import dataclass, field, replace
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE, SUBFRAMES, Block, Route
+from i18n import N_, t
 from telemetry import Frame
 
 DT = SUBFRAMES / SAMPLE_RATE  # 8 ms per telemetry update
@@ -115,8 +116,8 @@ def effective_gains(gains: Gains) -> Gains:
     return result
 
 
-GAME_EVENT_LABELS = {"delivered": "배송 완료", "fined": "벌금", "tollgate": "톨게이트",
-                     "ferry": "페리", "train": "기차", "refuel": "주유"}
+GAME_EVENT_LABELS = {"delivered": N_("배송 완료"), "fined": N_("벌금"), "tollgate": N_("톨게이트"),
+                     "ferry": N_("페리"), "train": N_("기차"), "refuel": N_("주유")}
 
 
 class Oscillator:
@@ -284,7 +285,7 @@ class Synth:
             self._both("gear", Burst(62.0, 1.3 * g, 0.018, delay_s=0.02, phase=0.25))
             self._both("gear", Burst(38.0, 0.5 * g, 0.05, delay_s=0.02))
             self.gear_cooldown = 0.15
-            self.levels.events.append(f"변속 {frame.gear}단")
+            self.levels.events.append(t("변속 {gear}단", gear=frame.gear))
         if frame.gear != 0:
             self.prev_gear = frame.gear
 
@@ -301,7 +302,7 @@ class Synth:
                 strength = min(1.0, (jump - threshold) / 30.0 + 0.4) * self.g.impact
                 self._both("impact", Burst(50.0, strength, 0.06))
                 self.impact_cooldown = 0.3
-                self.levels.events.append(f"충돌 {jump:.0f} m/s²")
+                self.levels.events.append(t("충돌 {accel} m/s²", accel=f"{jump:.0f}"))
         self.prev_accel = frame.accel
 
     def _changed(self, key: str, value: object) -> bool:
@@ -320,24 +321,24 @@ class Synth:
             floored = value >= 0.97
             if self._changed(f"{key}_floor", floored) and floored and g.pedal:
                 self._both("pedal", Burst(130.0, 0.8 * g.pedal, 0.012))
-                log.append("페달 바닥")
+                log.append(t("페달 바닥"))
 
         if self._changed("park_brake", frame.park_brake) and g.park_brake:
             s = g.park_brake
             self._both("park_brake", Burst(90.0, 1.0 * s, 0.015))
             hiss = 0.25 if frame.park_brake else 0.1
             self._both("park_brake", NoiseBurst(250.0, 0.5 * s, hiss, delay_s=0.03))
-            log.append("파킹 브레이크 " + ("체결" if frame.park_brake else "해제"))
+            log.append(t("파킹 브레이크 체결") if frame.park_brake else t("파킹 브레이크 해제"))
 
         if self._changed("trailer", frame.trailer_attached) and g.trailer:
             s = g.trailer
             if frame.trailer_attached:
                 self._both("trailer", Burst(40.0, 1.0 * s, 0.08))
-                log.append("트레일러 연결")
+                log.append(t("트레일러 연결"))
             else:
                 self._both("trailer", Burst(50.0, 0.9 * s, 0.05))
                 self._both("trailer", NoiseBurst(250.0, 0.4 * s, 0.15, delay_s=0.15))
-                log.append("트레일러 분리")
+                log.append(t("트레일러 분리"))
 
         # The lamp flag toggles with every flash; the relay clicks on both edges.
         self.blinker_idle += DT
@@ -346,7 +347,7 @@ class Synth:
             if self._changed(key, on) and g.blinker:
                 self.bursts.append(("blinker", side, Burst(160.0, (1.0 if on else 0.7) * g.blinker, 0.01)))
                 if self.blinker_idle > 1.5:
-                    log.append("방향지시등 " + ("좌" if key == "blinker_l" else "우"))
+                    log.append(t("방향지시등 좌") if key == "blinker_l" else t("방향지시등 우"))
                 self.blinker_idle = 0.0
 
         if self._changed("engine_on", frame.engine_on) and g.engine_start:
@@ -354,16 +355,16 @@ class Synth:
             if frame.engine_on:
                 self._both("engine_start", NoiseBurst(60.0, 0.8 * s, 0.35))
                 self._both("engine_start", Burst(35.0, 0.9 * s, 0.25, delay_s=0.25))
-                log.append("시동")
+                log.append(t("시동"))
             else:
                 self._both("engine_start", Burst(30.0, 0.7 * s, 0.3))
-                log.append("시동 끔")
+                log.append(t("시동 끔"))
 
         for i, toggle in enumerate(frame.shifter_toggle):
             if self._changed(f"shifter_{i}", toggle) and g.shifter:
                 s = g.shifter
                 self._both("shifter", Burst(120.0, 1.0 * s, 0.012))
-                log.append("레인지 셀렉터" if i == 0 else "스플리터")
+                log.append(t("레인지 셀렉터") if i == 0 else t("스플리터"))
 
         previous = self.prev_state.get("game_events", frozenset())
         self.prev_state["game_events"] = frame.game_events
@@ -372,7 +373,7 @@ class Synth:
                 s = g.game_events
                 self._both("game_events", Burst(80.0, 1.0 * s, 0.03))
                 self._both("game_events", Burst(80.0, 1.0 * s, 0.03, delay_s=0.12))
-            log.append(GAME_EVENT_LABELS.get(name, name))
+            log.append(t(GAME_EVENT_LABELS[name]) if name in GAME_EVENT_LABELS else name)
 
     def _novelty(self, key: str, value: float, scale: float) -> float:
         """1 just after value moved by scale or more, falling to 0 as it holds steady."""

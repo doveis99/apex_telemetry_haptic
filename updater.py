@@ -25,9 +25,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from i18n import t
 from version import __version__
 
 REPO = "doveis99/apex_telemetry_haptic"
+PAGE_URL = f"https://github.com/{REPO}"
 API_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 EXE_NAME = "ATSHaptics.exe"
 TIMEOUT_S = 10
@@ -119,12 +121,12 @@ def download(release: Release, progress: Callable[[float], None] | None = None) 
             if progress and release.asset_size:
                 progress(done / release.asset_size)
     if digest.hexdigest() != release.sha256:
-        raise RuntimeError("다운로드한 파일의 해시가 릴리스와 다릅니다")
+        raise RuntimeError(t("다운로드한 파일의 해시가 릴리스와 다릅니다"))
     with zipfile.ZipFile(archive) as zf:
         zf.extractall(work / "unpacked")
     exe = next((work / "unpacked").rglob(EXE_NAME), None)
     if exe is None or not (exe.parent / "_internal").is_dir():
-        raise RuntimeError(f"릴리스 zip에 {EXE_NAME}이 없습니다")
+        raise RuntimeError(t("릴리스 zip에 {exe}이 없습니다", exe=EXE_NAME))
     return exe.parent
 
 

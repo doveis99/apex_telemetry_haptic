@@ -16,6 +16,8 @@ import winreg
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from i18n import t
+
 STEAM_APPS = {"ATS": (270880, "American Truck Simulator"), "ETS2": (227300, "Euro Truck Simulator 2")}
 PLUGIN_FILE = "scs-telemetry.dll"
 # shared-memory name inside the DLL (UTF-16) -> provider
@@ -49,9 +51,9 @@ class GameInstall:
 
     def describe(self) -> str:
         if not self.plugins:
-            return "텔레메트리 플러그인 없음"
+            return t("텔레메트리 플러그인 없음")
         names = ", ".join(sorted(set(self.plugins.values())))
-        return f"{names}" + ("" if self.compatible else " (호환 미확인)")
+        return names if self.compatible else t("{names} (호환 미확인)", names=names)
 
 
 def _steam_root() -> Path | None:
@@ -131,7 +133,7 @@ def install(game: GameInstall) -> Path:
     folder needs administrator rights."""
     source = bundled_plugin()
     if not source.is_file():
-        raise FileNotFoundError(f"번들 플러그인이 없습니다: {source}")
+        raise FileNotFoundError(t("번들 플러그인이 없습니다: {path}", path=source))
     game.plugins_dir.mkdir(parents=True, exist_ok=True)
     target = game.plugins_dir / PLUGIN_FILE
     shutil.copyfile(source, target)

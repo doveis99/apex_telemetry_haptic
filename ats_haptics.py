@@ -24,7 +24,8 @@ from typing import Callable
 from apex6 import FRAME_PERIOD, MAX_SAMPLE, Apex6, Block, DeviceUnavailable, StreamStats
 from effects import Gains, Synth, effective_gains
 from gamewatch import GameWatcher
-from settings import load_gains
+from i18n import set_language, system_language, t
+from settings import load_app_options, load_gains
 from telemetry import Frame, SharedMemoryTelemetry, SimulatedTelemetry
 
 STALE_AFTER_S = 0.3  # game minimized, loading or closed: render_time stops moving
@@ -63,19 +64,19 @@ class Runner:
         now = time.perf_counter()
         if frame is None:
             problem = getattr(self.source, "problem", None)
-            self._set_state(f"텔레메트리 없음: {problem} → '텔레메트리 플러그인…'에서 설치" if problem
-                            else "텔레메트리 대기 중 (게임 로딩 중이거나 플러그인 없음)")
+            self._set_state(t("텔레메트리 없음: {problem} → '텔레메트리 플러그인'에서 설치", problem=problem)
+                            if problem else t("텔레메트리 대기 중 (게임 로딩 중이거나 플러그인 없음)"))
             return None
         if frame.render_time != self._last_render_time:
             self._last_render_time = frame.render_time
             self._last_render_change = now
         if not frame.live:
-            self._set_state("일시정지/메뉴")
+            self._set_state(t("일시정지/메뉴"))
             return None
         if now - self._last_render_change > STALE_AFTER_S:
-            self._set_state("텔레메트리 멈춤 (최소화/로딩)")
+            self._set_state(t("텔레메트리 멈춤 (최소화/로딩)"))
             return None
-        self._set_state(f"주행 중 ({self.source.name})")
+        self._set_state(t("주행 중 ({source})", source=self.source.name))
         return frame
 
     def _set_state(self, state: str) -> None:
@@ -100,7 +101,7 @@ class Runner:
             if self.watcher is None or self.watcher.game:
                 return True
             self.frame = None
-            self._set_state("게임 대기 중 (ATS/ETS2 실행 전)")
+            self._set_state(t("게임 대기 중 (ATS/ETS2 실행 전)"))
             time.sleep(0.25)
         return False
 
@@ -171,7 +172,7 @@ def run(runner: Runner, dry_run: bool = False,
                 if on_connected:
                     on_connected(None)
                 runner.frame = None
-                runner._set_state(f"{exc} · {RETRY_S:.0f}초 후 재시도")
+                runner._set_state(t("{error} · {seconds}초 후 재시도", error=exc, seconds=f"{RETRY_S:.0f}"))
                 runner.events.append(f"{time.strftime('%H:%M:%S')} {exc}")
                 deadline = time.perf_counter() + RETRY_S
                 while not runner.finished and time.perf_counter() < deadline:
@@ -183,7 +184,7 @@ def run(runner: Runner, dry_run: bool = False,
             on_connected(None)
         if not runner.game_ended or exit_with_game:
             return
-        runner._set_state("게임 종료됨, 컨트롤러 해제")
+        runner._set_state(t("게임 종료됨, 컨트롤러 해제"))
 
 
 def parse_args(defaults: Gains) -> argparse.Namespace:
@@ -206,6 +207,7 @@ def parse_args(defaults: Gains) -> argparse.Namespace:
 
 
 def main() -> None:
+    set_language(load_app_options().language or system_language())
     gains = load_gains()
     args = parse_args(gains)
     gains.master = args.gain
@@ -237,14 +239,14 @@ def main() -> None:
         runner.render = render_with_status
     def on_connected(name: str | None) -> None:
         if name:
-            print(f"\n{name} 연결됨. Ctrl+C로 종료.", flush=True)
+            print("\n" + t("{name} 연결됨. Ctrl+C로 종료.", name=name), flush=True)
         elif runner.last_stats:
-            print(f"\n컨트롤러 해제. {runner.last_stats.summary()}", flush=True)
+            print("\n" + t("컨트롤러 해제. {stats}", stats=runner.last_stats.summary()), flush=True)
 
     try:
         run(runner, dry_run=args.dry_run, on_connected=on_connected, exit_with_game=args.exit_with_game)
     except KeyboardInterrupt:
-        print("\n종료: 모터 해제 완료.")
+        print("\n" + t("종료: 모터 해제 완료."))
     finally:
         runner.close()
 

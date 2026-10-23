@@ -18,6 +18,8 @@ from typing import Callable, Sequence
 
 import hid
 
+from i18n import t
+
 VENDOR_ID = 0x37D7
 PRODUCT_ID = 0x2502
 USAGE_PAGE = 0xFFA0
@@ -184,9 +186,9 @@ def find_path() -> bytes:
         if entry["usage_page"] == USAGE_PAGE:
             return entry["path"]
     if _steam_overlay_loaded():
-        raise DeviceUnavailable("컨트롤러 안 보임: Steam이 실행한 프로세스라 Steam Input이 패드를 숨김 "
-                                "(창을 따로 실행하거나 게임의 Steam Input 끄기)")
-    raise DeviceUnavailable("컨트롤러 없음 (유선/2.4G 동글 연결, 전원 확인)")
+        raise DeviceUnavailable(t("컨트롤러 안 보임: Steam이 실행한 프로세스라 Steam Input이 패드를 숨김 "
+                                  "(창을 따로 실행하거나 게임의 Steam Input 끄기)"))
+    raise DeviceUnavailable(t("컨트롤러 없음 (유선/2.4G 동글 연결, 전원 확인)"))
 
 
 def _steam_overlay_loaded() -> bool:
@@ -231,7 +233,7 @@ class Apex6:
         try:
             self._dev.open_path(find_path())
         except OSError as exc:
-            raise DeviceUnavailable(f"컨트롤러를 열 수 없음 ({exc})") from exc
+            raise DeviceUnavailable(t("컨트롤러를 열 수 없음 ({error})", error=exc)) from exc
         try:
             self.info = self.identify()
         except BaseException:
@@ -252,9 +254,9 @@ class Apex6:
         try:
             written = self._dev.write(report)
         except OSError as exc:
-            raise DeviceUnavailable(f"컨트롤러 연결 끊김 ({exc})") from exc
+            raise DeviceUnavailable(t("컨트롤러 연결 끊김 ({error})", error=exc)) from exc
         if written < 0:
-            raise DeviceUnavailable(f"컨트롤러 연결 끊김 ({self._dev.error()})")
+            raise DeviceUnavailable(t("컨트롤러 연결 끊김 ({error})", error=self._dev.error()))
 
     def identify(self, timeout: float = 0.6) -> DeviceInfo:
         # Drop stale input before the exchange. cython-hidapi treats a 0 ms
@@ -269,12 +271,12 @@ class Apex6:
                 data = self._dev.read(64, 50)
                 if data and (info := _parse_device_info(data)):
                     if not info.is_pro:
-                        raise RuntimeError(f"APEX 6 Pro가 아님 (device type 0x{info.device_type:02X})")
+                        raise RuntimeError(t("APEX 6 Pro가 아님 (device type 0x{type})", type=f"{info.device_type:02X}"))
                     return info
         except OSError as exc:
-            raise DeviceUnavailable(f"컨트롤러 연결 끊김 ({exc})") from exc
+            raise DeviceUnavailable(t("컨트롤러 연결 끊김 ({error})", error=exc)) from exc
         # The 2.4 GHz dongle stays enumerated while the controller sleeps.
-        raise DeviceUnavailable("컨트롤러 응답 없음 (절전 중이면 버튼을 눌러 깨우세요)")
+        raise DeviceUnavailable(t("컨트롤러 응답 없음 (절전 중이면 버튼을 눌러 깨우세요)"))
 
     def enable(self, trigger_mode: int = DEFAULT_TRIGGER_MODE) -> None:
         self._trigger_mode = trigger_mode

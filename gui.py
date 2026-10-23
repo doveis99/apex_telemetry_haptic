@@ -53,6 +53,7 @@ EFFECT_SLIDERS = (
     ("impact", "충돌", 0, 200, 100, "%"),
     ("trigger", "엑셀/브레이크", 0, 100, 100, "%"),
     ("throttle_pulse", "└ 엔진 박자", 0, 100, 100, "%"),
+    ("steady_fade", "정속 시 줄임", 0, 100, 100, "%"),
 )
 EVENT_SLIDERS = (
     ("pedal", "페달 바닥", 0, 200, 100, "%"),
@@ -63,6 +64,7 @@ EVENT_SLIDERS = (
     ("engine_start", "시동 켜기/끄기", 0, 200, 100, "%"),
     ("shifter", "레인지/스플리터", 0, 200, 100, "%"),
     ("game_events", "게임 알림", 0, 200, 100, "%"),
+    ("ducking", "└ 주행 진동 양보", 0, 100, 100, "%"),
 )
 THRESHOLD_SLIDERS = (
     ("bump_threshold", "요철 감지 기준", 5, 100, 100, "cm/s"),

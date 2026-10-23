@@ -22,6 +22,10 @@ from telemetry import Frame
 
 DT = SUBFRAMES / SAMPLE_RATE  # 8 ms per telemetry update
 TAU = 2.0 * math.pi
+# Steady fade: engine and trigger settle toward a floor while their inputs
+# hold still (long cruises tire the hands) and come back when they move.
+STEADY_TAU = 3.0  # s for the reference to catch up with an input that stopped moving
+STEADY_K = 1.0 - math.exp(-DT / STEADY_TAU)
 
 # Relative texture strength per substance (matched by substring).
 SURFACES = (
@@ -45,6 +49,15 @@ TOGGLEABLE = ("engine", "road", "bumps", "gear", "retarder", "impact", "trigger"
               "pedal", "squeal", "trailer", "park_brake", "blinker", "engine_start",
               "shifter", "game_events")
 
+# Event bursts duck the continuous effects on their channel so they stand out
+# over the driving bed (sidechain ducking). Bumps come from the road itself
+# and fire constantly on rough surfaces, so they do not duck it.
+DUCK_EXEMPT = ("bumps",)
+DUCK_FULL = 0.25  # burst envelope that ducks by the full Gains.ducking
+DUCK_ATTACK = 1.0 - math.exp(-1.0 / (0.001 * SAMPLE_RATE))  # 1 ms, avoids a step in the bed
+DUCK_RELEASE = math.exp(-1.0 / (0.08 * SAMPLE_RATE))  # 80 ms back to full
+DUCK_LOOKAHEAD = 0.02  # delayed bursts start ducking this early, leaving a gap
+
 GRIP, TRIGGER, BOTH = "grip", "trigger", "both"
 ROUTES = (GRIP, TRIGGER, BOTH)
 DEFAULT_ROUTES = {name: TRIGGER if name in ("trigger", "pedal", "squeal") else GRIP for name in TOGGLEABLE}
@@ -65,6 +78,9 @@ class Gains:
     # how deep the throttle trigger pulses at the engine firing rate; 0 keeps
     # it steady, 0.8 is the fixed pulse of earlier versions
     throttle_pulse: float = 0.0
+    # how far engine and throttle/brake fade while rpm, load and pedals hold
+    # steady; 0 keeps them constant
+    steady_fade: float = 0.6
     cylinders: int = 6
     bump_threshold: float = 0.25  # m/s of sudden suspension travel
     impact_threshold: float = 12.0  # m/s^2 change within one 8 ms block
@@ -77,6 +93,8 @@ class Gains:
     engine_start: float = 0.8
     shifter: float = 0.5
     game_events: float = 0.5
+    # how far the continuous effects dip while an event plays; 0 never
+    ducking: float = 0.7
     # effects switched off; their gains are kept so switching back restores them
     disabled: list[str] = field(default_factory=list)
     # effect -> GRIP, TRIGGER or BOTH; missing or unknown entries use DEFAULT_ROUTES
@@ -131,15 +149,26 @@ class BandNoise:
 
 
 class Burst:
-    """Decaying sine pulse for discrete events, optionally delayed."""
+    """Decaying sine pulse for discrete events, optionally delayed.
 
-    def __init__(self, freq: float, amplitude: float, decay_s: float, delay_s: float = 0.0) -> None:
+    phase 0.25 starts at the crest instead of zero: a hard edge, not a swell.
+    """
+
+    def __init__(self, freq: float, amplitude: float, decay_s: float, delay_s: float = 0.0,
+                 phase: float = 0.0) -> None:
         self.freq, self.amplitude, self.decay_s = freq, amplitude, decay_s
         self.age = -delay_s
-        self.phase = 0.0
+        self.phase = phase
 
     def _envelope(self) -> float:
         return self.amplitude * math.exp(-self.age / self.decay_s)
+
+    @property
+    def level(self) -> float:
+        """Current envelope, before next() advances it; full just ahead of a delayed start."""
+        if self.age >= 0:
+            return self._envelope()
+        return self.amplitude if self.age >= -DUCK_LOOKAHEAD else 0.0
 
     def _carrier(self) -> float:
         value = math.sin(TAU * self.phase)
@@ -212,6 +241,8 @@ class Synth:
         self.prev_accel: tuple[float, float, float] | None = None
         self.impact_cooldown = 0.0
         self.lock_clock = 0.0
+        self.steady_ref: dict[str, float] = {}
+        self.duck = [0.0, 0.0, 0.0]  # left grip, right grip, trigger; 0 = no ducking
         self.levels = Levels()
 
     # -- event detection, once per block ------------------------------------
@@ -246,8 +277,12 @@ class Synth:
     def _gear_event(self, frame: Frame) -> None:
         self.gear_cooldown = max(0.0, self.gear_cooldown - DT)
         if frame.gear != self.prev_gear and frame.gear != 0 and self.gear_cooldown == 0.0:
-            strength = 0.7 * self.g.gear
-            self._both("gear", Burst(45.0, strength, 0.03))
+            # Clutch gap, then the dog clutch engaging: the bed ducks 20 ms
+            # ahead, a hard-edged hit near the grip resonance lands in the
+            # gap and a low body follows.
+            g = self.g.gear
+            self._both("gear", Burst(62.0, 1.3 * g, 0.018, delay_s=0.02, phase=0.25))
+            self._both("gear", Burst(38.0, 0.5 * g, 0.05, delay_s=0.02))
             self.gear_cooldown = 0.15
             self.levels.events.append(f"변속 {frame.gear}단")
         if frame.gear != 0:
@@ -289,7 +324,7 @@ class Synth:
 
         if self._changed("park_brake", frame.park_brake) and g.park_brake:
             s = g.park_brake
-            self._both("park_brake", Burst(90.0, 0.6 * s, 0.012))
+            self._both("park_brake", Burst(90.0, 1.0 * s, 0.015))
             hiss = 0.25 if frame.park_brake else 0.1
             self._both("park_brake", NoiseBurst(250.0, 0.5 * s, hiss, delay_s=0.03))
             log.append("파킹 브레이크 " + ("체결" if frame.park_brake else "해제"))
@@ -300,7 +335,7 @@ class Synth:
                 self._both("trailer", Burst(40.0, 1.0 * s, 0.08))
                 log.append("트레일러 연결")
             else:
-                self._both("trailer", Burst(50.0, 0.6 * s, 0.05))
+                self._both("trailer", Burst(50.0, 0.9 * s, 0.05))
                 self._both("trailer", NoiseBurst(250.0, 0.4 * s, 0.15, delay_s=0.15))
                 log.append("트레일러 분리")
 
@@ -309,7 +344,7 @@ class Synth:
         for key, on, side in (("blinker_l", frame.blinker_left, "L"),
                               ("blinker_r", frame.blinker_right, "R")):
             if self._changed(key, on) and g.blinker:
-                self.bursts.append(("blinker", side, Burst(160.0, (0.5 if on else 0.3) * g.blinker, 0.006)))
+                self.bursts.append(("blinker", side, Burst(160.0, (1.0 if on else 0.7) * g.blinker, 0.01)))
                 if self.blinker_idle > 1.5:
                     log.append("방향지시등 " + ("좌" if key == "blinker_l" else "우"))
                 self.blinker_idle = 0.0
@@ -327,7 +362,7 @@ class Synth:
         for i, toggle in enumerate(frame.shifter_toggle):
             if self._changed(f"shifter_{i}", toggle) and g.shifter:
                 s = g.shifter
-                self._both("shifter", Burst(120.0, 0.5 * s, 0.008))
+                self._both("shifter", Burst(120.0, 1.0 * s, 0.012))
                 log.append("레인지 셀렉터" if i == 0 else "스플리터")
 
         previous = self.prev_state.get("game_events", frozenset())
@@ -335,9 +370,19 @@ class Synth:
         for name in sorted(frame.game_events - previous):
             if g.game_events:
                 s = g.game_events
-                self._both("game_events", Burst(80.0, 0.6 * s, 0.03))
-                self._both("game_events", Burst(80.0, 0.6 * s, 0.03, delay_s=0.12))
+                self._both("game_events", Burst(80.0, 1.0 * s, 0.03))
+                self._both("game_events", Burst(80.0, 1.0 * s, 0.03, delay_s=0.12))
             log.append(GAME_EVENT_LABELS.get(name, name))
+
+    def _novelty(self, key: str, value: float, scale: float) -> float:
+        """1 just after value moved by scale or more, falling to 0 as it holds steady."""
+        ref = self.steady_ref.setdefault(key, value)
+        self.steady_ref[key] = ref + (value - ref) * STEADY_K
+        return min(1.0, abs(value - ref) / scale)
+
+    def _steady_gain(self, novelty: float) -> float:
+        floor = 1.0 - min(1.0, max(0.0, self.g.steady_fade))
+        return floor + (1.0 - floor) * novelty
 
     def _wheel_lock(self, frame: Frame) -> float:
         speed = abs(frame.speed)
@@ -376,11 +421,13 @@ class Synth:
             if braking > 0.08 and 0.3 < speed < 4.0:
                 squeal_amp = g.squeal * 0.35 * math.sqrt(1.0 - speed / 4.0)
 
+            load = max(frame.game_throttle, 0.0)
+            rpm_frac = min(1.0, frame.rpm / frame.rpm_max)
+            engine_moved = max(self._novelty("load", load, 0.15), self._novelty("rpm", rpm_frac, 0.06))
             if frame.engine_on and frame.rpm > 100:
                 # Firing frequency of a 4-stroke engine: rpm/60 * cylinders/2.
                 engine_freq = max(25.0, min(140.0, frame.rpm / 60.0 * g.cylinders / 2.0))
-                load = max(frame.game_throttle, 0.0)
-                engine_amp = g.engine * (0.25 + 0.55 * load + 0.2 * min(1.0, frame.rpm / frame.rpm_max))
+                engine_amp = g.engine * (0.25 + 0.55 * load + 0.2 * rpm_frac) * self._steady_gain(engine_moved)
 
             speed_factor = min(1.0, abs(frame.speed) / 25.0) ** 0.7
             sides = ([w for w in frame.wheels if w.pos_x < 0 and w.on_ground],
@@ -400,16 +447,20 @@ class Synth:
                 retarder_amp = g.retarder * 0.3 * min(1.0, abs(frame.speed) / 5)
 
             # One trigger channel: follow whichever pedal the player is pressing.
+            # A wheel lock is a warning and never fades.
             lock = self._wheel_lock(frame) if frame.user_brake > 0.05 else 0.0
+            throttle_moved = self._novelty("throttle", frame.user_throttle, 0.1)
+            brake_moved = self._novelty("brake", frame.user_brake, 0.1)
             if frame.user_brake > 0.05 and frame.user_brake >= frame.user_throttle:
                 trigger_mode = "brake"
                 if lock > 0:
                     trigger_amp = g.trigger * min(1.0, 0.6 + lock)
                 else:
-                    trigger_amp = g.trigger * 0.25 * frame.user_brake * speed_factor
+                    trigger_amp = (g.trigger * 0.25 * frame.user_brake * speed_factor
+                                   * self._steady_gain(brake_moved))
             elif frame.user_throttle > 0.05 and frame.engine_on:
                 trigger_mode = "throttle"
-                trigger_amp = g.trigger * (0.2 + 0.6 * frame.user_throttle)
+                trigger_amp = g.trigger * (0.2 + 0.6 * frame.user_throttle) * self._steady_gain(throttle_moved)
 
         self.lock_clock = (self.lock_clock + DT) % (1.0 / 12.0)  # 12 Hz ABS-like chop
         routes = {name: route_of(g, name) for name in TOGGLEABLE}
@@ -424,14 +475,15 @@ class Synth:
             tr = p["trigger"] + (trigger_amp - p["trigger"]) * k
             sq = p["squeal"] + (squeal_amp - p["squeal"]) * k
 
-            out = [0.0, 0.0, 0.0]  # left grip, right grip, trigger
+            out = [0.0, 0.0, 0.0]  # left grip, right grip, trigger: events
+            bed = [0.0, 0.0, 0.0]  # continuous effects, ducked under the events
             engine = e * (self.engine_osc.next(engine_freq) + 0.3 * self.engine_harm.next(engine_freq * 2))
-            _mix(out, routes["engine"], engine, engine, engine)
+            _mix(bed, routes["engine"], engine, engine, engine)
             retarder = rt * self.retarder_osc.next(50.0)
-            _mix(out, routes["retarder"], retarder, retarder, retarder)
+            _mix(bed, routes["retarder"], retarder, retarder, retarder)
             # Independent noises: 0.7 keeps their sum near one side's strength.
             noise_l, noise_r = rl * self.noise_left.next(), rr * self.noise_right.next()
-            _mix(out, routes["road"], noise_l, noise_r, 0.7 * (noise_l + noise_r))
+            _mix(bed, routes["road"], noise_l, noise_r, 0.7 * (noise_l + noise_r))
 
             if trigger_mode == "brake" and lock > 0:
                 chop = 1.0 if self.lock_clock < 1.0 / 24.0 else 0.0
@@ -443,14 +495,25 @@ class Synth:
                 t = tr * pulse * self.trigger_osc.next(100.0)
             else:
                 t = tr * self.trigger_osc.next(100.0)
-            _mix(out, routes["trigger"], t, t, t)
+            _mix(bed, routes["trigger"], t, t, t)
             if sq:
                 wobble = 0.6 + 0.4 * self.squeal_mod.next(5.0)
                 squeal = sq * wobble * self.squeal_osc.next(230.0)
                 _mix(out, routes["squeal"], squeal, squeal, squeal)
+            drive = [0.0, 0.0, 0.0]
             for effect, side, burst in self.bursts:
+                if effect not in DUCK_EXEMPT:
+                    d = burst.level
+                    _mix(drive, routes[effect], 0.0 if side == "R" else d, 0.0 if side == "L" else d, d)
                 b = burst.next()
                 _mix(out, routes[effect], 0.0 if side == "R" else b, 0.0 if side == "L" else b, b)
+            for i in range(3):
+                target = min(1.0, drive[i] / DUCK_FULL) * g.ducking
+                if target > self.duck[i]:
+                    self.duck[i] += (target - self.duck[i]) * DUCK_ATTACK
+                else:
+                    self.duck[i] = max(target, self.duck[i] * DUCK_RELEASE)
+                out[i] += bed[i] * (1.0 - self.duck[i])
 
             left.append(self._out(out[0], self.g.grip_level))
             right.append(self._out(out[1], self.g.grip_level))

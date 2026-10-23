@@ -81,6 +81,8 @@ MESSAGES = {
     "엔진": "Engine",
     "노면": "Road",
     "요철": "Bumps",
+    "차선 요철": "Rumble strips",
+    "휠스핀": "Wheelspin",
     "변속": "Gear shift",
     "리타더": "Retarder",
     "충돌": "Impact",
@@ -155,6 +157,12 @@ MESSAGES = {
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 60Hz 펄스를 냅니다. 민감도는 '요철 감지 기준'에서 정합니다.":
         ("A 60 Hz pulse in that wheel's grip when the suspension jolts on potholes, kerbs or joints. Set the "
          "sensitivity with 'Bump threshold'."),
+    "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
+        ("A brrrr in the grip on the side that runs onto a centre-line or shoulder rumble strip. "
+         "Detected from the road surface the game reports; the faster you go, the finer it gets."),
+    "엑셀을 밟는데 구동 바퀴가 트럭보다 빨리 헛돌면(얼음, 눈, 진흙, 급출발) 양쪽 그립에 거칠게 긁히는 진동을 냅니다. 브레이크로 바퀴가 잠기는 휠락은 '엑셀/브레이크'에서 냅니다.":
+        ("A rough grinding in both grips when the driven wheels spin faster than the truck moves under "
+         "throttle (ice, snow, mud, a hard launch). Wheels locking under braking are on 'Throttle/brake'."),
     "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다.":
         ("A 'clunk' on every gear change: the driving vibration drops out briefly, then the gear bites firmly. "
          "Works with automatic gearboxes too."),
@@ -217,10 +225,10 @@ MESSAGES = {
         "Shows the new version's release notes, then downloads, installs and restarts. Your settings are kept.",
     "게임에 설치된 텔레메트리 플러그인을 확인하고, 없으면 동봉한 플러그인을 설치합니다.":
         "Shows the telemetry plugin installed in each game and installs the bundled one if needed.",
-    ("ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n테스트 주행: 게임 없이 40초 시나리오를 재생합니다. 효과 확인과 튜닝용입니다.\n실행 "
+    ("ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n테스트 주행: 게임 없이 60초 시나리오를 재생합니다. 효과 확인과 튜닝용입니다.\n실행 "
      "중에는 바꿀 수 없습니다."):
         ("ATS/ETS2 game: vibration from the game's telemetry; the controller is only used while the game "
-         "runs.\nTest drive: plays a 40 s scenario without the game, for checking and tuning effects.\nCannot be "
+         "runs.\nTest drive: plays a 60 s scenario without the game, for checking and tuning effects.\nCannot be "
          "changed while running."),
     "진동 출력을 시작하거나 멈춥니다. 정지하면 모터를 끄고 컨트롤러를 놓습니다.":
         "Starts or stops the vibration output. Stopping turns the motors off and releases the controller.",
@@ -251,4 +259,13 @@ MESSAGES = {
     "Steam 밖에 설치했거나 찾지 못한 경우, bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 게임 폴더를 지정합니다.":
         ("For installs outside Steam or ones not found: point to the game folder that contains "
          "bin\\win_x64\\amtrucks.exe or eurotrucks2.exe."),
+    "디버그 기록: {name}": "Debug log: {name}",
+    "디버그 기록을 열 수 없음 ({error})": "Cannot open the debug log ({error})",
+    "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 다음 시작부터 적용되고 바로 저장됩니다.":
+        ("When on, every start writes each 8 ms block sent to the controller to a CSV (time, interval, trigger route, "
+         "level per channel, speed, surface, events). If a vibration feels wrong, note the time and look it up there. "
+         "About 30 MB per hour; the newest 10 are kept. Applies from the next start and is saved at once."),
+    "기록 폴더 ↗": "Log folder ↗",
+    "디버그 기록이 쌓이는 폴더를 엽니다.": "Opens the folder the debug logs go to.",
+    "디버그 기록": "Debug log",
 }

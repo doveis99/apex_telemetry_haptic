@@ -28,12 +28,24 @@ TAU = 2.0 * math.pi
 STEADY_TAU = 3.0  # s for the reference to catch up with an input that stopped moving
 STEADY_K = 1.0 - math.exp(-DT / STEADY_TAU)
 
-# Relative texture strength per substance (matched by substring).
+# Relative texture strength per substance (matched by substring, first match
+# wins, so the specific road_* variants come before plain "road").
 SURFACES = (
-    ("ice", 0.15), ("snow", 0.45), ("road", 0.3), ("asphalt", 0.3), ("concrete", 0.35),
-    ("metal", 0.6), ("dirt", 0.75), ("grass", 0.7), ("gravel", 1.0), ("rough", 0.9),
+    ("road_smooth", 0.2), ("road_coarse", 0.45), ("road_dirt", 0.55),
+    ("ice", 0.15), ("snow", 0.45),
+    ("rumble", 0.3),  # the strip itself is the rumble effect; the texture stays that of asphalt
+    ("road", 0.3), ("asphalt", 0.3), ("concrete", 0.35),
+    ("wood", 0.55), ("metal", 0.6), ("dirt", 0.75), ("grass", 0.7), ("gravel", 1.0), ("rough", 0.9),
 )
 DEFAULT_SURFACE = 0.4
+# Rumble strips: the game reports a "rumble_stripe" substance under a wheel.
+# It flickers back to road between the grooves, so a short hold bridges the
+# gaps. Grooves are milled about 30 cm apart: 83 Hz at 90 km/h.
+RUMBLE_SPACING = 0.3  # m
+RUMBLE_HOLD = 0.25  # s
+# Trailer wheels reach the cab through the coupling: their bumps and strips
+# follow the truck's own, softer.
+TRAILER_FEEL = 0.5
 
 
 def surface_factor(name: str) -> float:
@@ -46,7 +58,7 @@ def surface_factor(name: str) -> float:
     return DEFAULT_SURFACE
 
 
-TOGGLEABLE = ("engine", "road", "bumps", "gear", "retarder", "impact", "trigger",
+TOGGLEABLE = ("engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarder", "impact", "trigger",
               "pedal", "squeal", "trailer", "park_brake", "blinker", "engine_start",
               "shifter", "game_events")
 
@@ -72,6 +84,8 @@ class Gains:
     engine: float = 0.5
     road: float = 0.6
     bumps: float = 1.0
+    rumble: float = 0.8
+    wheelspin: float = 0.7
     gear: float = 0.8
     retarder: float = 0.5
     impact: float = 1.0
@@ -226,17 +240,23 @@ class Synth:
         self.squeal_mod = Oscillator()
         self.noise_left = BandNoise(80.0, 1.2, seed=1)
         self.noise_right = BandNoise(80.0, 1.2, seed=2)
+        self.rumble_osc = (Oscillator(), Oscillator())
+        self.spin_noise = BandNoise(45.0, 1.5, seed=3)
+        self.spin_chatter = Oscillator()
         # (effect, side, burst); side "L"/"R" is one grip, "C" both. The
         # trigger has no sides and takes every burst of an effect routed there.
         self.bursts: list[tuple[str, str, Burst]] = []
         # previous-block state
-        self.prev_amp = {"engine": 0.0, "road_l": 0.0, "road_r": 0.0, "retarder": 0.0,
-                         "trigger": 0.0, "squeal": 0.0}
+        self.prev_amp = {"engine": 0.0, "road_l": 0.0, "road_r": 0.0, "rumble_l": 0.0, "rumble_r": 0.0,
+                         "spin": 0.0, "retarder": 0.0, "trigger": 0.0, "squeal": 0.0}
         self.prev_state: dict[str, object] = {}
         self.blinker_idle = 0.0
         self.prev_deflection: list[float] = []
         self.deflection_rate_avg: list[float] = []
         self.roughness = [0.0, 0.0]
+        # s left of each side's rumble after its wheels left the strip; truck, then trailer
+        self.rumble_hold = ([0.0, 0.0], [0.0, 0.0])
+        self.spin = 0.0
         self.prev_gear = 0
         self.gear_cooldown = 0.0
         self.prev_accel: tuple[float, float, float] | None = None
@@ -249,7 +269,7 @@ class Synth:
     # -- event detection, once per block ------------------------------------
 
     def _wheel_events(self, frame: Frame) -> None:
-        wheels = frame.wheels
+        wheels = frame.wheels + frame.trailer_wheels
         if len(self.prev_deflection) != len(wheels):
             self.prev_deflection = [w.deflection for w in wheels]
             self.deflection_rate_avg = [0.0] * len(wheels)
@@ -262,13 +282,15 @@ class Synth:
             avg = self.deflection_rate_avg[i] = self.deflection_rate_avg[i] * 0.96 + rate * 0.04
             high = abs(rate - avg)
             side = 0 if wheel.pos_x < 0 else 1
-            rough[side] += high
-            counts[side] += 1
+            trailer = i >= len(frame.wheels)
+            if not trailer:  # road texture is what the truck's own tyres feel
+                rough[side] += high
+                counts[side] += 1
             if not wheel.on_ground:
                 continue
             threshold = self.g.bump_threshold
             if high > threshold:  # a step in suspension travel: pothole, kerb, joint
-                strength = min(1.0, (high - threshold) / 0.8) * self.g.bumps
+                strength = min(1.0, (high - threshold) / 0.8) * self.g.bumps * (TRAILER_FEEL if trailer else 1.0)
                 where = "C" if abs(wheel.pos_x) < 0.15 else "LR"[side]
                 self.bursts.append(("bumps", where, Burst(freq=60.0, amplitude=strength, decay_s=0.035)))
         for side in (0, 1):
@@ -385,6 +407,20 @@ class Synth:
         floor = 1.0 - min(1.0, max(0.0, self.g.steady_fade))
         return floor + (1.0 - floor) * novelty
 
+    def _wheel_spin(self, frame: Frame) -> float:
+        """Share of grounded wheels turning clearly faster than the truck moves."""
+        speed = abs(frame.speed)
+        grounded = [w for w in frame.wheels if w.on_ground]
+        if not grounded:
+            return 0.0
+        spinning = 0
+        for wheel in grounded:
+            excess = abs(wheel.velocity) * TAU * wheel.radius - speed
+            # 25% clears the outer wheels of a tight turn; 1 m/s the creep off the line
+            if excess > max(1.0, 0.25 * speed):
+                spinning += 1
+        return spinning / len(grounded)
+
     def _wheel_lock(self, frame: Frame) -> float:
         speed = abs(frame.speed)
         if speed < 3.0:
@@ -406,8 +442,8 @@ class Synth:
         live = frame is not None and frame.live
         g = self.g
 
-        engine_amp = road_l = road_r = retarder_amp = trigger_amp = squeal_amp = 0.0
-        engine_freq = 40.0
+        engine_amp = road_l = road_r = rumble_l = rumble_r = spin_amp = retarder_amp = trigger_amp = squeal_amp = 0.0
+        engine_freq = rumble_freq = 40.0
         trigger_mode = "-"
         lock = 0.0
         if live:
@@ -439,6 +475,28 @@ class Synth:
                 texture = surface * speed_factor + min(1.0, self.roughness[side] * 1.5)
                 road.append(g.road * min(1.0, texture))
             road_l, road_r = road
+            rumble_freq = max(25.0, min(120.0, abs(frame.speed) / RUMBLE_SPACING))
+            trailer_sides = ([w for w in frame.trailer_wheels if w.pos_x < 0 and w.on_ground],
+                             [w for w in frame.trailer_wheels if w.pos_x >= 0 and w.on_ground])
+            rumble = [0.0, 0.0]
+            for hold, groups, feel in ((self.rumble_hold[0], sides, 1.0),
+                                       (self.rumble_hold[1], trailer_sides, TRAILER_FEEL)):
+                for side, wheels in enumerate(groups):
+                    if any("rumble" in w.substance.lower() for w in wheels):
+                        hold[side] = RUMBLE_HOLD
+                    else:
+                        hold[side] = max(0.0, hold[side] - DT)
+                    if hold[side] > 0:
+                        rumble[side] = max(rumble[side], feel)
+            strip = g.rumble * min(1.0, abs(frame.speed) / 15.0) ** 0.5 if abs(frame.speed) > 1.0 else 0.0
+            rumble_l, rumble_r = strip * rumble[0], strip * rumble[1]
+
+            # Wheelspin: driven wheels outrunning the truck under power (ice, mud, a hard launch).
+            powered = frame.engine_on and max(frame.user_throttle, frame.game_throttle) > 0.05
+            spin = self._wheel_spin(frame) if powered else 0.0
+            self.spin = max(spin, self.spin - DT / 0.15)  # let go over 150 ms, not on one frame
+            if self.spin > 0:
+                spin_amp = g.wheelspin * min(1.0, 0.4 + self.spin)
             if frame.wheels:
                 self.levels.surface = frame.wheels[0].substance
 
@@ -472,6 +530,9 @@ class Synth:
             e = p["engine"] + (engine_amp - p["engine"]) * k
             rl = p["road_l"] + (road_l - p["road_l"]) * k
             rr = p["road_r"] + (road_r - p["road_r"]) * k
+            ul = p["rumble_l"] + (rumble_l - p["rumble_l"]) * k
+            ur = p["rumble_r"] + (rumble_r - p["rumble_r"]) * k
+            sp = p["spin"] + (spin_amp - p["spin"]) * k
             rt = p["retarder"] + (retarder_amp - p["retarder"]) * k
             tr = p["trigger"] + (trigger_amp - p["trigger"]) * k
             sq = p["squeal"] + (squeal_amp - p["squeal"]) * k
@@ -485,6 +546,16 @@ class Synth:
             # Independent noises: 0.7 keeps their sum near one side's strength.
             noise_l, noise_r = rl * self.noise_left.next(), rr * self.noise_right.next()
             _mix(bed, routes["road"], noise_l, noise_r, 0.7 * (noise_l + noise_r))
+            if ul or ur:
+                # Soft-clipped sine: each groove lands as a hard edge, a buzz, not a hum.
+                strip_l = ul * math.tanh(2.5 * self.rumble_osc[0].next(rumble_freq))
+                strip_r = ur * math.tanh(2.5 * self.rumble_osc[1].next(rumble_freq))
+                _mix(bed, routes["rumble"], strip_l, strip_r, 0.7 * (strip_l + strip_r))
+            if sp:
+                # Low grinding noise, chattering as the tyres hop between grip and slip.
+                # 2x: noise is spiky, and this has to stand out over a floored engine.
+                grind = 2.0 * sp * self.spin_noise.next() * (0.55 + 0.45 * self.spin_chatter.next(13.0))
+                _mix(bed, routes["wheelspin"], grind, grind, grind)
 
             if trigger_mode == "brake" and lock > 0:
                 chop = 1.0 if self.lock_clock < 1.0 / 24.0 else 0.0
@@ -520,7 +591,8 @@ class Synth:
             right.append(self._out(out[1], self.g.grip_level))
             trigger.append(self._out(out[2], self.g.trigger_level))
         self.prev_amp = {"engine": engine_amp, "road_l": road_l, "road_r": road_r,
-                         "retarder": retarder_amp, "trigger": trigger_amp, "squeal": squeal_amp}
+                         "rumble_l": rumble_l, "rumble_r": rumble_r, "spin": spin_amp, "retarder": retarder_amp,
+                         "trigger": trigger_amp, "squeal": squeal_amp}
         self.bursts = [entry for entry in self.bursts if not entry[2].done]
 
         lv = self.levels

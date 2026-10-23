@@ -33,6 +33,7 @@ def _migrate_legacy() -> None:
 class AppOptions:
     auto_start_on_game: bool = False
     language: str = ""  # i18n code; empty follows the Windows display language
+    debug_log: bool = False  # write every output block to a CSV (blocklog.py)
 
 
 def _read(path: Path | None) -> dict:

@@ -83,6 +83,8 @@ MESSAGES = {
     "엔진": "Moteur",
     "노면": "Route",
     "요철": "Bosses",
+    "차선 요철": "Bandes rugueuses",
+    "휠스핀": "Patinage",
     "변속": "Passage",
     "리타더": "Ralentisseur",
     "충돌": "Choc",
@@ -158,6 +160,12 @@ MESSAGES = {
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 60Hz 펄스를 냅니다. 민감도는 '요철 감지 기준'에서 정합니다.":
         ("Une impulsion à 60 Hz dans la poignée du côté concerné quand la suspension encaisse un nid-de-poule, un "
          "trottoir ou un joint. Sensibilité via « Seuil des bosses »."),
+    "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
+        ("Un brrrr dans la poignée du côté qui roule sur une bande rugueuse de ligne centrale ou "
+         "d'accotement. Détectée via le revêtement signalé par le jeu ; plus on va vite, plus c'est fin."),
+    "엑셀을 밟는데 구동 바퀴가 트럭보다 빨리 헛돌면(얼음, 눈, 진흙, 급출발) 양쪽 그립에 거칠게 긁히는 진동을 냅니다. 브레이크로 바퀴가 잠기는 휠락은 '엑셀/브레이크'에서 냅니다.":
+        ("Un raclement rugueux dans les deux poignées quand les roues motrices tournent plus vite que le camion "
+         "n'avance à l'accélération (glace, neige, boue, départ brutal). Le blocage au freinage est dans « Accél./frein »."),
     "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다.":
         ("Un « clac » à chaque changement de rapport : la vibration de conduite s'interrompt un instant, puis le "
          "rapport s'enclenche fermement. Marche aussi en boîte automatique."),
@@ -222,10 +230,10 @@ MESSAGES = {
         "Affiche les notes de version, puis télécharge, installe et redémarre. Vos réglages sont conservés.",
     "게임에 설치된 텔레메트리 플러그인을 확인하고, 없으면 동봉한 플러그인을 설치합니다.":
         "Affiche le plugin de télémétrie installé dans chaque jeu et installe celui fourni si besoin.",
-    ("ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n테스트 주행: 게임 없이 40초 시나리오를 재생합니다. 효과 확인과 튜닝용입니다.\n실행 "
+    ("ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n테스트 주행: 게임 없이 60초 시나리오를 재생합니다. 효과 확인과 튜닝용입니다.\n실행 "
      "중에는 바꿀 수 없습니다."):
         ("Jeu ATS/ETS2 : vibrations tirées de la télémétrie ; la manette n'est utilisée que pendant le jeu.\nEssai "
-         "routier : joue un scénario de 40 s sans le jeu, pour vérifier et régler les effets.\nNon modifiable "
+         "routier : joue un scénario de 60 s sans le jeu, pour vérifier et régler les effets.\nNon modifiable "
          "pendant le fonctionnement."),
     "진동 출력을 시작하거나 멈춥니다. 정지하면 모터를 끄고 컨트롤러를 놓습니다.":
         "Démarre ou arrête la sortie des vibrations. L'arrêt coupe les moteurs et libère la manette.",
@@ -258,4 +266,13 @@ MESSAGES = {
     "Steam 밖에 설치했거나 찾지 못한 경우, bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 게임 폴더를 지정합니다.":
         ("Pour une installation hors Steam ou introuvable : indiquez le dossier du jeu qui contient "
          "bin\\win_x64\\amtrucks.exe ou eurotrucks2.exe."),
+    "디버그 기록: {name}": "Journal de débogage : {name}",
+    "디버그 기록을 열 수 없음 ({error})": "Impossible d'ouvrir le journal de débogage ({error})",
+    "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 다음 시작부터 적용되고 바로 저장됩니다.":
+        ("Activé, chaque démarrage écrit dans un CSV chaque bloc de 8 ms envoyé à la manette (heure, intervalle, route "
+         "des gâchettes, intensité par canal, vitesse, revêtement, événements). Si une vibration semble anormale, notez l'heure "
+         "et cherchez-la dedans. Environ 30 Mo par heure ; les 10 plus récents sont gardés. Pris en compte au prochain démarrage, enregistré aussitôt."),
+    "기록 폴더 ↗": "Dossier des journaux ↗",
+    "디버그 기록이 쌓이는 폴더를 엽니다.": "Ouvre le dossier des journaux de débogage.",
+    "디버그 기록": "Journal de débogage",
 }

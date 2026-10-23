@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import os
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
@@ -30,6 +31,7 @@ import i18n
 import plugin_install
 import updater
 from ats_haptics import Runner, run
+from blocklog import LOG_DIR
 from i18n import N_, t
 from version import __version__
 from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Gains, route_of
@@ -53,6 +55,8 @@ EFFECT_SLIDERS = (
     ("engine", N_("엔진"), 0, 200, 100, "%"),
     ("road", N_("노면"), 0, 200, 100, "%"),
     ("bumps", N_("요철"), 0, 200, 100, "%"),
+    ("rumble", N_("차선 요철"), 0, 200, 100, "%"),
+    ("wheelspin", N_("휠스핀"), 0, 200, 100, "%"),
     ("gear", N_("변속"), 0, 200, 100, "%"),
     ("retarder", N_("리타더"), 0, 200, 100, "%"),
     ("impact", N_("충돌"), 0, 200, 100, "%"),
@@ -87,6 +91,10 @@ SLIDER_TIPS = {
                "80Hz 노이즈입니다. 왼쪽과 오른쪽 바퀴가 따로 갑니다."),
     "bumps": N_("포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 60Hz 펄스를 냅니다. "
                 "민감도는 '요철 감지 기준'에서 정합니다."),
+    "rumble": N_("중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. "
+                 "게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다."),
+    "wheelspin": N_("엑셀을 밟는데 구동 바퀴가 트럭보다 빨리 헛돌면(얼음, 눈, 진흙, 급출발) 양쪽 그립에 거칠게 긁히는 "
+                    "진동을 냅니다. 브레이크로 바퀴가 잠기는 휠락은 '엑셀/브레이크'에서 냅니다."),
     "gear": N_("기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다."),
     "retarder": N_("리타더 단계에 비례하는 50Hz 웅웅거림입니다. 엔진 브레이크만 켜져 있으면 약하게 냅니다."),
     "impact": N_("가속도가 순간적으로 크게 튀면(충돌, 큰 충격) 강한 50Hz 펄스를 냅니다. "
@@ -200,7 +208,7 @@ class App:
         self.source_picker = Segmented(control, (("game", t("ATS/ETS2 게임"), ACCENT), ("sim", t("테스트 주행"), ACCENT)),
                                        self._on_source, segment_width=104, height=32, size=10)
         tip(self.source_picker, t("ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n"
-                                  "테스트 주행: 게임 없이 40초 시나리오를 재생합니다. 효과 확인과 튜닝용입니다.\n"
+                                  "테스트 주행: 게임 없이 60초 시나리오를 재생합니다. 효과 확인과 튜닝용입니다.\n"
                                   "실행 중에는 바꿀 수 없습니다.")).pack(side="left")
         self.run_button = Button(control, t("▶  시작"), self.toggle_run, kind="go", size=11, height=36,
                                  min_width=120, bg=CARD)
@@ -237,6 +245,17 @@ class App:
         tip(tk.Label(footer, textvariable=self.timing, bg=BG, fg=FAINT, font=font(9)),
             t("직전 세션에서 8ms 출력 주기를 놓친 횟수와 가장 늦었던 시간입니다. 0에 가까우면 정상입니다.")).pack(
             side="right")
+        # debug log: switch, name and folder link, packed right to left
+        log_tip = t("켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, "
+                    "트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 "
+                    "보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 다음 시작부터 적용되고 바로 저장됩니다.")
+        tip(Link(footer, t("기록 폴더 ↗"), self._open_log_dir),
+            t("디버그 기록이 쌓이는 폴더를 엽니다.") + f"\n{LOG_DIR}").pack(side="right", padx=(0, 18))
+        tip(tk.Label(footer, text=t("디버그 기록"), bg=BG, fg=TEXT, font=font(9)), log_tip).pack(
+            side="right", padx=(8, 10))
+        if not hasattr(self, "debug_log"):
+            self.debug_log = tk.BooleanVar(value=self.options.debug_log)
+        tip(Switch(footer, self.debug_log, self._on_debug_log, color=ACCENT, bg=BG), log_tip).pack(side="right")
 
         left = tk.Frame(root, bg=BG)
         left.grid(row=2, column=0, sticky="nsew", padx=(18, 6), pady=(12, 0))
@@ -459,6 +478,15 @@ class App:
         save_app_options(self.options)
         self.last_game = None  # a game that is already running counts as newly detected
 
+    def _on_debug_log(self) -> None:
+        # An app option like auto start: saved right away, used from the next start.
+        self.options.debug_log = self.debug_log.get()
+        save_app_options(self.options)
+
+    def _open_log_dir(self) -> None:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        os.startfile(LOG_DIR)
+
     def _set_cylinders(self) -> None:
         self.gains.cylinders = int(self.cylinders.get())
         self._changed()
@@ -506,7 +534,7 @@ class App:
         self.error = None
         self.connected = None
         self.events.delete(0, "end")
-        self.runner = Runner(self.gains, simulate=self.source.get() == "sim")
+        self.runner = Runner(self.gains, simulate=self.source.get() == "sim", log_blocks=self.options.debug_log)
         self.thread = threading.Thread(target=self._worker, args=(self.runner,), daemon=True)
         self.thread.start()
         self._show_run_state()

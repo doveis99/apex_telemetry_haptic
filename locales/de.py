@@ -81,6 +81,8 @@ MESSAGES = {
     "엔진": "Motor",
     "노면": "Fahrbahn",
     "요철": "Unebenheiten",
+    "차선 요철": "Rüttelstreifen",
+    "휠스핀": "Durchdrehen",
     "변속": "Schalten",
     "리타더": "Retarder",
     "충돌": "Aufprall",
@@ -156,6 +158,12 @@ MESSAGES = {
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 60Hz 펄스를 냅니다. 민감도는 '요철 감지 기준'에서 정합니다.":
         ("Ein 60-Hz-Impuls im Griff der Seite, wenn die Federung an Schlaglöchern, Bordsteinen oder Fugen ruckt. "
          "Empfindlichkeit über „Schwelle Unebenheit“."),
+    "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
+        ("Ein Brrrr im Griff der Seite, die auf einen Rüttelstreifen an Mittellinie oder "
+         "Seitenstreifen fährt. Erkannt am Fahrbahnbelag aus dem Spiel; je schneller, desto feiner."),
+    "엑셀을 밟는데 구동 바퀴가 트럭보다 빨리 헛돌면(얼음, 눈, 진흙, 급출발) 양쪽 그립에 거칠게 긁히는 진동을 냅니다. 브레이크로 바퀴가 잠기는 휠락은 '엑셀/브레이크'에서 냅니다.":
+        ("Ein raues Schaben in beiden Griffen, wenn die Antriebsräder beim Gasgeben schneller drehen, als "
+         "der Lkw fährt (Eis, Schnee, Schlamm, harter Start). Blockieren beim Bremsen kommt über „Gas/Bremse“."),
     "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다.":
         ("Ein „Klonk“ bei jedem Gangwechsel: Die Fahrvibration setzt kurz aus, dann greift der Gang fest. "
          "Funktioniert auch mit Automatik."),
@@ -221,10 +229,10 @@ MESSAGES = {
          "erhalten."),
     "게임에 설치된 텔레메트리 플러그인을 확인하고, 없으면 동봉한 플러그인을 설치합니다.":
         "Zeigt das in jedem Spiel installierte Telemetrie-Plugin und installiert bei Bedarf das mitgelieferte.",
-    ("ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n테스트 주행: 게임 없이 40초 시나리오를 재생합니다. 효과 확인과 튜닝용입니다.\n실행 "
+    ("ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n테스트 주행: 게임 없이 60초 시나리오를 재생합니다. 효과 확인과 튜닝용입니다.\n실행 "
      "중에는 바꿀 수 없습니다."):
         ("ATS/ETS2-Spiel: Vibration aus der Telemetrie des Spiels; der Controller wird nur genutzt, solange das "
-         "Spiel läuft.\nTestfahrt: spielt ohne Spiel ein 40-s-Szenario ab, zum Prüfen und Abstimmen der "
+         "Spiel läuft.\nTestfahrt: spielt ohne Spiel ein 60-s-Szenario ab, zum Prüfen und Abstimmen der "
          "Effekte.\nWährend des Betriebs nicht umschaltbar."),
     "진동 출력을 시작하거나 멈춥니다. 정지하면 모터를 끄고 컨트롤러를 놓습니다.":
         "Startet oder stoppt die Vibrationsausgabe. Stoppen schaltet die Motoren ab und gibt den Controller frei.",
@@ -256,4 +264,13 @@ MESSAGES = {
     "Steam 밖에 설치했거나 찾지 못한 경우, bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 게임 폴더를 지정합니다.":
         ("Für Installationen außerhalb von Steam oder nicht gefundene: den Spielordner mit "
          "bin\\win_x64\\amtrucks.exe oder eurotrucks2.exe angeben."),
+    "디버그 기록: {name}": "Debug-Protokoll: {name}",
+    "디버그 기록을 열 수 없음 ({error})": "Debug-Protokoll lässt sich nicht öffnen ({error})",
+    "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 다음 시작부터 적용되고 바로 저장됩니다.":
+        ("Wenn an, schreibt jeder Start jeden an den Controller gesendeten 8-ms-Block in eine CSV (Zeit, Abstand, "
+         "Trigger-Route, Stärke je Kanal, Tempo, Belag, Ereignisse). Fühlt sich eine Vibration falsch an, merken Sie sich die "
+         "Uhrzeit und sehen Sie dort nach. Etwa 30 MB pro Stunde; die neuesten 10 bleiben. Gilt ab dem nächsten Start, sofort gespeichert."),
+    "기록 폴더 ↗": "Protokollordner ↗",
+    "디버그 기록이 쌓이는 폴더를 엽니다.": "Öffnet den Ordner mit den Debug-Protokollen.",
+    "디버그 기록": "Debug-Protokoll",
 }

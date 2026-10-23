@@ -22,6 +22,7 @@ from dataclasses import fields
 from typing import Callable
 
 from apex6 import FRAME_PERIOD, MAX_SAMPLE, Apex6, Block, DeviceUnavailable, StreamStats
+from blocklog import BlockLog
 from effects import Gains, Synth, effective_gains
 from gamewatch import GameWatcher
 from i18n import set_language, system_language, t
@@ -40,7 +41,8 @@ class Runner:
     """
 
     def __init__(self, gains: Gains, simulate: bool = False,
-                 on_state: Callable[[str], None] | None = None, seconds: float | None = None) -> None:
+                 on_state: Callable[[str], None] | None = None, seconds: float | None = None,
+                 log_blocks: bool = False) -> None:
         self.gains = effective_gains(gains)
         self.synth = Synth(self.gains)
         self.simulated = simulate
@@ -58,6 +60,8 @@ class Runner:
         self.max_accel = 0.0
         self._last_render_time = None
         self._last_render_change = 0.0
+        self.log_blocks = log_blocks
+        self.block_log: BlockLog | None = None
 
     def _read_frame(self) -> Frame | None:
         frame = self.source.read()
@@ -109,6 +113,14 @@ class Runner:
         self.game_ended = False
         self.synth = Synth(self.gains)  # fresh edge detectors: no stale events
         self._last_render_time = None
+        self._close_log()
+        if self.log_blocks:
+            stamp = time.strftime("%H:%M:%S")
+            try:
+                self.block_log = BlockLog()
+                self.events.append(f"{stamp} {t('디버그 기록: {name}', name=self.block_log.path.name)}")
+            except OSError as exc:
+                self.events.append(f"{stamp} {t('디버그 기록을 열 수 없음 ({error})', error=exc)}")
 
     def render(self, _first_sample: int = 0) -> Block | None:
         if self.finished:
@@ -127,6 +139,8 @@ class Runner:
         self.events.extend(f"{stamp} {event}" for event in levels.events)
         for i, channel in enumerate((block.left_grip, block.right_grip, block.trigger)):
             self.peaks[i] = max(self.peaks[i], max(abs(x) for x in channel) / MAX_SAMPLE)
+        if self.block_log is not None:
+            self.block_log.add(block, frame, levels.events)
         return block
 
     def take_peaks(self) -> list[float]:
@@ -137,7 +151,13 @@ class Runner:
         value, self.max_accel = self.max_accel, 0.0
         return value
 
+    def _close_log(self) -> None:
+        if self.block_log is not None:
+            self.block_log.close()
+            self.block_log = None
+
     def close(self) -> None:
+        self._close_log()
         self.source.close()
         if self.watcher is not None:
             self.watcher.close()
@@ -194,11 +214,14 @@ def parse_args(defaults: Gains) -> argparse.Namespace:
     parser.add_argument("--monitor", action="store_true", help="print a status line twice a second")
     parser.add_argument("--seconds", type=float, help="stop after this many seconds")
     parser.add_argument("--exit-with-game", action="store_true", help="quit when ATS/ETS2 quits")
+    parser.add_argument("--log-blocks", action="store_true",
+                        help="write every output block as CSV under %%APPDATA%%/ATSHaptics/logs (see blocklog.py)")
     parser.add_argument("--gain", type=float, default=defaults.master, help="master gain 0..1+")
     parser.add_argument("--grip-level", type=float, default=defaults.grip_level, help="grip output strength")
     parser.add_argument("--trigger-level", type=float, default=defaults.trigger_level,
                         help="trigger output strength")
-    for name in ("engine", "road", "bumps", "gear", "retarder", "impact", "trigger"):
+    for name in ("engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarder", "impact",
+                 "trigger"):
         parser.add_argument(f"--{name}", type=float, default=getattr(defaults, name))
     parser.add_argument("--throttle-pulse", type=float, default=defaults.throttle_pulse,
                         help="engine-rate pulse depth of the throttle trigger, 0..1")
@@ -211,10 +234,10 @@ def main() -> None:
     gains = load_gains()
     args = parse_args(gains)
     gains.master = args.gain
-    for name in ("grip_level", "trigger_level", "engine", "road", "bumps", "gear", "retarder", "impact",
-                 "trigger", "throttle_pulse", "cylinders"):
+    for name in ("grip_level", "trigger_level", "engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarder",
+                 "impact", "trigger", "throttle_pulse", "cylinders"):
         setattr(gains, name, getattr(args, name))
-    runner = Runner(gains, simulate=args.simulate, seconds=args.seconds,
+    runner = Runner(gains, simulate=args.simulate, seconds=args.seconds, log_blocks=args.log_blocks,
                     on_state=lambda s: print(f"\n[{time.strftime('%H:%M:%S')}] {s}", flush=True))
     monitor = args.monitor or args.dry_run
     if monitor:

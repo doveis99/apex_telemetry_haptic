@@ -4,9 +4,10 @@ Only the packaged exe updates itself: the release zip is downloaded, checked
 against the SHA-256 digest GitHub publishes for the asset and unpacked to
 %TEMP%. A small PowerShell script then waits until every ATSHaptics.exe from
 the install folder has exited (the window and a Steam --launch wrapper),
-copies the new files over it and starts the new version. Running from
-source, or from a folder that is not writable, only points at the release
-page.
+backs the install up, copies the new files over it and starts the new
+version; a failed copy restores the backup, and a program that never exits
+leaves the install untouched. Running from source, or from a folder that is
+not writable, only points at the release page.
 """
 
 from __future__ import annotations
@@ -44,12 +45,35 @@ for ($i = 0; $i -lt 240; $i++) {
     if (-not $running) { break }
     Start-Sleep -Milliseconds 500
 }
-# _internal is mirrored so files dropped by the new version disappear; the
-# top level is only overwritten, never purged.
-robocopy (Join-Path $Source "_internal") (Join-Path $Target "_internal") /MIR /R:10 /W:1 /NP /NFL /NDL | Out-File $Log -Append
-$internal = $LASTEXITCODE
-robocopy $Source $Target /E /XD _internal /R:10 /W:1 /NP /NFL /NDL | Out-File $Log -Append
-"robocopy exit codes: $internal, $LASTEXITCODE (below 8 is success)" | Out-File $Log -Append
+if ($running) {
+    # Its files are locked: copying now would leave half of each version.
+    "still running after 120 s; update not applied" | Out-File $Log -Append
+    exit 1
+}
+function Copy-Install([string]$From, [string]$To) {
+    # _internal is mirrored so files dropped by the new version disappear; the
+    # top level is only overwritten, never purged. Returns the worse robocopy
+    # exit code (8 and above is a failure).
+    robocopy (Join-Path $From "_internal") (Join-Path $To "_internal") /MIR /R:10 /W:1 /NP /NFL /NDL | Out-File $Log -Append
+    $internal = $LASTEXITCODE
+    robocopy $From $To /E /XD _internal /R:10 /W:1 /NP /NFL /NDL | Out-File $Log -Append
+    "robocopy exit codes: $internal, $LASTEXITCODE (below 8 is success)" | Out-File $Log -Append
+    return [Math]::Max($internal, $LASTEXITCODE)
+}
+# Keep the installed version until the new one is fully in place, so a failed
+# copy can put it back instead of leaving a mix that will not start.
+$backup = Join-Path (Split-Path $Source) "previous"
+"backing up $Target to $backup" | Out-File $Log -Append
+if ((Copy-Install $Target $backup) -ge 8) {
+    "backup failed; update not applied" | Out-File $Log -Append
+    Start-Process $exe
+    exit 1
+}
+"installing $Source" | Out-File $Log -Append
+if ((Copy-Install $Source $Target) -ge 8) {
+    "install failed; restoring the previous version" | Out-File $Log -Append
+    if ((Copy-Install $backup $Target) -ge 8) { "restore failed too: copy $backup back by hand" | Out-File $Log -Append }
+}
 Start-Process $exe
 """
 

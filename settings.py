@@ -42,7 +42,7 @@ def _read(path: Path | None) -> dict:
     path = path or CONFIG_PATH
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (OSError, ValueError):  # missing, unreadable, not UTF-8 or not JSON: start from defaults
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -50,19 +50,33 @@ def _read(path: Path | None) -> dict:
 def _write(path: Path | None, data: dict) -> None:
     path = path or CONFIG_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    # Write beside it and swap in, so a crash or power cut mid-write never
+    # leaves a truncated file that would reset every setting.
+    temp = path.with_name(path.name + ".tmp")
+    temp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(temp, path)
+
+
+def _set_fields(target: object, stored: dict) -> None:
+    """Copy the stored values that fit; a hand-edited one of the wrong type keeps its default."""
+    for f in fields(target):
+        if f.name not in stored:
+            continue
+        current, value = getattr(target, f.name), stored[f.name]
+        try:
+            if isinstance(current, dict):  # keep defaults for keys an older config lacks
+                current.update(value if isinstance(value, dict) else {})
+            elif isinstance(current, list):
+                setattr(target, f.name, [str(item) for item in value] if isinstance(value, list) else current)
+            else:
+                setattr(target, f.name, type(current)(value))
+        except (TypeError, ValueError):
+            pass
 
 
 def load_gains(path: Path | None = None) -> Gains:
     gains = Gains()
-    data = _read(path)
-    for f in fields(Gains):
-        if f.name in data:
-            current = getattr(gains, f.name)
-            if isinstance(current, dict):  # keep defaults for keys an older config lacks
-                current.update(data[f.name] if isinstance(data[f.name], dict) else {})
-            else:
-                setattr(gains, f.name, type(current)(data[f.name]))
+    _set_fields(gains, _read(path))
     return gains
 
 
@@ -75,9 +89,7 @@ def save_gains(gains: Gains, path: Path | None = None) -> None:
 def load_app_options(path: Path | None = None) -> AppOptions:
     options = AppOptions()
     stored = _read(path).get("app", {})
-    for f in fields(AppOptions):
-        if f.name in stored:
-            setattr(options, f.name, type(getattr(options, f.name))(stored[f.name]))
+    _set_fields(options, stored if isinstance(stored, dict) else {})
     return options
 
 

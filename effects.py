@@ -190,6 +190,10 @@ class Burst:
         self.phase = (self.phase + self.freq / SAMPLE_RATE) % 1.0
         return value
 
+    def retrigger(self, amplitude: float) -> None:
+        """Restart the envelope at a new peak; the carrier keeps running."""
+        self.amplitude, self.age = amplitude, 0.0
+
     def next(self) -> float:
         if self.age < 0:
             self.age += 1.0 / SAMPLE_RATE
@@ -251,13 +255,15 @@ class Synth:
                          "spin": 0.0, "retarder": 0.0, "trigger": 0.0, "squeal": 0.0}
         self.prev_state: dict[str, object] = {}
         self.blinker_idle = 0.0
+        self.was_live = False
         self.prev_deflection: list[float] = []
         self.deflection_rate_avg: list[float] = []
+        self.bump_bursts: list[Burst | None] = []  # each wheel's pulse while it rings
         self.roughness = [0.0, 0.0]
         # s left of each side's rumble after its wheels left the strip; truck, then trailer
         self.rumble_hold = ([0.0, 0.0], [0.0, 0.0])
         self.spin = 0.0
-        self.prev_gear = 0
+        self.prev_gear: int | None = None  # None until the first live frame sets the reference
         self.gear_cooldown = 0.0
         self.prev_accel: tuple[float, float, float] | None = None
         self.impact_cooldown = 0.0
@@ -268,11 +274,26 @@ class Synth:
 
     # -- event detection, once per block ------------------------------------
 
+    def _rebaseline(self) -> None:
+        """Forget the edge detectors' last values as telemetry comes back.
+
+        A gap (pause, menu, loading, a ferry, a new session or reconnect) can
+        end with the truck elsewhere; comparing against the old values would
+        fire bumps on every wheel, an impact or a gear change that never
+        happened. The first live frame only becomes the new reference. Game
+        events are one-shot flags, not states, so they still fire.
+        """
+        self.prev_deflection = []
+        self.prev_accel = None
+        self.prev_gear = None
+        self.prev_state = {key: value for key, value in self.prev_state.items() if key == "game_events"}
+
     def _wheel_events(self, frame: Frame) -> None:
         wheels = frame.wheels + frame.trailer_wheels
         if len(self.prev_deflection) != len(wheels):
             self.prev_deflection = [w.deflection for w in wheels]
             self.deflection_rate_avg = [0.0] * len(wheels)
+            self.bump_bursts = [None] * len(wheels)
             return
         rough = [0.0, 0.0]
         counts = [0, 0]
@@ -291,14 +312,28 @@ class Synth:
             threshold = self.g.bump_threshold
             if high > threshold:  # a step in suspension travel: pothole, kerb, joint
                 strength = min(1.0, (high - threshold) / 0.8) * self.g.bumps * (TRAILER_FEEL if trailer else 1.0)
+                current = self.bump_bursts[i]
+                if current is not None and not current.done:
+                    # One pulse per wheel: a pothole spans several blocks and rough
+                    # ground trips every block, so lift the ringing pulse to the
+                    # stronger hit instead of stacking more. Keeps the work bounded
+                    # by the wheel count once trailers multiply the wheels.
+                    if strength > current.level:
+                        current.retrigger(strength)
+                    continue
                 where = "C" if abs(wheel.pos_x) < 0.15 else "LR"[side]
-                self.bursts.append(("bumps", where, Burst(freq=60.0, amplitude=strength, decay_s=0.035)))
+                burst = Burst(freq=60.0, amplitude=strength, decay_s=0.035)
+                self.bursts.append(("bumps", where, burst))
+                self.bump_bursts[i] = burst
         for side in (0, 1):
             value = rough[side] / counts[side] if counts[side] else 0.0
             self.roughness[side] = self.roughness[side] * 0.9 + value * 0.1
 
     def _gear_event(self, frame: Frame) -> None:
         self.gear_cooldown = max(0.0, self.gear_cooldown - DT)
+        if self.prev_gear is None:  # first live frame: already in this gear, nothing shifted
+            self.prev_gear = frame.gear
+            return
         if frame.gear != self.prev_gear and frame.gear != 0 and self.gear_cooldown == 0.0:
             # Clutch gap, then the dog clutch engaging: the bed ducks 20 ms
             # ahead, a hard-edged hit near the grip resonance lands in the
@@ -446,6 +481,9 @@ class Synth:
         engine_freq = rumble_freq = 40.0
         trigger_mode = "-"
         lock = 0.0
+        if live and not self.was_live:
+            self._rebaseline()
+        self.was_live = live
         if live:
             self._wheel_events(frame)
             self._gear_event(frame)

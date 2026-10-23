@@ -7,8 +7,10 @@
 
 Sliders, on/off switches and the 그립 | 트리거 | 둘 다 selectors change the
 running effects immediately; 저장 writes config.json, which ats_haptics.py also
-reads. Only one window runs at a time; a second launch exits quietly. At
-start it looks for a newer GitHub release and offers it in the top bar.
+reads. Only one window runs at a time; a second launch exits quietly, and
+if it came from the Steam launch option the open window starts the game
+session instead. At start it looks for a newer GitHub release and offers it
+in the top bar. Unexpected errors land in logs\\error.log (errorlog.py).
 Every control explains itself in a tooltip. The language menu in the top
 bar rebuilds the window in another language (i18n.py) and remembers it.
 The widgets and dark theme live in widgets.py.
@@ -30,8 +32,10 @@ from tkinter import filedialog, messagebox, ttk
 import i18n
 import plugin_install
 import updater
+from apex6 import StreamStats
 from ats_haptics import Runner, run
 from blocklog import LOG_DIR
+from errorlog import log_exception
 from i18n import N_, t
 from version import __version__
 from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Gains, route_of
@@ -44,6 +48,7 @@ from widgets import (ACCENT, BG, BOTH_COLOR, CARD, FAINT, FIELD_HI, GO, GRIP_COL
 POLL_MS = 100
 METER_DECAY = 0.8
 INSTANCE_MUTEX = "Local\\ApexAtsHapticsGui"
+LAUNCH_EVENT = "Local\\ApexAtsHapticsGuiLaunch"
 
 # key, label, slider min, slider max, slider units per gain unit, unit text
 OUTPUT_SLIDERS = (
@@ -122,6 +127,7 @@ SLIDER_TIPS = {
 }
 METER_LABELS = (N_("왼쪽 그립"), N_("오른쪽 그립"), N_("트리거"))
 CYLINDERS_LABEL = N_("엔진 기통 수")
+CYLINDERS_RANGE = (4, 12)
 # where an effect vibrates; each choice has its colour, which its slider takes too
 ROUTE_OPTIONS = ((GRIP, N_("그립"), GRIP_COLOR), (TRIGGER, N_("트리거"), TRIGGER_COLOR),
                  (BOTH, N_("둘 다"), BOTH_COLOR))
@@ -133,16 +139,19 @@ LANGUAGE_TIP = "Language · 언어 · 言語 · 语言 · Sprache · Langue · I
 
 
 class App:
-    def __init__(self, root: tk.Tk, dry_run: bool = False, exit_with_game: bool = False) -> None:
+    def __init__(self, root: tk.Tk, dry_run: bool = False, exit_with_game: bool = False,
+                 launch_event: int | None = None) -> None:
         self.root = root
         self.dry_run = dry_run
         self.exit_with_game = exit_with_game
+        self.launch_event = launch_event  # set by a later Steam launch (see _request_launch)
         self.gains = load_gains()
         self.saved = asdict(self.gains)
         self.runner: Runner | None = None
         self.thread: threading.Thread | None = None
         self.error: str | None = None
         self.connected: str | None = None
+        self.session_stats: StreamStats | None = None  # set by the worker when it releases the pad
         self.meter_values = [0.0, 0.0, 0.0]
         self.save_state = tk.StringVar()  # sliders update it while being built
         self.closed = False
@@ -331,9 +340,13 @@ class App:
         tip(tk.Label(thresholds, text=t(CYLINDERS_LABEL), bg=CARD, fg=TEXT, anchor="w"), cylinders_tip).grid(
             row=len(THRESHOLD_SLIDERS), column=1, sticky="w")
         self.cylinders = tk.IntVar(value=self.gains.cylinders)
-        tip(ttk.Spinbox(thresholds, from_=4, to=12, increment=2, width=5, textvariable=self.cylinders,
-                        command=self._set_cylinders), cylinders_tip).grid(row=len(THRESHOLD_SLIDERS), column=2,
-                                                                          sticky="w", padx=6, pady=(4, 0))
+        # Traced rather than the spinbox command, which only sees the arrows, not typing.
+        self.cylinders.trace_add("write", lambda *_: self._set_cylinders())
+        spinbox = ttk.Spinbox(thresholds, from_=CYLINDERS_RANGE[0], to=CYLINDERS_RANGE[1], increment=2, width=5,
+                              textvariable=self.cylinders)
+        # text left unusable shows the count in use again
+        spinbox.bind("<FocusOut>", lambda _: self.cylinders.set(self.gains.cylinders))
+        tip(spinbox, cylinders_tip).grid(row=len(THRESHOLD_SLIDERS), column=2, sticky="w", padx=6, pady=(4, 0))
 
         log = card(right, t("이벤트"))
         log.outer.pack(fill="both", expand=True, pady=(12, 0))
@@ -488,8 +501,14 @@ class App:
         os.startfile(LOG_DIR)
 
     def _set_cylinders(self) -> None:
-        self.gains.cylinders = int(self.cylinders.get())
-        self._changed()
+        # Runs on every keystroke: text that is not (yet) a count in range waits.
+        try:
+            value = int(self.cylinders.get())
+        except (tk.TclError, ValueError):
+            return
+        if CYLINDERS_RANGE[0] <= value <= CYLINDERS_RANGE[1] and value != self.gains.cylinders:
+            self.gains.cylinders = value
+            self._changed()
 
     def save(self) -> None:
         save_gains(self.gains)
@@ -509,8 +528,8 @@ class App:
         self.gains.routes = dict(DEFAULT_ROUTES)
         for key in self.route_pickers:
             self._show_effect(key)
-        self.cylinders.set(defaults.cylinders)
-        self._set_cylinders()
+        self.cylinders.set(defaults.cylinders)  # traced
+        self._changed()
 
     def toggle_run(self) -> None:
         if self.thread and self.thread.is_alive():
@@ -543,17 +562,22 @@ class App:
         try:
             run(runner, dry_run=self.dry_run, on_connected=self._on_connected,
                 exit_with_game=self.exit_with_game)
-        except Exception as exc:  # shown in the status line
-            self.error = str(exc)
+        except Exception as exc:  # shown in the status line, the traceback in error.log
+            log_exception(exc, "session")
+            # Our own failures are RuntimeErrors with a readable message; for a bug
+            # the bare message (a KeyError's 'x') says little without its type.
+            self.error = str(exc) if isinstance(exc, RuntimeError) else f"{type(exc).__name__}: {exc}"
         finally:
             runner.close()
 
     def _on_connected(self, name: str | None) -> None:
+        # Runs on the worker thread, so plain attributes only; _poll shows them.
+        # A Tk call from here waits for the main thread, which on_close keeps
+        # in join() until this thread ends: both would wait out the timeout.
         self.connected = name
         stats = self.runner.last_stats if self.runner else None
         if name is None and stats:
-            self.timing.set(t("지난 세션: 지연 프레임 {late} / 최대 {max} ms", late=stats.late_frames,
-                              max=f"{stats.max_lateness_ms:.1f}"))
+            self.session_stats = stats
 
     def stop(self) -> None:
         if self.runner:
@@ -636,15 +660,21 @@ class App:
             return
         running = bool(self.thread and self.thread.is_alive())
         # Auto start on the game appearing, not on every poll, so a manual
-        # 정지 holds until the next launch.
+        # 정지 holds until the next launch. A Steam launch while this window
+        # was already open starts it too: that launch's own window bowed out.
         game = self.watcher.game
-        if game and not self.last_game and self.auto_start.get() and not running:
+        launched = _launch_requested(self.launch_event)  # read every poll, so a stale request never lingers
+        if not running and (launched or (game and not self.last_game and self.auto_start.get())):
             self.source.set("game")
             self.start()
             running = True
         self.last_game = game
         runner = self.runner
         self._show_run_state()
+        if self.session_stats:
+            stats, self.session_stats = self.session_stats, None
+            self.timing.set(t("지난 세션: 지연 프레임 {late} / 최대 {max} ms", late=stats.late_frames,
+                              max=f"{stats.max_lateness_ms:.1f}"))
         if running and runner:
             device = self.connected or (t("컨트롤러 없음") if self.dry_run else t("컨트롤러 미사용"))
             self.status.set(f"{device} · {runner.state or t('시작 중')}")
@@ -758,14 +788,37 @@ class PluginDialog:
         self._render()
 
 
+_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_kernel32.CreateMutexW.restype = ctypes.c_void_p
+_kernel32.CreateEventW.restype = ctypes.c_void_p
+_kernel32.SetEvent.argtypes = (ctypes.c_void_p,)
+_kernel32.WaitForSingleObject.argtypes = (ctypes.c_void_p, ctypes.c_uint32)
+_kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
+
+
 def _claim_single_instance() -> object | None:
     """Hold a named mutex; None if another window already holds it."""
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.CreateMutexW.restype = ctypes.c_void_p
-    handle = kernel32.CreateMutexW(None, False, INSTANCE_MUTEX)
+    handle = _kernel32.CreateMutexW(None, False, INSTANCE_MUTEX)
     if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
         return None
     return handle
+
+
+def _launch_event() -> int | None:
+    """The auto-reset event a Steam launch sets when this window is already open."""
+    return _kernel32.CreateEventW(None, False, False, LAUNCH_EVENT)
+
+
+def _request_launch() -> None:
+    """From a second instance: have the open window start its game session."""
+    event = _launch_event()
+    if event:
+        _kernel32.SetEvent(event)
+        _kernel32.CloseHandle(event)
+
+
+def _launch_requested(event: int | None) -> bool:
+    return bool(event) and _kernel32.WaitForSingleObject(event, 0) == 0  # WAIT_OBJECT_0, resets it
 
 
 def fit_window(root: tk.Tk) -> None:
@@ -784,11 +837,15 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--minimized", action="store_true", help="open minimized")
     args = parser.parse_args(argv)
     if _claim_single_instance() is None:
+        if args.autostart:  # a Steam launch: the window already open runs the session
+            _request_launch()
         return
     i18n.set_language(load_app_options().language or i18n.system_language())
     root = tk.Tk()
+    # windowed build: no console for Tk's own traceback printout
+    root.report_callback_exception = lambda _type, exc, _tb: log_exception(exc, "window")
     apply_theme(root)
-    app = App(root, dry_run=args.dry_run, exit_with_game=args.exit_with_game)
+    app = App(root, dry_run=args.dry_run, exit_with_game=args.exit_with_game, launch_event=_launch_event())
     dark_title_bar(root)
     if args.autostart:
         app.start()

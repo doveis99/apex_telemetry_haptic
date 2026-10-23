@@ -1,7 +1,7 @@
 """ATS / ETS2 telemetry -> APEX 6 Pro voice-coil haptics (command line).
 
   python ats_haptics.py                 run with the game (waits for it)
-  python ats_haptics.py --simulate      scripted 40 s test drive, no game needed
+  python ats_haptics.py --simulate      scripted 60 s test drive, no game needed
   python ats_haptics.py --dry-run       no controller; print levels only
   python ats_haptics.py --gain 0.8 --road 0.4 --trigger 0.3 --monitor
   python ats_haptics.py --exit-with-game
@@ -113,14 +113,25 @@ class Runner:
         self.game_ended = False
         self.synth = Synth(self.gains)  # fresh edge detectors: no stale events
         self._last_render_time = None
+        # Map the plugin afresh: the next game may write another plugin's mapping,
+        # and holding the old one keeps a dead copy alive.
+        self.source.close()
+
+    def _open_log(self) -> None:
+        """Start a debug log once the controller is taken: one file per connection.
+
+        Not per attempt: retrying a sleeping controller every RETRY_S would
+        rotate the log that recorded the disconnect out of the folder.
+        """
         self._close_log()
-        if self.log_blocks:
-            stamp = time.strftime("%H:%M:%S")
-            try:
-                self.block_log = BlockLog()
-                self.events.append(f"{stamp} {t('디버그 기록: {name}', name=self.block_log.path.name)}")
-            except OSError as exc:
-                self.events.append(f"{stamp} {t('디버그 기록을 열 수 없음 ({error})', error=exc)}")
+        if not self.log_blocks:
+            return
+        stamp = time.strftime("%H:%M:%S")
+        try:
+            self.block_log = BlockLog()
+            self.events.append(f"{stamp} {t('디버그 기록: {name}', name=self.block_log.path.name)}")
+        except OSError as exc:
+            self.events.append(f"{stamp} {t('디버그 기록을 열 수 없음 ({error})', error=exc)}")
 
     def render(self, _first_sample: int = 0) -> Block | None:
         if self.finished:
@@ -175,15 +186,18 @@ def run(runner: Runner, dry_run: bool = False,
     while runner.wait_for_game():
         runner.start_session()
         if dry_run:
+            runner._open_log()
             deadline = time.perf_counter()
             while runner.render() is not None:
                 deadline += FRAME_PERIOD
                 remaining = deadline - time.perf_counter()
                 if remaining > 0:
                     time.sleep(remaining)
+            runner._close_log()
         else:
             try:
                 with Apex6() as pad:
+                    runner._open_log()
                     if on_connected:
                         on_connected(pad.info.name)
                     runner.last_stats = pad.stream(runner.render)
@@ -200,6 +214,8 @@ def run(runner: Runner, dry_run: bool = False,
                 if runner.watcher is None or runner.watcher.game:
                     continue
                 runner.game_ended = True  # quit without ever reaching the pad
+            finally:
+                runner._close_log()  # flushed now, not when the next game starts
         if on_connected:
             on_connected(None)
         if not runner.game_ended or exit_with_game:

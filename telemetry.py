@@ -162,6 +162,7 @@ class SharedMemoryTelemetry:
         if self._mem is not None:
             self._mem.close()
             self._mem = None
+        self._substances_read_at = 0.0  # another game names its substances differently
 
     def _read_substances(self, buf) -> None:
         names = []

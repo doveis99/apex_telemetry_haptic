@@ -1,6 +1,7 @@
 """Flydigi APEX 6 Pro realtime voice-coil output.
 
-Packet layout and init sequence are ported from ApexSenseBridge (MIT):
+Packet layout and init sequence are ported from ApexSenseBridge
+(GPL-3.0-or-later, see THIRD_PARTY_NOTICES.md):
 src/flydigi/Apex6Protocol.cpp, src/flydigi/Apex5Device.cpp and
 src/dualsense/Apex6HapticBridge.cpp.
 

@@ -182,12 +182,13 @@ MESSAGES = {
          "sekund, co zmniejsza zmęczenie w długich trasach. Wracają od razu przy przyspieszaniu, zmianie biegu lub "
          "ruchu pedału."),
     "엑셀이나 브레이크를 끝까지(97% 이상) 밟는 순간 짧은 '툭'.": "Krótkie „stuk”, gdy gaz lub hamulec dojdzie do oporu (97% lub więcej).",
-    "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 가늘게 떨리는 진동입니다.":
-        "Delikatne drżenie przy łagodnym hamowaniu do zatrzymania poniżej ok. 14 km/h.",
+    "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다.":
+        "Cienki pisk w osobnych porcjach przy łagodnym hamowaniu do zatrzymania poniżej ok. 14 km/h.",
     "트레일러를 연결할 때 묵직한 '쿵', 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
         "Ciężkie „bum” przy podpinaniu naczepy; przy odpinaniu bum, a po nim syk powietrza.",
-    "파킹 브레이크를 체결하거나 해제할 때 '딸깍'에 이어 에어 빠지는 느낌.":
-        "„Klik”, a po nim syk powietrza przy zaciąganiu lub zwalnianiu hamulca ręcznego.",
+    "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
+        ("Przy zaciąganiu hamulca ręcznego „klak”, a potem prawie sekundę uchodzącego powietrza; przy zwalnianiu "
+         "niskie „tok”, a potem krótki syk."),
     "방향지시등이 점멸할 때마다 켜진 쪽 그립에 '틱'.": "„Tyk” w uchwycie po stronie kierunkowskazu przy każdym mignięciu.",
     "시동을 켤 때 크랭킹에 이어 '부웅', 끌 때 꺼지며 떨림.":
         "Przy uruchamianiu kręcenie rozrusznikiem i „brum”; przy wyłączaniu drżenie, gdy silnik gaśnie.",

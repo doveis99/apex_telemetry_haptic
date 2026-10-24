@@ -9,8 +9,8 @@ import random
 import unittest
 
 from apex6 import SAMPLE_RATE
-from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, TOGGLEABLE, Gains, Synth, Texture, effective_gains,
-                     surface_of)
+from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, TOGGLEABLE, Gains, NoiseBurst, Synth, Texture,
+                     effective_gains, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
 _render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise
@@ -295,6 +295,40 @@ class SurfaceTest(unittest.TestCase):
         # neither has stones: ice hisses at 140 Hz, wood at 65 Hz; a plain band-pass made ice 1.5x stronger
         ice, wood = rms(self.road("ice")), rms(self.road("wood"))
         self.assertAlmostEqual(ice / wood, 0.15 / 0.55, delta=0.05)
+
+
+class EventShapeTest(unittest.TestCase):
+    def park_brake(self, setting: bool) -> list[float]:
+        """The left grip for a second after the park brake is set or released."""
+        s, samples = only("park_brake"), []
+        s.render(frame(park_brake=not setting))
+        for _ in range(125):
+            samples.extend(s.render(frame(park_brake=setting)).left_grip)
+        return samples
+
+    def test_venting_air_swells_in(self) -> None:
+        burst = NoiseBurst(250.0, 1.0, 0.35, attack_s=0.15)
+        levels = []
+        for n in range(200):
+            levels.append(burst.level)
+            burst.next()
+        self.assertLess(levels[10], 0.2 * levels[150])
+
+    def test_setting_the_park_brake_hisses_for_most_of_a_second(self) -> None:
+        samples = self.park_brake(True)
+        self.assertGreater(rms(samples[600:800]), 0.18 * rms(samples[50:250]))
+
+    def test_releasing_the_park_brake_pops_after_the_thunk(self) -> None:
+        samples = self.park_brake(False)
+        self.assertGreater(rms(samples[280:340]), 2 * rms(samples[180:260]))
+
+    def test_squeal_comes_in_separate_squeals(self) -> None:
+        s, samples = only("squeal"), []
+        for _ in range(250):  # braking gently at walking pace: 2 s
+            samples.extend(s.render(frame(speed=1.5, user_brake=0.3, user_throttle=0.0)).trigger)
+        windows = [rms(samples[i:i + 20]) for i in range(0, len(samples), 20)]
+        quiet = sum(1 for w in windows if w < 0.05 * max(windows)) / len(windows)
+        self.assertGreater(quiet, 0.08)  # the old one wobbled at 5 Hz and never went quiet
 
 
 def drive(fps: float | None, start: float, end: float) -> tuple[list[float], int]:

@@ -95,9 +95,9 @@ The switch on the left turns each effect on or off. An effect that is off is gre
 | Effect | Default | Default output | What it does |
 |---|---|---|---|
 | **Pedals** | 60% | Trigger | A short "thud" the moment throttle or brake reaches the floor (97% or more) |
-| **Brake squeal** | 40% | Trigger | A thin, trembling 230 Hz while braking gently to a stop below about 14 km/h |
+| **Brake squeal** | 40% | Trigger | A 230 Hz squeal while braking gently to a stop below about 14 km/h. Like the recorded ones it comes in separate squeals of 0.15–0.5 s, each a little off the last in pitch |
 | **Trailer coupled** | 90% | Both grips | A heavy "thump" when coupling; a thump followed by an air hiss when uncoupling |
-| **Parking brake** | 70% | Both grips | A "click" followed by an air hiss when set or released (longer when set) |
+| **Parking brake** | 70% | Both grips | Set: a "clunk", then the spring brakes venting (swelling over 0.15 s, dying over most of a second). Released: a low "thunk", then a short puff 0.3 s later |
 | **Turn signals** | 50% | Grip on the signalling side | A "tick" with every blink |
 | **Engine start/stop** | 80% | Both grips | Cranking and a "vroom" on start; a shudder as it dies on stop |
 | **Range/splitter** | 50% | Both grips | A "click" when you use the range selector or splitter switch of an H-shifter. Silent with automatic or sequential shifting. |

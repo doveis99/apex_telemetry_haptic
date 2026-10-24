@@ -189,12 +189,13 @@ MESSAGES = {
          "sofort zurück."),
     "엑셀이나 브레이크를 끝까지(97% 이상) 밟는 순간 짧은 '툭'.":
         "Ein kurzes „Tock“, sobald Gas oder Bremse am Anschlag ist (97 % oder mehr).",
-    "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 가늘게 떨리는 진동입니다.":
-        "Ein feines Zittern beim sanften Abbremsen bis zum Stillstand unter etwa 14 km/h.",
+    "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다.":
+        "Ein feines Quietschen in einzelnen Stößen beim sanften Abbremsen bis zum Stillstand unter etwa 14 km/h.",
     "트레일러를 연결할 때 묵직한 '쿵', 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
         "Ein schweres „Rums“ beim Ankuppeln; beim Abkuppeln ein Rums mit anschließendem Luftzischen.",
-    "파킹 브레이크를 체결하거나 해제할 때 '딸깍'에 이어 에어 빠지는 느낌.":
-        "Ein „Klick“ mit anschließendem Luftzischen beim Anziehen oder Lösen der Feststellbremse.",
+    "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
+        ("Beim Anziehen der Feststellbremse ein „Klack“, dann fast eine Sekunde lang ausströmende Luft; beim Lösen "
+         "ein tiefes „Tock“, dann ein kurzes Zischen."),
     "방향지시등이 점멸할 때마다 켜진 쪽 그립에 '틱'.": "Bei jedem Blinken ein „Tick“ im Griff der Blinkseite.",
     "시동을 켤 때 크랭킹에 이어 '부웅', 끌 때 꺼지며 떨림.":
         "Beim Starten Anlassen und ein „Brumm“; beim Abstellen ein Schütteln beim Auslaufen.",

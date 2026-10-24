@@ -339,16 +339,18 @@ class Burst:
     """Decaying sine pulse for discrete events, optionally delayed.
 
     phase 0.25 starts at the crest instead of zero: a hard edge, not a swell.
+    attack_s ramps the envelope in, for sounds that swell, like venting air.
     """
 
     def __init__(self, freq: float, amplitude: float, decay_s: float, delay_s: float = 0.0,
-                 phase: float = 0.0) -> None:
-        self.freq, self.amplitude, self.decay_s = freq, amplitude, decay_s
+                 phase: float = 0.0, attack_s: float = 0.0) -> None:
+        self.freq, self.amplitude, self.decay_s, self.attack_s = freq, amplitude, decay_s, attack_s
         self.age = -delay_s
         self.phase = phase
 
     def _envelope(self) -> float:
-        return self.amplitude * math.exp(-self.age / self.decay_s)
+        envelope = self.amplitude * math.exp(-self.age / self.decay_s)
+        return envelope * self.age / self.attack_s if self.age < self.attack_s else envelope
 
     @property
     def level(self) -> float:
@@ -378,14 +380,45 @@ class Burst:
 
     @property
     def done(self) -> bool:
-        return self.age > self.decay_s * 5
+        return self.age > self.attack_s + self.decay_s * 5
+
+
+class Squeal:
+    """Brake squeal as recorded: separate squeals of a few tenths of a second that swell in
+    and stop short, with gaps between and each a little off the last in pitch."""
+
+    HZ = 230.0
+    LENGTH = (0.15, 0.5)  # s
+    GAP = (0.03, 0.25)  # s
+    ATTACK, RELEASE = 0.08, 0.04  # s
+
+    def __init__(self, seed: int) -> None:
+        self.rng = random.Random(seed)
+        self.osc = Oscillator()
+        self.age = self.length = self.gap = 0.0
+        self.pitch = 1.0
+
+    def restart(self) -> None:
+        """The next sample starts a squeal, rather than wherever the last one left off."""
+        self.age = self.length + self.gap
+
+    def next(self) -> float:
+        if self.age >= self.length + self.gap:
+            self.age = 0.0
+            self.length, self.gap = self.rng.uniform(*self.LENGTH), self.rng.uniform(*self.GAP)
+            self.pitch = self.rng.uniform(0.92, 1.08)
+        age = self.age
+        self.age += 1.0 / SAMPLE_RATE
+        envelope = min(1.0, age / self.ATTACK, (self.length - age) / self.RELEASE) if age < self.length else 0.0
+        return envelope * self.osc.next(self.HZ * self.pitch)
 
 
 class NoiseBurst(Burst):
     """Decaying band-limited noise: air hiss, cranking."""
 
-    def __init__(self, center: float, amplitude: float, decay_s: float, delay_s: float = 0.0) -> None:
-        super().__init__(center, amplitude, decay_s, delay_s)
+    def __init__(self, center: float, amplitude: float, decay_s: float, delay_s: float = 0.0,
+                 attack_s: float = 0.0) -> None:
+        super().__init__(center, amplitude, decay_s, delay_s, attack_s=attack_s)
         self.noise = BandNoise(center, 0.8, seed=random.randrange(1 << 30))
 
     def _carrier(self) -> float:
@@ -414,8 +447,7 @@ class Synth:
         self.trigger_osc = Oscillator()
         self.trigger_mod = Oscillator()
         self.retarder_osc = Oscillator()
-        self.squeal_osc = Oscillator()
-        self.squeal_mod = Oscillator()
+        self.squeal = Squeal(seed=4)
         self.texture = (Texture(seed=1), Texture(seed=2))
         self.rumble_osc = (Oscillator(), Oscillator())
         self.spin_noise = BandNoise(45.0, 1.5, seed=3)
@@ -601,9 +633,15 @@ class Synth:
 
         if self._changed("park_brake", frame.park_brake) and g.park_brake:
             s = g.park_brake
-            self._both("park_brake", Burst(90.0, 1.0 * s, 0.015))
-            hiss = 0.25 if frame.park_brake else 0.1
-            self._both("park_brake", NoiseBurst(250.0, 0.5 * s, hiss, delay_s=0.03))
+            if frame.park_brake:
+                # Set: the knob clunks, then the spring brakes vent in a hiss that swells
+                # for about 0.15 s and takes most of a second to die (as recorded).
+                self._both("park_brake", Burst(110.0, 1.0 * s, 0.02, phase=0.25))
+                self._both("park_brake", NoiseBurst(250.0, 0.5 * s, 0.35, delay_s=0.03, attack_s=0.15))
+            else:
+                # Released: a lower thunk, and a short pop of air about 0.3 s later.
+                self._both("park_brake", Burst(70.0, 1.0 * s, 0.025, phase=0.25))
+                self._both("park_brake", NoiseBurst(250.0, 0.45 * s, 0.05, delay_s=0.28))
             log.append(t("파킹 브레이크 체결") if frame.park_brake else t("파킹 브레이크 해제"))
 
         if self._changed("trailer", frame.trailer_attached) and g.trailer:
@@ -841,9 +879,10 @@ class Synth:
                 t = tr * self.trigger_osc.next(100.0)
             _mix(bed, routes["trigger"], t, t, t)
             if sq:
-                wobble = 0.6 + 0.4 * self.squeal_mod.next(5.0)
-                squeal = sq * wobble * self.squeal_osc.next(230.0)
+                squeal = sq * self.squeal.next()
                 _mix(out, routes["squeal"], squeal, squeal, squeal)
+            else:
+                self.squeal.restart()
             drive = [0.0, 0.0, 0.0]
             for effect, side, burst in self.bursts:
                 if effect not in DUCK_EXEMPT:

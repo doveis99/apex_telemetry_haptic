@@ -216,9 +216,9 @@ MESSAGES = {
     "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다.":
         ("Une impulsion de bosse se déclenche quand la suspension bouge soudain plus vite que cela. Baissez pour "
          "sentir les petites bosses, montez pour ne sentir que les gros chocs."),
-    "8ms 사이 가속도 변화가 이 값을 넘으면 충돌 펄스를 냅니다. 평소 주행 중 '가속도 최대' 값보다 충분히 높게 두세요.":
-        ("Une impulsion de choc se déclenche quand l'accélération varie de plus que cela en 8 ms. Gardez-la bien "
-         "au-dessus de l'« Accél. max » en conduite normale."),
+    "게임 화면 한 프레임 사이의 가속도 변화가 이 값을 넘으면 충돌 펄스를 냅니다. 평소 주행 중 '가속도 최대' 값보다 충분히 높게 두세요.":
+        ("Une impulsion de choc se déclenche quand l'accélération varie de plus que cela d'une image du jeu à la "
+         "suivante. Gardez-la bien au-dessus de l'« Accél. max » en conduite normale."),
     "창이 정지 상태일 때 게임이 실행되면 자동으로 시작합니다. 게임 도중 직접 정지하면 그 게임이 끝날 때까지는 다시 켜지지 않습니다. 바꾸면 바로 저장됩니다.":
         ("Démarre automatiquement quand le jeu se lance alors que la fenêtre est à l'arrêt. Si vous arrêtez pendant "
          "une partie, cela reste arrêté jusqu'à la fin de ce jeu. Enregistré dès le changement."),

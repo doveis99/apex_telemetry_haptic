@@ -208,9 +208,9 @@ MESSAGES = {
     "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다.":
         ("Impuls nierówności pojawia się, gdy zawieszenie nagle porusza się szybciej. Obniż, by czuć małe "
          "nierówności; podnieś, by czuć tylko mocne uderzenia."),
-    "8ms 사이 가속도 변화가 이 값을 넘으면 충돌 펄스를 냅니다. 평소 주행 중 '가속도 최대' 값보다 충분히 높게 두세요.":
-        ("Impuls uderzenia pojawia się, gdy przyspieszenie zmieni się o więcej w ciągu 8 ms. Ustaw wyraźnie powyżej "
-         "„Maks. przysp.” przy zwykłej jeździe."),
+    "게임 화면 한 프레임 사이의 가속도 변화가 이 값을 넘으면 충돌 펄스를 냅니다. 평소 주행 중 '가속도 최대' 값보다 충분히 높게 두세요.":
+        ("Impuls uderzenia pojawia się, gdy przyspieszenie zmieni się o więcej między kolejnymi klatkami gry. Ustaw "
+         "wyraźnie powyżej „Maks. przysp.” przy zwykłej jeździe."),
     "창이 정지 상태일 때 게임이 실행되면 자동으로 시작합니다. 게임 도중 직접 정지하면 그 게임이 끝날 때까지는 다시 켜지지 않습니다. 바꾸면 바로 저장됩니다.":
         ("Uruchamia się samo, gdy gra wystartuje przy zatrzymanym oknie. Jeśli zatrzymasz w trakcie gry, pozostanie "
          "wyłączone do jej końca. Zapisywane od razu."),

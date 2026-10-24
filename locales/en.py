@@ -211,9 +211,9 @@ MESSAGES = {
     "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다.":
         ("A bump pulse fires when the suspension suddenly moves faster than this. Lower it to feel small bumps, "
          "raise it to feel only big hits."),
-    "8ms 사이 가속도 변화가 이 값을 넘으면 충돌 펄스를 냅니다. 평소 주행 중 '가속도 최대' 값보다 충분히 높게 두세요.":
-        ("An impact pulse fires when acceleration changes by more than this within 8 ms. Keep it well above the "
-         "'Peak accel.' you see in normal driving."),
+    "게임 화면 한 프레임 사이의 가속도 변화가 이 값을 넘으면 충돌 펄스를 냅니다. 평소 주행 중 '가속도 최대' 값보다 충분히 높게 두세요.":
+        ("An impact pulse fires when acceleration changes by more than this from one game frame to the next. Keep it "
+         "well above the 'Peak accel.' you see in normal driving."),
     "창이 정지 상태일 때 게임이 실행되면 자동으로 시작합니다. 게임 도중 직접 정지하면 그 게임이 끝날 때까지는 다시 켜지지 않습니다. 바꾸면 바로 저장됩니다.":
         ("Starts automatically when the game launches while the window is stopped. If you stop it during a game, it "
          "stays off until that game ends. Saved as soon as you flip it."),

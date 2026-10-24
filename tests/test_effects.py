@@ -106,6 +106,42 @@ class BumpTest(unittest.TestCase):
         self.assertAlmostEqual(bumps[0].amplitude, 1.0)
 
 
+class LockChopTest(unittest.TestCase):
+    def pulses(self) -> list[tuple[int, int]]:
+        """(start, length) in ms of the brake trigger's pulses once every wheel locks."""
+        s = synth()
+        for _ in range(7):  # braking without a lock first, so the chop clock is mid-cycle
+            s.render(frame(user_brake=0.9))
+        samples = []
+        for _ in range(60):
+            f = frame(user_brake=0.9)
+            for wheel in f.wheels:
+                wheel.velocity = 0.0
+            samples.extend(s.render(f).trigger)
+        # on while the carrier swings within the last 110 Hz cycle
+        on = [max(abs(x) for x in samples[max(0, n - 9):n + 1]) > 10.0 for n in range(len(samples))]
+        runs, start = [], None
+        for n, value in enumerate(on + [False]):
+            if value and start is None:
+                start = n
+            elif not value and start is not None:
+                runs.append((start, n - start))
+                start = None
+        return runs
+
+    def test_pulses_are_even(self) -> None:
+        runs = self.pulses()[:-1]  # the last may be cut off
+        self.assertGreaterEqual(len(runs), 4)
+        lengths = [length for _, length in runs]
+        self.assertLessEqual(max(lengths) - min(lengths), 2)
+        gaps = [b - a for (a, _), (b, _) in zip(runs, runs[1:])]
+        for gap in gaps:  # +-2.5: where the 110 Hz carrier first crosses the detector's level varies
+            self.assertAlmostEqual(gap, 1000 / 12, delta=2.5)
+
+    def test_first_pulse_starts_with_the_lock(self) -> None:
+        self.assertLessEqual(self.pulses()[0][0], 10)
+
+
 def drive(fps: float | None, start: float, end: float) -> tuple[list[float], int]:
     """Bump-only left grip over [start, end) s of the scripted drive, and the bump pulses started there."""
     clock = [0.0]

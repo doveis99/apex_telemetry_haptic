@@ -35,6 +35,10 @@ STEADY_K = 1.0 - math.exp(-DT / STEADY_TAU)
 MAX_FRAME_GAP = 0.2  # s; across a longer hitch, or the game's timer restarting, only take a new reference
 RATE_AVG_TAU = 0.2  # s, the slow suspension movement that bumps stand out from
 ROUGH_TAU = 0.076  # s, smoothing of the road roughness estimate
+# A locking wheel chops the brake trigger like ABS, timed per sample so every
+# pulse is the same length (whole blocks gave 40 or 48 ms).
+LOCK_RATE = 12.0  # Hz
+LOCK_EDGE = 0.003  # s ramp at each edge: a crisp pulse without the click of a step
 
 # Relative texture strength per substance (matched by substring, first match
 # wins, so the specific road_* variants come before plain "road").
@@ -276,7 +280,8 @@ class Synth:
         self.gear_cooldown = 0.0
         self.prev_accel: tuple[float, float, float] | None = None
         self.impact_cooldown = 0.0
-        self.lock_clock = 0.0
+        self.lock_phase = 0.0  # of the ABS-like chop, per sample
+        self.was_locked = False
         self.steady_ref: dict[str, float] = {}
         self.duck = [0.0, 0.0, 0.0]  # left grip, right grip, trigger; 0 = no ducking
         self.levels = Levels()
@@ -590,7 +595,9 @@ class Synth:
                 trigger_mode = "throttle"
                 trigger_amp = g.trigger * (0.2 + 0.6 * frame.user_throttle) * self._steady_gain(throttle_moved)
 
-        self.lock_clock = (self.lock_clock + DT) % (1.0 / 12.0)  # 12 Hz ABS-like chop
+        if lock > 0 and not self.was_locked:
+            self.lock_phase = 0.0  # the warning starts with a pulse, not up to half a cycle late
+        self.was_locked = lock > 0
         routes = {name: route_of(g, name) for name in TOGGLEABLE}
         trigger, left, right = [], [], []
         p = self.prev_amp
@@ -627,8 +634,7 @@ class Synth:
                 _mix(bed, routes["wheelspin"], grind, grind, grind)
 
             if trigger_mode == "brake" and lock > 0:
-                chop = 1.0 if self.lock_clock < 1.0 / 24.0 else 0.0
-                t = tr * chop * self.trigger_osc.next(110.0)
+                t = tr * self._lock_chop() * self.trigger_osc.next(110.0)
             elif trigger_mode == "throttle":
                 # 100 Hz carrier, optionally pulsed at the engine firing rate.
                 depth = min(1.0, max(0.0, g.throttle_pulse))
@@ -670,6 +676,15 @@ class Synth:
         any_trigger = any(trigger)
         return Block(trigger=trigger, left_grip=left, right_grip=right,
                      route=Route.BOTH if any_trigger else Route.MUTE)
+
+    def _lock_chop(self) -> float:
+        """Wheel-lock gate: on for the first half of each LOCK_RATE cycle, with LOCK_EDGE ramps."""
+        p = self.lock_phase
+        self.lock_phase = (p + LOCK_RATE / SAMPLE_RATE) % 1.0
+        if p >= 0.5:
+            return 0.0
+        edge = LOCK_EDGE * LOCK_RATE
+        return min(1.0, p / edge, (0.5 - p) / edge)
 
     def _out(self, x: float, channel_level: float) -> float:
         # Soft limit so stacked effects saturate smoothly instead of clipping;

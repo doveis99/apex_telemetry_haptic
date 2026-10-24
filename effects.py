@@ -19,7 +19,7 @@ from dataclasses import dataclass, field, replace
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE, SUBFRAMES, Block, Route
 from i18n import N_, t
-from telemetry import Frame
+from telemetry import Frame, Wheel
 
 DT = SUBFRAMES / SAMPLE_RATE  # 8 ms per telemetry update
 TAU = 2.0 * math.pi
@@ -46,16 +46,30 @@ RETARDER_HZ = (40.0, 65.0)  # standing, and from 90 km/h
 JAKE_PEAK = 0.1  # of a firing cycle: the knock peaks this early, then the cylinder is quiet
 _JAKE_MEAN = JAKE_PEAK * math.e * (1.0 - (1.0 + 1.0 / JAKE_PEAK) * math.exp(-1.0 / JAKE_PEAK))
 
-# Relative texture strength per substance (matched by substring, first match
-# wins, so the specific road_* variants come before plain "road").
+
+@dataclass(frozen=True)
+class Surface:
+    level: float  # relative texture strength
+    pitch: float  # Hz, centre of the texture at speed; it drops towards PITCH_STANDING of this when slow
+    grains: float = 0.0  # loose stones per metre that click under a tyre
+
+
+# Matched by substring, first match wins, so the specific road_* variants come
+# before plain "road". Smooth and hard surfaces hiss high and fine, soft ones
+# rumble low, loose ones crackle.
 SURFACES = (
-    ("road_smooth", 0.2), ("road_coarse", 0.45), ("road_dirt", 0.55),
-    ("ice", 0.15), ("snow", 0.45),
-    ("rumble", 0.3),  # the strip itself is the rumble effect; the texture stays that of asphalt
-    ("road", 0.3), ("asphalt", 0.3), ("concrete", 0.35),
-    ("wood", 0.55), ("metal", 0.6), ("dirt", 0.75), ("grass", 0.7), ("gravel", 1.0), ("rough", 0.9),
+    ("road_smooth", Surface(0.2, 120.0)), ("road_coarse", Surface(0.45, 95.0, 2.0)),
+    ("road_dirt", Surface(0.55, 75.0, 6.0)),
+    ("ice", Surface(0.15, 140.0)), ("snow", Surface(0.45, 55.0, 8.0)),
+    ("rumble", Surface(0.3, 100.0)),  # the strip itself is the rumble effect; the texture stays that of asphalt
+    ("road", Surface(0.3, 100.0)), ("asphalt", Surface(0.3, 100.0)), ("concrete", Surface(0.35, 90.0)),
+    ("wood", Surface(0.55, 65.0)), ("metal", Surface(0.6, 130.0)), ("dirt", Surface(0.75, 60.0, 5.0)),
+    ("grass", Surface(0.7, 50.0, 1.0)), ("gravel", Surface(1.0, 80.0, 14.0)), ("rough", Surface(0.9, 70.0, 6.0)),
 )
-DEFAULT_SURFACE = 0.4
+DEFAULT_SURFACE = Surface(0.4, 90.0, 1.0)
+PITCH_STANDING = 0.6  # share of a surface's pitch at walking pace; all of it from 90 km/h
+GRAIN_RATE_MAX = 200.0  # clicks per second per side, past which they blur into noise anyway
+GRAIN_SHARE = 16.0  # stones per metre at which the clicks would be all of the texture
 # Rumble strips: the game reports a "rumble_stripe" substance under a wheel.
 # It flickers back to road between the grooves, so a short hold bridges the
 # gaps. Grooves are milled about 30 cm apart: 83 Hz at 90 km/h.
@@ -66,14 +80,25 @@ RUMBLE_HOLD = 0.25  # s
 TRAILER_FEEL = 0.5
 
 
-def surface_factor(name: str) -> float:
+def surface_of(name: str) -> Surface | None:
+    """The texture of a substance; None for no ground at all."""
     name = name.lower()
     if not name or name == "static":
-        return 0.0
-    for key, value in SURFACES:
+        return None
+    for key, surface in SURFACES:
         if key in name:
-            return value
+            return surface
     return DEFAULT_SURFACE
+
+
+def side_surface(wheels: list[Wheel]) -> Surface:
+    """One side's mix of surfaces: mean strength, pitch and stones weighted by strength."""
+    found = [s for s in (surface_of(w.substance) for w in wheels) if s is not None]
+    total = sum(s.level for s in found)
+    if not total:
+        return Surface(0.0, DEFAULT_SURFACE.pitch)
+    return Surface(total / len(wheels), sum(s.level * s.pitch for s in found) / total,
+                   sum(s.level * s.grains for s in found) / total)
 
 
 TOGGLEABLE = ("engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarder", "impact", "trigger",
@@ -172,23 +197,102 @@ def jake_pulse(phase: float) -> float:
     return (u * math.exp(1.0 - u) - _JAKE_MEAN) / (1.0 - _JAKE_MEAN)
 
 
-class BandNoise:
-    """White noise through a 2-pole band-pass (RBJ biquad)."""
+class Resonator:
+    """2-pole band-pass (RBJ biquad, 0 dB at the centre); it can be retuned between blocks."""
 
-    def __init__(self, center: float, q: float, seed: int) -> None:
+    def __init__(self, center: float, q: float) -> None:
+        self.x1 = self.x2 = self.y1 = self.y2 = 0.0
+        self.center = self.q = 0.0
+        self.tune(center, q)
+
+    def tune(self, center: float, q: float) -> None:
+        if (center, q) == (self.center, self.q):
+            return
+        self.center, self.q = center, q
         w = TAU * center / SAMPLE_RATE
         alpha = math.sin(w) / (2 * q)
         a0 = 1 + alpha
         self.b0, self.b2 = alpha / a0, -alpha / a0
         self.a1, self.a2 = -2 * math.cos(w) / a0, (1 - alpha) / a0
-        self.x1 = self.x2 = self.y1 = self.y2 = 0.0
+
+    def next(self, x: float) -> float:
+        y = self.b0 * x + self.b2 * self.x2 - self.a1 * self.y1 - self.a2 * self.y2
+        self.x2, self.x1, self.y2, self.y1 = self.x1, x, self.y1, y
+        return y
+
+    def impulse_peak(self) -> float:
+        """Largest swing this tuning rings with after a unit impulse."""
+        x1 = x2 = y1 = y2 = 0.0
+        peak = 0.0
+        for n in range(int(SAMPLE_RATE / self.center) + 2):  # the first crest comes within a cycle
+            x = 1.0 if n == 0 else 0.0
+            y = self.b0 * x + self.b2 * x2 - self.a1 * y1 - self.a2 * y2
+            x2, x1, y2, y1 = x1, x, y1, y
+            peak = max(peak, abs(y))
+        return peak
+
+
+class BandNoise:
+    """White noise through a band-pass."""
+
+    def __init__(self, center: float, q: float, seed: int) -> None:
+        self.filter = Resonator(center, q)
         self.rng = random.Random(seed)
 
     def next(self) -> float:
-        x = self.rng.uniform(-1.0, 1.0)
-        y = self.b0 * x + self.b2 * self.x2 - self.a1 * self.y1 - self.a2 * self.y2
-        self.x2, self.x1, self.y2, self.y1 = self.x1, x, self.y1, y
-        return y * 2.5  # roughly unit RMS-to-peak after the narrow filter
+        return self.filter.next(self.rng.uniform(-1.0, 1.0)) * 2.5  # about 0.6 RMS, peaks near 2.3
+
+
+class Grains:
+    """Loose stones under a tyre: random clicks, each ringing the band-pass with a peak up to 1."""
+
+    Q = 1.5  # rings about 7 ms, so stones a few metres apart stay single clicks
+
+    def __init__(self, seed: int) -> None:
+        self.filter = Resonator(100.0, self.Q)
+        self.rng = random.Random(seed)
+        self.rate = 0.0  # clicks per second
+        self.gain = 1.0 / self.filter.impulse_peak()
+
+    def tune(self, center: float, rate: float) -> None:
+        if center != self.filter.center:
+            self.filter.tune(center, self.Q)
+            self.gain = 1.0 / self.filter.impulse_peak()
+        self.rate = rate
+
+    def next(self) -> float:
+        click = 0.0
+        if self.rate and self.rng.random() < self.rate / SAMPLE_RATE:
+            click = self.rng.uniform(0.3, 1.0) * self.gain
+        return self.filter.next(click)
+
+
+class Texture:
+    """One side's road texture: noise around the surface's pitch, mixed with stones clicking."""
+
+    GRAIN_GAIN = 1.5  # clicks stand out of the noise as a crackle, not a hiss
+
+    def __init__(self, seed: int) -> None:
+        self.noise = BandNoise(DEFAULT_SURFACE.pitch, 1.2, seed)
+        self.grains = Grains(seed + 100)
+        self.share = 0.0  # of the texture that is clicks
+        self.noise_gain = 1.0
+
+    def tune(self, surface: Surface, speed: float) -> None:
+        pace = min(1.0, speed / 25.0)
+        pitch = surface.pitch * (PITCH_STANDING + (1.0 - PITCH_STANDING) * pace)
+        self.noise.filter.tune(pitch, 1.2)
+        # A band-pass of fixed Q lets through noise in proportion to its centre:
+        # keep the strength of the 80 Hz band every surface used to share.
+        self.noise_gain = math.sqrt(80.0 / pitch)
+        self.grains.tune(pitch * 1.25, min(GRAIN_RATE_MAX, surface.grains * speed))
+        self.share = min(1.0, surface.grains / GRAIN_SHARE)
+
+    def next(self) -> float:
+        value = (1.0 - self.share) * self.noise_gain * self.noise.next()
+        if self.share:
+            value += self.share * self.GRAIN_GAIN * self.grains.next()
+        return value
 
 
 class Burst:
@@ -271,8 +375,7 @@ class Synth:
         self.jake_osc = Oscillator()
         self.squeal_osc = Oscillator()
         self.squeal_mod = Oscillator()
-        self.noise_left = BandNoise(80.0, 1.2, seed=1)
-        self.noise_right = BandNoise(80.0, 1.2, seed=2)
+        self.texture = (Texture(seed=1), Texture(seed=2))
         self.rumble_osc = (Oscillator(), Oscillator())
         self.spin_noise = BandNoise(45.0, 1.5, seed=3)
         self.spin_chatter = Oscillator()
@@ -564,8 +667,9 @@ class Synth:
                      [w for w in frame.wheels if w.pos_x >= 0 and w.on_ground])
             road = []
             for side, wheels in enumerate(sides):
-                surface = sum(surface_factor(w.substance) for w in wheels) / len(wheels) if wheels else 0.0
-                texture = surface * speed_factor + min(1.0, self.roughness[side] * 1.5)
+                surface = side_surface(wheels)
+                self.texture[side].tune(surface, speed)
+                texture = surface.level * speed_factor + min(1.0, self.roughness[side] * 1.5)
                 road.append(g.road * min(1.0, texture))
             road_l, road_r = road
             rumble_freq = max(25.0, min(120.0, abs(frame.speed) / RUMBLE_SPACING))
@@ -645,7 +749,7 @@ class Synth:
                 retarder += jb * jake_pulse(self.jake_osc.next_phase(engine_freq))
             _mix(bed, routes["retarder"], retarder, retarder, retarder)
             # Independent noises: 0.7 keeps their sum near one side's strength.
-            noise_l, noise_r = rl * self.noise_left.next(), rr * self.noise_right.next()
+            noise_l, noise_r = rl * self.texture[0].next(), rr * self.texture[1].next()
             _mix(bed, routes["road"], noise_l, noise_r, 0.7 * (noise_l + noise_r))
             if ul or ur:
                 # Soft-clipped sine: each groove lands as a hard edge, a buzz, not a hum.

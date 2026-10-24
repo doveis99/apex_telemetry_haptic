@@ -185,6 +185,45 @@ class RetarderTest(unittest.TestCase):
         self.assertGreater(tone_level(fast, 65.0), 3 * tone_level(fast, 43.0))
 
 
+class SurfaceTest(unittest.TestCase):
+    def road(self, substance: str, speed: float = 22.0) -> list[float]:
+        s, samples = only("road"), []
+        for _ in range(400):
+            f = frame(speed=speed)
+            for wheel in f.wheels:
+                wheel.substance = substance
+            samples.extend(s.render(f).left_grip)
+        return samples[200:]
+
+    @staticmethod
+    def crossings(samples: list[float]) -> float:
+        """Zero crossings per second: follows where the texture's energy sits."""
+        return sum(1 for a, b in zip(samples, samples[1:]) if a * b < 0) * SAMPLE_RATE / len(samples)
+
+    @staticmethod
+    def kurtosis(samples: list[float]) -> float:
+        mean = sum(samples) / len(samples)
+        var = sum((x - mean) ** 2 for x in samples) / len(samples)
+        return sum((x - mean) ** 4 for x in samples) / len(samples) / var ** 2
+
+    def test_hard_surfaces_feel_finer_than_soft_ones(self) -> None:
+        ice, asphalt, snow = (self.crossings(self.road(name)) for name in ("ice", "road", "snow"))
+        self.assertGreater(ice, asphalt)
+        self.assertGreater(asphalt, snow)
+
+    def test_texture_rises_with_speed(self) -> None:
+        self.assertGreater(self.crossings(self.road("road", 25.0)), 1.2 * self.crossings(self.road("road", 3.0)))
+
+    def test_gravel_crackles_and_asphalt_does_not(self) -> None:
+        # slow enough that single stones stand apart; noise alone has a kurtosis near 3
+        self.assertGreater(self.kurtosis(self.road("gravel", 4.0)), 1.5 * self.kurtosis(self.road("road", 4.0)))
+
+    def test_strength_does_not_follow_the_pitch(self) -> None:
+        # neither has stones: ice hisses at 140 Hz, wood at 65 Hz; a plain band-pass made ice 1.5x stronger
+        ice, wood = rms(self.road("ice")), rms(self.road("wood"))
+        self.assertAlmostEqual(ice / wood, 0.15 / 0.55, delta=0.05)
+
+
 def drive(fps: float | None, start: float, end: float) -> tuple[list[float], int]:
     """Bump-only left grip over [start, end) s of the scripted drive, and the bump pulses started there."""
     clock = [0.0]

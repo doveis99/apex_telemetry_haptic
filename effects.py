@@ -182,13 +182,9 @@ class Oscillator:
         self.phase = 0.0
 
     def next(self, freq: float) -> float:
-        return math.sin(TAU * self.next_phase(freq))
-
-    def next_phase(self, freq: float) -> float:
-        """This sample's phase, 0..1, for waveforms other than a sine."""
-        phase = self.phase
-        self.phase = (phase + freq / SAMPLE_RATE) % 1.0
-        return phase
+        value = math.sin(TAU * self.phase)
+        self.phase = (self.phase + freq / SAMPLE_RATE) % 1.0
+        return value
 
 
 def jake_pulse(phase: float) -> float:
@@ -372,7 +368,6 @@ class Synth:
         self.trigger_osc = Oscillator()
         self.trigger_mod = Oscillator()
         self.retarder_osc = Oscillator()
-        self.jake_osc = Oscillator()
         self.squeal_osc = Oscillator()
         self.squeal_mod = Oscillator()
         self.texture = (Texture(seed=1), Texture(seed=2))
@@ -742,11 +737,14 @@ class Synth:
 
             out = [0.0, 0.0, 0.0]  # left grip, right grip, trigger: events
             bed = [0.0, 0.0, 0.0]  # continuous effects, ducked under the events
+            firing = self.engine_osc.phase
             engine = e * (self.engine_osc.next(engine_freq) + 0.3 * self.engine_harm.next(engine_freq * 2))
             _mix(bed, routes["engine"], engine, engine, engine)
             retarder = rt * self.retarder_osc.next(retarder_freq)
             if jb:
-                retarder += jb * jake_pulse(self.jake_osc.next_phase(engine_freq))
+                # on the engine's own firing, knock peak on its crest: on a phase of their
+                # own the two could cancel, the same frequency at once
+                retarder += jb * jake_pulse((firing - 0.25 + JAKE_PEAK) % 1.0)
             _mix(bed, routes["retarder"], retarder, retarder, retarder)
             # Independent noises: 0.7 keeps their sum near one side's strength.
             noise_l, noise_r = rl * self.texture[0].next(), rr * self.texture[1].next()

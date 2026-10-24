@@ -174,6 +174,19 @@ class RetarderTest(unittest.TestCase):
         self.assertGreater(firing, 3 * tone_level(samples, 50.0))
         self.assertGreater(tone_level(samples, 130.0), 0.3 * firing)  # a knock, not a sine
 
+    def test_engine_brake_adds_to_the_engine(self) -> None:
+        # The knock has the engine's frequency; on a phase of its own it could cancel the engine.
+        # Driving on the throttle first leaves the engine anywhere in its cycle when the brake comes in.
+        for blocks_on_throttle in range(8):
+            with self.subTest(blocks_on_throttle=blocks_on_throttle):
+                levels = []
+                for effects in (("engine",), ("engine", "retarder")):
+                    s = Synth(effective_gains(Gains(disabled=[n for n in TOGGLEABLE if n not in effects])))
+                    for _ in range(blocks_on_throttle):
+                        s.render(frame())
+                    levels.append(rms(left_grip(s, **self.ENGINE_BRAKE)))
+                self.assertGreater(levels[1], 1.3 * levels[0])
+
     def test_no_engine_brake_under_throttle(self) -> None:
         samples = left_grip(only("retarder"), motor_brake=True)
         self.assertLess(max(map(abs, samples)), 1.0)

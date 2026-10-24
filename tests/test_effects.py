@@ -235,6 +235,56 @@ class EngineTest(unittest.TestCase):
         self.assertGreater(harshness(0.9), harshness(0.0) + 0.15)
 
 
+class ThrottlePulseTest(unittest.TestCase):
+    IDLE = {"rpm": 650.0, "game_throttle": 0.0, "user_throttle": 0.3}  # 32.5 Hz firings: slow enough to see
+
+    @staticmethod
+    def drive(pulse: float, brake_first: int = 0) -> tuple[list[float], list[float]]:
+        """Trigger envelope (over one 100 Hz carrier cycle) and engine vibration on the grip, throttle held."""
+        gains = Gains(throttle_pulse=pulse, steady_fade=0.0,
+                      disabled=[name for name in TOGGLEABLE if name not in ("engine", "trigger")])
+        s, trigger, grip = Synth(effective_gains(gains)), [], []
+        for _ in range(brake_first):  # the trigger follows the brake meanwhile; the engine runs on
+            s.render(frame(**dict(ThrottlePulseTest.IDLE, user_throttle=0.0, user_brake=0.5)))
+        for _ in range(100):
+            block = s.render(frame(**ThrottlePulseTest.IDLE))
+            trigger.extend(block.trigger)
+            grip.extend(block.left_grip)
+        envelope = [max(abs(x) for x in trigger[n - 5:n + 5]) for n in range(205, 795)]
+        return envelope, grip[205:795]
+
+    @staticmethod
+    def correlation(a: list[float], b: list[float]) -> float:
+        ma, mb = sum(a) / len(a), sum(b) / len(b)
+        cov = sum((x - ma) * (y - mb) for x, y in zip(a, b))
+        return cov / math.sqrt(sum((x - ma) ** 2 for x in a) * sum((y - mb) ** 2 for y in b))
+
+    def test_steady_at_zero(self) -> None:
+        envelope, _ = self.drive(0.0)
+        self.assertLess(max(envelope) - min(envelope), 0.02 * max(envelope))
+
+    def test_beats_with_the_engine_even_after_braking(self) -> None:
+        # The pulse ran on an oscillator of its own that stood still while braking.
+        for blocks in (0, 3, 7):
+            with self.subTest(brake_first=blocks):
+                envelope, grip = self.drive(0.8, brake_first=blocks)
+                self.assertGreater(self.correlation(envelope, grip), 0.6)
+
+    def test_each_firing_pulses_as_strong_as_it_fires(self) -> None:
+        envelope, grip = self.drive(0.8)
+        crests, current = [], None  # the pulse's crest in each firing, cut where the engine rises through zero
+        for x, (a, b) in zip(envelope[1:], zip(grip, grip[1:])):
+            if a <= 0 < b:
+                if current is not None:
+                    crests.append(current)
+                current = x
+            elif current is not None:
+                current = max(current, x)
+        mean = sum(crests) / len(crests)
+        spread = math.sqrt(sum((c - mean) ** 2 for c in crests) / len(crests)) / mean
+        self.assertGreater(spread, 0.04)  # a steady sine pulsed every firing alike
+
+
 class EqualizerTest(unittest.TestCase):
     CURVES = {"grip": {"30": 2.0, "65": 1.0, "250": 2.0}, "trigger": {"100": 1.0, "200": 1.5}}
 

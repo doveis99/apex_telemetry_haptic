@@ -177,8 +177,10 @@ MESSAGES = {
     "지금 밟고 있는 페달을 따라가는 트리거 진동입니다. 엑셀은 밟은 만큼 세지고, 브레이크는 바퀴가 잠기면(휠락) 끊기는 펄스를 냅니다.":
         ("Wibracja spustu podążająca za wciśniętym pedałem: gaz rośnie wraz z wciśnięciem, hamulec pulsuje, gdy "
          "koła się blokują."),
-    "엑셀 트리거 진동을 엔진 점화 박자에 맞춰 출렁이게 하는 정도입니다. 0%면 일정하게 울립니다. 브레이크 쪽에는 영향이 없습니다.":
-        "Jak mocno spust gazu pulsuje w takt zapłonu silnika. 0% daje równą wibrację. Nie dotyczy hamulca.",
+    "엑셀 트리거 진동을 엔진 점화 박자에 맞춰 출렁이게 하는 정도입니다. 엔진 진동과 같은 폭발을 따라가서 공회전의 울렁임과 폭발마다 다른 세기도 느껴집니다. 0%면 일정하게 울립니다. 브레이크 쪽에는 영향이 없습니다.":
+        ("Jak mocno spust gazu pulsuje w takt zapłonu silnika. Podąża za tymi samymi zapłonami co wibracja silnika, "
+         "więc czuć też falowanie biegu jałowego i siłę każdego zapłonu. 0% daje równą wibrację. Nie dotyczy "
+         "hamulca."),
     "rpm, 엑셀 부하, 페달이 그대로 유지되면 엔진과 엑셀/브레이크 진동을 몇 초에 걸쳐 이 비율만큼 줄여 장거리 피로를 덜어 줍니다. 가속, 변속, 페달 조작 순간에는 바로 돌아옵니다.":
         ("Gdy obroty, obciążenie i pedały są stałe, wibracje silnika i gazu/hamulca słabną o tę część w ciągu kilku "
          "sekund, co zmniejsza zmęczenie w długich trasach. Wracają od razu przy przyspieszaniu, zmianie biegu lub "

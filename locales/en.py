@@ -179,9 +179,10 @@ MESSAGES = {
     "지금 밟고 있는 페달을 따라가는 트리거 진동입니다. 엑셀은 밟은 만큼 세지고, 브레이크는 바퀴가 잠기면(휠락) 끊기는 펄스를 냅니다.":
         ("Trigger vibration that follows the pedal you are pressing: throttle grows with how far you press it, "
          "brake pulses when the wheels lock."),
-    "엑셀 트리거 진동을 엔진 점화 박자에 맞춰 출렁이게 하는 정도입니다. 0%면 일정하게 울립니다. 브레이크 쪽에는 영향이 없습니다.":
-        ("How much the throttle trigger throbs with the engine's firing beat. 0% keeps it steady. The brake is not "
-         "affected."),
+    "엑셀 트리거 진동을 엔진 점화 박자에 맞춰 출렁이게 하는 정도입니다. 엔진 진동과 같은 폭발을 따라가서 공회전의 울렁임과 폭발마다 다른 세기도 느껴집니다. 0%면 일정하게 울립니다. 브레이크 쪽에는 영향이 없습니다.":
+        ("How much the throttle trigger throbs with the engine's firing beat. It follows the same firings as the "
+         "engine vibration, so the idle's lope and each firing's own strength come through too. 0% keeps it steady. "
+         "The brake is not affected."),
     "rpm, 엑셀 부하, 페달이 그대로 유지되면 엔진과 엑셀/브레이크 진동을 몇 초에 걸쳐 이 비율만큼 줄여 장거리 피로를 덜어 줍니다. 가속, 변속, 페달 조작 순간에는 바로 돌아옵니다.":
         ("While rpm, load and pedals hold steady, engine and throttle/brake vibration fade by this much over a few "
          "seconds to ease long hauls. They return at once when you accelerate, shift or move a pedal."),

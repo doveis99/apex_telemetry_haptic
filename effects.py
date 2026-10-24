@@ -515,7 +515,6 @@ class Synth:
         self.cylinder = 0
         self.firing_gain = 1.0
         self.trigger_osc = Oscillator()
-        self.trigger_mod = Oscillator()
         self.retarder_osc = Oscillator()
         self.squeal = Squeal(seed=4)
         self.texture = (Texture(seed=1), Texture(seed=2))
@@ -938,9 +937,9 @@ class Synth:
 
             out = [0.0, 0.0, 0.0]  # left grip, right grip, trigger: events
             bed = [0.0, 0.0, 0.0]  # continuous effects, ducked under the events
-            firing = self.engine_osc.phase
+            firing, fire_gain = self.engine_osc.phase, self.firing_gain
             w = TAU * firing
-            engine = e * self.firing_gain * (self.engine_osc.next(engine_freq) + 0.3 * math.sin(2 * w)
+            engine = e * fire_gain * (self.engine_osc.next(engine_freq) + 0.3 * math.sin(2 * w)
                                              + eh * math.sin(3 * w))
             if self.engine_osc.phase < firing:  # a cycle done: the next cylinder fires
                 self._next_firing(engine_uneven)
@@ -971,9 +970,11 @@ class Synth:
             if trigger_mode == "brake" and lock > 0:
                 t = tr * self._lock_chop() * self.trigger_osc.next(110.0)
             elif trigger_mode == "throttle":
-                # 100 Hz carrier, optionally pulsed at the engine firing rate.
+                # 100 Hz carrier, optionally pulsed with the engine's own firings: on
+                # their beat and each as strong as that firing, so the idle's lope and
+                # the firing-to-firing differences come through the pedal too.
                 depth = min(1.0, max(0.0, g.throttle_pulse))
-                pulse = 1.0 - depth * 0.5 * (1.0 - self.trigger_mod.next(engine_freq))
+                pulse = (1.0 - depth * 0.5 * (1.0 - math.sin(w))) * (1.0 + depth * (fire_gain - 1.0))
                 t = tr * pulse * self.trigger_osc.next(100.0)
             else:
                 t = tr * self.trigger_osc.next(100.0)

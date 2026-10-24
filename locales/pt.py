@@ -181,9 +181,10 @@ MESSAGES = {
     "지금 밟고 있는 페달을 따라가는 트리거 진동입니다. 엑셀은 밟은 만큼 세지고, 브레이크는 바퀴가 잠기면(휠락) 끊기는 펄스를 냅니다.":
         ("Vibração do gatilho que segue o pedal pressionado: o acelerador cresce conforme você pisa e o freio pulsa "
          "quando as rodas travam."),
-    "엑셀 트리거 진동을 엔진 점화 박자에 맞춰 출렁이게 하는 정도입니다. 0%면 일정하게 울립니다. 브레이크 쪽에는 영향이 없습니다.":
-        ("Quanto o gatilho do acelerador pulsa no ritmo da ignição do motor. 0% deixa constante. O freio não é "
-         "afetado."),
+    "엑셀 트리거 진동을 엔진 점화 박자에 맞춰 출렁이게 하는 정도입니다. 엔진 진동과 같은 폭발을 따라가서 공회전의 울렁임과 폭발마다 다른 세기도 느껴집니다. 0%면 일정하게 울립니다. 브레이크 쪽에는 영향이 없습니다.":
+        ("Quanto o gatilho do acelerador pulsa no ritmo da ignição do motor. Segue as mesmas explosões da vibração "
+         "do motor, então o balanço da marcha lenta e a força de cada explosão também aparecem. 0% deixa constante. "
+         "O freio não é afetado."),
     "rpm, 엑셀 부하, 페달이 그대로 유지되면 엔진과 엑셀/브레이크 진동을 몇 초에 걸쳐 이 비율만큼 줄여 장거리 피로를 덜어 줍니다. 가속, 변속, 페달 조작 순간에는 바로 돌아옵니다.":
         ("Com rpm, carga e pedais estáveis, a vibração do motor e do acelerador/freio cai nessa proporção em alguns "
          "segundos para aliviar viagens longas. Volta na hora ao acelerar, trocar de marcha ou mexer num pedal."),

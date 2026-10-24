@@ -121,13 +121,19 @@ def side_surface(wheels: list[Wheel]) -> Surface:
 
 
 TOGGLEABLE = ("engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarder", "impact", "trigger",
-              "pedal", "squeal", "trailer", "park_brake", "blinker", "engine_start",
+              "pedal", "squeal", "trailer", "park_brake", "air_brake", "blinker", "engine_start",
               "shifter", "game_events")
 
 # Event bursts duck the continuous effects on their channel so they stand out
 # over the driving bed (sidechain ducking). Bumps come from the road itself
-# and fire constantly on rough surfaces, so they do not duck it.
-DUCK_EXEMPT = ("bumps",)
+# and fire constantly on rough surfaces, and the brakes vent on every release
+# of the pedal, so neither ducks it.
+DUCK_EXEMPT = ("bumps", "air_brake")
+# Letting go of the service brake vents the brake chambers, as recorded: a
+# valve thump around 35-65 Hz, then a hiss that swells in tens of
+# milliseconds and falls 20 dB in about 0.3 s, louder the harder it braked.
+AIR_BRAKE_HOLD = 0.3  # s the pedal must be held; a dab sends too little air to hear
+AIR_BRAKE_ON, AIR_BRAKE_OFF = 0.1, 0.03  # pedal travel that holds it, and that lets go
 DUCK_FULL = 0.25  # burst envelope that ducks by the full Gains.ducking
 DUCK_ATTACK = 1.0 - math.exp(-1.0 / (0.001 * SAMPLE_RATE))  # 1 ms, avoids a step in the bed
 DUCK_RELEASE = math.exp(-1.0 / (0.08 * SAMPLE_RATE))  # 80 ms back to full
@@ -166,6 +172,7 @@ class Gains:
     squeal: float = 0.4
     trailer: float = 0.9
     park_brake: float = 0.7
+    air_brake: float = 0.5
     blinker: float = 0.5
     engine_start: float = 0.8
     shifter: float = 0.5
@@ -460,6 +467,7 @@ class Synth:
                          "spin": 0.0, "retarder": 0.0, "jake": 0.0, "trigger": 0.0, "squeal": 0.0}
         self.prev_state: dict[str, object] = {}
         self.blinker_idle = 0.0
+        self.brake_held = self.brake_peak = 0.0  # how long and how hard the service brake has been held
         self.was_live = False
         self.prev_render_time: int | None = None
         self.prev_deflection: list[float] = []
@@ -493,6 +501,7 @@ class Synth:
         events are one-shot flags, not states, so they still fire.
         """
         self.prev_render_time = None
+        self.brake_held = self.brake_peak = 0.0
         self.prev_deflection = []
         self.prev_accel = None
         self.prev_gear = None
@@ -653,6 +662,16 @@ class Synth:
                 self._both("trailer", Burst(50.0, 0.9 * s, 0.05))
                 self._both("trailer", NoiseBurst(250.0, 0.4 * s, 0.15, delay_s=0.15))
                 log.append(t("트레일러 분리"))
+
+        if frame.user_brake > AIR_BRAKE_ON:
+            self.brake_held += DT
+            self.brake_peak = max(self.brake_peak, frame.user_brake)
+        elif frame.user_brake < AIR_BRAKE_OFF:
+            if self.brake_held >= AIR_BRAKE_HOLD and g.air_brake and frame.air_pressure > 30.0:
+                s = g.air_brake * (0.4 + 0.6 * self.brake_peak)
+                self._both("air_brake", Burst(50.0, 0.6 * s, 0.03, phase=0.25))
+                self._both("air_brake", NoiseBurst(250.0, 0.5 * s, 0.15, delay_s=0.01, attack_s=0.04))
+            self.brake_held = self.brake_peak = 0.0
 
         # The lamp flag toggles with every flash; the relay clicks on both edges.
         self.blinker_idle += DT

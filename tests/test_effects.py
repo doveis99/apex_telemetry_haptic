@@ -322,6 +322,28 @@ class EventShapeTest(unittest.TestCase):
         samples = self.park_brake(False)
         self.assertGreater(rms(samples[280:340]), 2 * rms(samples[180:260]))
 
+    @staticmethod
+    def release(blocks: int, pedal: float, s: Synth | None = None) -> list:
+        """Hold the brake pedal for some 8 ms blocks, let go, and return the air brake's bursts."""
+        s = s or only("air_brake")
+        for _ in range(blocks):
+            s.render(frame(user_brake=pedal, user_throttle=0.0))
+        s.render(frame(user_brake=0.0, user_throttle=0.0))
+        return [burst for effect, _, burst in s.bursts if effect == "air_brake"]
+
+    def test_letting_go_of_the_brake_vents_the_chambers(self) -> None:
+        hard, soft = self.release(50, 0.9), self.release(50, 0.2)
+        self.assertEqual(len(hard), 2)  # the valve's thump and the hiss
+        self.assertGreater(hard[0].amplitude, soft[0].amplitude)
+        self.assertEqual(self.release(20, 0.9), [])  # a dab of 0.16 s
+
+    def test_venting_does_not_duck_the_driving_effects(self) -> None:
+        s = Synth(effective_gains(Gains(disabled=[n for n in TOGGLEABLE if n not in ("engine", "air_brake")])))
+        self.release(50, 0.9, s)
+        for _ in range(10):
+            s.render(frame(user_brake=0.0, user_throttle=0.0))
+            self.assertEqual(max(s.duck), 0.0)
+
     def test_squeal_comes_in_separate_squeals(self) -> None:
         s, samples = only("squeal"), []
         for _ in range(250):  # braking gently at walking pace: 2 s

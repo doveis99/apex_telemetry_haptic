@@ -92,6 +92,7 @@ MESSAGES = {
     "페달": "Pedale",
     "브레이크 스퀼": "Bremsquietschen",
     "파킹 브레이크": "Feststellbremse",
+    "에어 브레이크": "Druckluftbremse",
     "방향지시등": "Blinker",
     "시동 켜기/끄기": "Motor an/aus",
     "레인지/스플리터": "Gruppe/Splitter",
@@ -196,6 +197,10 @@ MESSAGES = {
     "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
         ("Beim Anziehen der Feststellbremse ein „Klack“, dann fast eine Sekunde lang ausströmende Luft; beim Lösen "
          "ein tiefes „Tock“, dann ein kurzes Zischen."),
+    "브레이크 페달을 떼면 브레이크 챔버의 공기가 빠지며 '툭' 하고 짧게 '푸쉬익'. 세게 밟았을수록 크고, 잠깐 톡 친 정도로는 나지 않습니다. 브레이크를 뗄 때마다 나므로 '주행 진동 양보'로 주행 진동을 줄이지 않습니다.":
+        ("Lassen Sie das Bremspedal los, entlüften die Bremszylinder: ein „Plopp“ und ein kurzes „Pschht“. Je fester "
+         "gebremst, desto lauter; kurzes Antippen löst es nicht aus. Es kommt bei jedem Loslassen, daher senkt "
+         "„Platz für Ereignisse“ die Fahreffekte dafür nicht ab."),
     "방향지시등이 점멸할 때마다 켜진 쪽 그립에 '틱'.": "Bei jedem Blinken ein „Tick“ im Griff der Blinkseite.",
     "시동을 켤 때 크랭킹에 이어 '부웅', 끌 때 꺼지며 떨림.":
         "Beim Starten Anlassen und ein „Brumm“; beim Abstellen ein Schütteln beim Auslaufen.",

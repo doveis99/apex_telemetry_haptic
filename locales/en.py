@@ -92,6 +92,7 @@ MESSAGES = {
     "페달": "Pedals",
     "브레이크 스퀼": "Brake squeal",
     "파킹 브레이크": "Parking brake",
+    "에어 브레이크": "Air brake",
     "방향지시등": "Turn signals",
     "시동 켜기/끄기": "Engine start/stop",
     "레인지/스플리터": "Range/splitter",
@@ -192,6 +193,10 @@ MESSAGES = {
     "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
         ("Setting the parking brake: a 'clunk', then air venting for most of a second. Releasing it: a low 'thunk', "
          "then a short puff."),
+    "브레이크 페달을 떼면 브레이크 챔버의 공기가 빠지며 '툭' 하고 짧게 '푸쉬익'. 세게 밟았을수록 크고, 잠깐 톡 친 정도로는 나지 않습니다. 브레이크를 뗄 때마다 나므로 '주행 진동 양보'로 주행 진동을 줄이지 않습니다.":
+        ("When you let go of the brake pedal the brake chambers vent: a 'thump' and a short 'pssht'. Louder the "
+         "harder you braked; a quick dab does not do it. It comes with every release, so 'Duck for events' leaves "
+         "the driving effects alone for it."),
     "방향지시등이 점멸할 때마다 켜진 쪽 그립에 '틱'.": "A 'tick' in the grip on the signalling side with every blink.",
     "시동을 켤 때 크랭킹에 이어 '부웅', 끌 때 꺼지며 떨림.":
         "Cranking and a 'vroom' when the engine starts; a shudder as it dies when you switch it off.",

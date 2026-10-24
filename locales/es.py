@@ -92,6 +92,7 @@ MESSAGES = {
     "페달": "Pedales",
     "브레이크 스퀼": "Chirrido de frenos",
     "파킹 브레이크": "Freno de mano",
+    "에어 브레이크": "Freno de aire",
     "방향지시등": "Intermitentes",
     "시동 켜기/끄기": "Encendido/apagado",
     "레인지/스플리터": "Rango/splitter",
@@ -195,6 +196,10 @@ MESSAGES = {
     "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
         ("Al poner el freno de mano, un «clac» y luego casi un segundo de aire escapando; al quitarlo, un «toc» "
          "grave y luego un soplido corto."),
+    "브레이크 페달을 떼면 브레이크 챔버의 공기가 빠지며 '툭' 하고 짧게 '푸쉬익'. 세게 밟았을수록 크고, 잠깐 톡 친 정도로는 나지 않습니다. 브레이크를 뗄 때마다 나므로 '주행 진동 양보'로 주행 진동을 줄이지 않습니다.":
+        ("Al soltar el pedal de freno se vacían las cámaras de freno: un «tump» y un breve «pssst». Más fuerte "
+         "cuanto más se frenó; un toque breve no lo produce. Llega en cada suelta, así que «Ceder a eventos» no "
+         "atenúa los efectos de conducción por él."),
     "방향지시등이 점멸할 때마다 켜진 쪽 그립에 '틱'.": "Un «tic» en la empuñadura del lado del intermitente con cada parpadeo.",
     "시동을 켤 때 크랭킹에 이어 '부웅', 끌 때 꺼지며 떨림.":
         "Al arrancar, el motor de arranque y un «brum»; al apagar, una sacudida mientras se detiene.",

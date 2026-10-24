@@ -94,6 +94,7 @@ MESSAGES = {
     "페달": "Pédales",
     "브레이크 스퀼": "Crissement de frein",
     "파킹 브레이크": "Frein à main",
+    "에어 브레이크": "Frein pneumatique",
     "방향지시등": "Clignotants",
     "시동 켜기/끄기": "Démarrage/arrêt",
     "레인지/스플리터": "Gamme/demi-rapport",
@@ -197,6 +198,10 @@ MESSAGES = {
     "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
         ("En serrant le frein à main, un « clac » puis près d'une seconde d'air qui s'échappe ; en le desserrant, un "
          "« toc » sourd puis un bref souffle."),
+    "브레이크 페달을 떼면 브레이크 챔버의 공기가 빠지며 '툭' 하고 짧게 '푸쉬익'. 세게 밟았을수록 크고, 잠깐 톡 친 정도로는 나지 않습니다. 브레이크를 뗄 때마다 나므로 '주행 진동 양보'로 주행 진동을 줄이지 않습니다.":
+        ("Quand vous relâchez la pédale de frein, les cylindres de frein se vident : un « poc » et un bref « pschitt "
+         "». Plus fort si vous avez freiné fort ; une petite touche ne le déclenche pas. Il vient à chaque "
+         "relâchement, donc « Céder aux événements » n'atténue pas les effets de conduite pour lui."),
     "방향지시등이 점멸할 때마다 켜진 쪽 그립에 '틱'.": "Un « tic » dans la poignée du côté du clignotant à chaque clignement.",
     "시동을 켤 때 크랭킹에 이어 '부웅', 끌 때 꺼지며 떨림.":
         "Au démarrage, le démarreur puis un « vroum » ; à l'arrêt, un tremblement quand le moteur s'éteint.",

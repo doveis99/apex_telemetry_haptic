@@ -1,12 +1,17 @@
-"""Synth edge detectors: a new reference fires nothing, bump pulses stay bounded."""
+"""Synth edge detectors: a new reference fires nothing, bump pulses stay bounded,
+bumps do not depend on the game's frame rate."""
 
 from __future__ import annotations
 
+import itertools
+import math
 import random
 import unittest
 
-from effects import Gains, Synth, effective_gains
-from telemetry import Frame, Wheel
+from effects import DT, TOGGLEABLE, Gains, Synth, effective_gains
+from telemetry import Frame, SimulatedTelemetry, Wheel
+
+_render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise
 
 
 def wheels(count: int, deflection: float | list[float]) -> list[Wheel]:
@@ -18,6 +23,7 @@ def wheels(count: int, deflection: float | list[float]) -> list[Wheel]:
 def frame(gear: int = 10, deflection: float | list[float] = 0.02, truck_wheels: int = 6, trailer_wheels: int = 0,
           accel: tuple[float, float, float] = (0.2, 0.0, 0.5), **values) -> Frame:
     values.setdefault("trailer_attached", bool(trailer_wheels))
+    values.setdefault("render_time", next(_render_time))
     return Frame(active=True, paused=False, rpm=1300.0, speed=22.0, game_throttle=0.4, user_throttle=0.4,
                  gear=gear, engine_on=True, accel=accel, wheels=wheels(truck_wheels, deflection),
                  trailer_wheels=wheels(trailer_wheels, 0.02), **values)
@@ -98,6 +104,84 @@ class BumpTest(unittest.TestCase):
         bumps = [burst for effect, _, burst in s.bursts if effect == "bumps"]
         self.assertEqual(len(bumps), 1)
         self.assertAlmostEqual(bumps[0].amplitude, 1.0)
+
+
+def drive(fps: float | None, start: float, end: float) -> tuple[list[float], int]:
+    """Bump-only left grip over [start, end) s of the scripted drive, and the bump pulses started there."""
+    clock = [0.0]
+    source = SimulatedTelemetry(fps, clock=lambda: clock[0])
+    s = Synth(effective_gains(Gains(disabled=[name for name in TOGGLEABLE if name != "bumps"])))
+    left, pulses = [], set()
+    for n in range(round(end / DT)):
+        clock[0] = n * DT
+        block = s.render(source.read())
+        if clock[0] >= start:
+            left.extend(block.left_grip)
+            pulses.update(burst for effect, _, burst in s.bursts if effect == "bumps")
+    return left, len(pulses)
+
+
+def rms(samples: list[float]) -> float:
+    return math.sqrt(sum(x * x for x in samples) / len(samples))
+
+
+class FrameRateTest(unittest.TestCase):
+    """The plugin updates once per game frame, so most blocks below 125 fps read a frame again."""
+
+    def test_simulated_drive_holds_frames(self) -> None:
+        clock = [0.0]
+        source = SimulatedTelemetry(60, clock=lambda: clock[0])
+        times = []
+        for t in (0.0, 0.008, 0.016, 0.017):
+            clock[0] = t
+            times.append(source.read().render_time)
+        self.assertEqual(times[0], times[2])  # three blocks inside the first 16.7 ms frame
+        self.assertGreater(times[3], times[2])
+
+    def test_no_bumps_while_parked_at_any_frame_rate(self) -> None:
+        for fps in (None, 30, 60, 144):
+            with self.subTest(fps=fps):
+                _, pulses = drive(fps, 0.5, 5.0)  # the yard: only the suspension settling
+                self.assertEqual(pulses, 0)  # 30 fps used to ring every wheel without end
+
+    def test_gravel_is_not_rougher_at_60_fps(self) -> None:
+        continuous, _ = drive(None, 25.0, 28.0)
+        at_60, _ = drive(60, 25.0, 28.0)
+        self.assertLess(rms(at_60), 1.5 * rms(continuous))  # used to be 8x
+
+    def test_potholes_still_come_through_at_60_fps(self) -> None:
+        continuous, _ = drive(None, 16.9, 20.0)
+        at_60, _ = drive(60, 16.9, 20.0)
+        self.assertGreater(rms(at_60), 0.7 * rms(continuous))
+        self.assertLess(rms(at_60), 1.3 * rms(continuous))
+
+    def test_steady_travel_read_again_is_not_a_bump(self) -> None:
+        s = synth()
+        for n in range(60):
+            game_time = math.floor(n * DT * 30) / 30  # a 30 fps game: each frame read by four blocks
+            # 0.2 m/s, under the 0.25 m/s threshold; per block it looked like 0.8 m/s
+            s.render(frame(deflection=0.02 + 0.2 * game_time, render_time=int(game_time * 1e6)))
+        self.assertNotIn("bumps", effects_of(s))
+
+    def test_hitch_is_not_a_bump(self) -> None:
+        for hitch in (0.15, 1.0):  # within MAX_FRAME_GAP, then past it
+            with self.subTest(hitch=hitch):
+                s, game_time = synth(), 0.0
+                for n in range(60):
+                    game_time += hitch if n == 30 else 1 / 60
+                    deflection = 0.02 + 0.006 * math.sin(math.tau * 6 * game_time)  # gravel-like settling
+                    s.render(frame(deflection=deflection, render_time=int(game_time * 1e6)))
+                self.assertNotIn("bumps", effects_of(s))
+
+    def test_timer_restart_takes_a_new_reference(self) -> None:
+        s = synth()
+        for n in range(30):
+            s.render(frame(render_time=int((10.0 + n / 60) * 1e6)))
+        # after a load the game's timer starts over; the truck sits lower and pulls differently
+        s.render(frame(deflection=0.03, accel=(3.0, 0.0, -20.0), render_time=0))
+        self.assertEqual(effects_of(s), [])
+        s.render(frame(deflection=0.04, accel=(3.0, 0.0, -20.0), render_time=int(1e6 / 60)))  # and they work again
+        self.assertIn("bumps", effects_of(s))
 
 
 if __name__ == "__main__":

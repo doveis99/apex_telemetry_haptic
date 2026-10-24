@@ -2,7 +2,7 @@
 
 Outputs: left grip, right grip and one trigger channel (on this firmware the
 trigger channel always drives both triggers). Each effect is routed to the
-grips, the trigger or both (Gains.routes). Telemetry arrives once per 8 ms
+grips, the trigger or both (Gains.routes). Telemetry is read once per 8 ms
 block; amplitudes are ramped across the block and oscillator phases carry
 over, so parameter changes do not click.
 
@@ -27,6 +27,14 @@ TAU = 2.0 * math.pi
 # hold still (long cruises tire the hands) and come back when they move.
 STEADY_TAU = 3.0  # s for the reference to catch up with an input that stopped moving
 STEADY_K = 1.0 - math.exp(-DT / STEADY_TAU)
+# The plugin rewrites shared memory once per rendered game frame, so at 60 fps
+# about every other block reads the frame it read before. Suspension rates are
+# taken over the game time between new frames (Frame.render_time), not over a
+# block: dividing by DT made each change look up to 125/fps times faster, and
+# at 30 fps the bump pulses never stopped ringing.
+MAX_FRAME_GAP = 0.2  # s; across a longer hitch, or the game's timer restarting, only take a new reference
+RATE_AVG_TAU = 0.2  # s, the slow suspension movement that bumps stand out from
+ROUGH_TAU = 0.076  # s, smoothing of the road roughness estimate
 
 # Relative texture strength per substance (matched by substring, first match
 # wins, so the specific road_* variants come before plain "road").
@@ -98,7 +106,7 @@ class Gains:
     steady_fade: float = 0.6
     cylinders: int = 6
     bump_threshold: float = 0.25  # m/s of sudden suspension travel
-    impact_threshold: float = 12.0  # m/s^2 change within one 8 ms block
+    impact_threshold: float = 12.0  # m/s^2 change from one game frame to the next
     # event effects
     pedal: float = 0.6
     squeal: float = 0.4
@@ -256,6 +264,7 @@ class Synth:
         self.prev_state: dict[str, object] = {}
         self.blinker_idle = 0.0
         self.was_live = False
+        self.prev_render_time: int | None = None
         self.prev_deflection: list[float] = []
         self.deflection_rate_avg: list[float] = []
         self.bump_bursts: list[Burst | None] = []  # each wheel's pulse while it rings
@@ -283,24 +292,43 @@ class Synth:
         happened. The first live frame only becomes the new reference. Game
         events are one-shot flags, not states, so they still fire.
         """
+        self.prev_render_time = None
         self.prev_deflection = []
         self.prev_accel = None
         self.prev_gear = None
         self.prev_state = {key: value for key, value in self.prev_state.items() if key == "game_events"}
 
-    def _wheel_events(self, frame: Frame) -> None:
+    def _frame_dt(self, frame: Frame) -> float | None:
+        """Game time in s since the last new frame; None when this frame was read before.
+
+        0 when there is no usable previous frame (the first one, a hitch
+        longer than MAX_FRAME_GAP, the game's timer restarting): the rate
+        detectors then only take a new reference.
+        """
+        previous, self.prev_render_time = self.prev_render_time, frame.render_time
+        if previous == frame.render_time:
+            return None
+        dt = 0.0 if previous is None else (frame.render_time - previous) / 1e6
+        return dt if 0.0 < dt <= MAX_FRAME_GAP else 0.0
+
+    def _wheel_events(self, frame: Frame, dt: float) -> None:
         wheels = frame.wheels + frame.trailer_wheels
         if len(self.prev_deflection) != len(wheels):
             self.prev_deflection = [w.deflection for w in wheels]
             self.deflection_rate_avg = [0.0] * len(wheels)
             self.bump_bursts = [None] * len(wheels)
             return
+        if not dt:  # no rate across a gap: the travel since then is not one movement
+            self.prev_deflection = [w.deflection for w in wheels]
+            return
+        avg_k = 1.0 - math.exp(-dt / RATE_AVG_TAU)
         rough = [0.0, 0.0]
         counts = [0, 0]
         for i, wheel in enumerate(wheels):
-            rate = (wheel.deflection - self.prev_deflection[i]) / DT  # m/s
+            rate = (wheel.deflection - self.prev_deflection[i]) / dt  # m/s
             self.prev_deflection[i] = wheel.deflection
-            avg = self.deflection_rate_avg[i] = self.deflection_rate_avg[i] * 0.96 + rate * 0.04
+            avg = self.deflection_rate_avg[i]
+            avg = self.deflection_rate_avg[i] = avg + (rate - avg) * avg_k
             high = abs(rate - avg)
             side = 0 if wheel.pos_x < 0 else 1
             trailer = i >= len(frame.wheels)
@@ -325,9 +353,10 @@ class Synth:
                 burst = Burst(freq=60.0, amplitude=strength, decay_s=0.035)
                 self.bursts.append(("bumps", where, burst))
                 self.bump_bursts[i] = burst
+        rough_k = 1.0 - math.exp(-dt / ROUGH_TAU)
         for side in (0, 1):
             value = rough[side] / counts[side] if counts[side] else 0.0
-            self.roughness[side] = self.roughness[side] * 0.9 + value * 0.1
+            self.roughness[side] += (value - self.roughness[side]) * rough_k
 
     def _gear_event(self, frame: Frame) -> None:
         self.gear_cooldown = max(0.0, self.gear_cooldown - DT)
@@ -346,12 +375,12 @@ class Synth:
         if frame.gear != 0:
             self.prev_gear = frame.gear
 
-    def _impact_event(self, frame: Frame) -> None:
-        self.impact_cooldown = max(0.0, self.impact_cooldown - DT)
+    def _impact_event(self, frame: Frame, dt: float) -> None:
+        self.impact_cooldown = max(0.0, self.impact_cooldown - dt)
         ax, _, az = frame.accel
         horizontal = math.hypot(ax, az)
         self.levels.max_accel = max(self.levels.max_accel, horizontal)
-        if self.prev_accel is not None and self.impact_cooldown == 0.0:
+        if dt and self.prev_accel is not None and self.impact_cooldown == 0.0:
             px, _, pz = self.prev_accel
             jump = math.hypot(ax - px, az - pz)
             threshold = self.g.impact_threshold
@@ -485,9 +514,11 @@ class Synth:
             self._rebaseline()
         self.was_live = live
         if live:
-            self._wheel_events(frame)
+            dt = self._frame_dt(frame)
+            if dt is not None:  # the same frame read again holds no new movement
+                self._wheel_events(frame, dt)
+                self._impact_event(frame, dt)
             self._gear_event(frame)
-            self._impact_event(frame)
             self._state_events(frame)
 
             # Brake squeal: light braking while rolling to a stop.

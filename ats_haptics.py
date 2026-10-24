@@ -2,6 +2,7 @@
 
   python ats_haptics.py                 run with the game (waits for it)
   python ats_haptics.py --simulate      scripted 60 s test drive, no game needed
+  python ats_haptics.py --simulate --sim-fps 30   the same drive as a 30 fps game (0: new data every block)
   python ats_haptics.py --dry-run       no controller; print levels only
   python ats_haptics.py --gain 0.8 --road 0.4 --trigger 0.3 --monitor
   python ats_haptics.py --exit-with-game
@@ -27,7 +28,7 @@ from effects import Gains, Synth, effective_gains
 from gamewatch import GameWatcher
 from i18n import set_language, system_language, t
 from settings import load_app_options, load_gains
-from telemetry import Frame, SharedMemoryTelemetry, SimulatedTelemetry
+from telemetry import SIMULATED_FPS, Frame, SharedMemoryTelemetry, SimulatedTelemetry
 
 STALE_AFTER_S = 0.3  # game minimized, loading or closed: render_time stops moving
 RETRY_S = 2.0  # wait between attempts to reach an absent or sleeping controller
@@ -42,11 +43,11 @@ class Runner:
 
     def __init__(self, gains: Gains, simulate: bool = False,
                  on_state: Callable[[str], None] | None = None, seconds: float | None = None,
-                 log_blocks: bool = False) -> None:
+                 log_blocks: bool = False, sim_fps: float | None = SIMULATED_FPS) -> None:
         self.gains = effective_gains(gains)
         self.synth = Synth(self.gains)
         self.simulated = simulate
-        self.source = SimulatedTelemetry() if simulate else SharedMemoryTelemetry()
+        self.source = SimulatedTelemetry(sim_fps) if simulate else SharedMemoryTelemetry()
         self.watcher = None if simulate else GameWatcher()
         self.on_state = on_state
         self.deadline = time.perf_counter() + seconds if seconds else None
@@ -226,6 +227,8 @@ def run(runner: Runner, dry_run: bool = False,
 def parse_args(defaults: Gains) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--simulate", action="store_true", help="use the scripted drive instead of the game")
+    parser.add_argument("--sim-fps", type=float, default=SIMULATED_FPS,
+                        help="game frame rate the scripted drive updates at; 0 updates every 8 ms block")
     parser.add_argument("--dry-run", action="store_true", help="do not open the controller")
     parser.add_argument("--monitor", action="store_true", help="print a status line twice a second")
     parser.add_argument("--seconds", type=float, help="stop after this many seconds")
@@ -254,6 +257,7 @@ def main() -> None:
                  "impact", "trigger", "throttle_pulse", "cylinders"):
         setattr(gains, name, getattr(args, name))
     runner = Runner(gains, simulate=args.simulate, seconds=args.seconds, log_blocks=args.log_blocks,
+                    sim_fps=args.sim_fps or None,
                     on_state=lambda s: print(f"\n[{time.strftime('%H:%M:%S')}] {s}", flush=True))
     monitor = args.monitor or args.dry_run
     if monitor:

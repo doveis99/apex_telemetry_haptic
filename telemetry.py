@@ -13,6 +13,7 @@ import struct
 import time
 from dataclasses import dataclass, field
 from multiprocessing.shared_memory import SharedMemory
+from typing import Callable
 
 from i18n import t
 
@@ -75,6 +76,7 @@ _TRAILER_WHEEL_VELOCITY = 232
 _TRAILER_WHEEL_RADIUS = 552
 _TRAILER_WHEEL_POS_X = 676
 MAX_TRAILERS = 10
+SIMULATED_FPS = 60.0  # game frame rate the test drive holds its frames at
 
 
 @dataclass
@@ -243,6 +245,10 @@ class SimulatedTelemetry:
 
     Front axle first, the drive axles 0.2 s later and the trailer's two axles
     0.45 / 0.5 s later, like a 22 m/s rig rolling over the same spot.
+
+    Like the real plugin, the data only changes once per rendered game frame:
+    at the default 60 fps about every other 8 ms block reads the frame it read
+    before. fps=None makes a new frame on every read.
     """
 
     PERIOD = 60.0
@@ -251,16 +257,21 @@ class SimulatedTelemetry:
     TRUCK_WHEELS = ((-1.0, 0.0), (1.0, 0.0), (-0.9, 0.2), (0.9, 0.2), (-0.9, 0.25), (0.9, 0.25))  # (pos_x, delay)
     TRAILER_WHEELS = ((-0.98, 0.45), (0.98, 0.45), (-0.98, 0.5), (0.98, 0.5))
 
-    def __init__(self) -> None:
-        self._start = time.perf_counter()
-        self.name = "simulated"
+    def __init__(self, fps: float | None = SIMULATED_FPS, clock: Callable[[], float] = time.perf_counter) -> None:
+        self.fps = fps
+        self._clock = clock
+        self._start = clock()
+        self.name = f"simulated {fps:g} fps" if fps else "simulated"
 
     def close(self) -> None:
         pass
 
     def read(self) -> Frame:
-        t = (time.perf_counter() - self._start) % self.PERIOD
-        frame = Frame(active=True, paused=False, render_time=int(time.perf_counter() * 1e6), rpm_max=2100.0)
+        elapsed = self._clock() - self._start
+        if self.fps:
+            elapsed = math.floor(elapsed * self.fps) / self.fps  # when the game rendered its last frame
+        t = elapsed % self.PERIOD
+        frame = Frame(active=True, paused=False, render_time=int(elapsed * 1e6), rpm_max=2100.0)
         speed, throttle, brake, gear, rpm = 0.0, 0.0, 0.0, 0, 650.0
         lock = spin = False
         if t < 5:

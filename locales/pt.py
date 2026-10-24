@@ -279,4 +279,43 @@ MESSAGES = {
     "기록 폴더 ↗": "Pasta de registros ↗",
     "디버그 기록이 쌓이는 폴더를 엽니다.": "Abre a pasta onde ficam os registros de depuração.",
     "디버그 기록": "Registro de depuração",
+    # motor calibration dialog
+    "모터 보정…": "Calibração dos motores…",
+    "모터가 주파수마다 다르게 울리는 정도를 손으로 느끼며 맞춥니다. 결과는 모든 효과에 주파수별로 적용됩니다. 출력을 정지한 상태에서 씁니다.":
+        ("Ajuste pelo tato o quanto a resposta dos motores muda com a frequência. O resultado vale para todos os "
+         "efeitos, frequência por frequência. Use com a saída parada."),
+    "모터 보정": "Calibração dos motores",
+    "출력을 정지한 다음 보정하세요.": "Pare a saída antes de calibrar.",
+    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 기준음 다음에 시험음이 울리면 같은 세기로 느껴질 때까지 더 세게 또는 더 약하게를 고르세요. 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 2~4분 걸립니다.":
+        ("Os motores vibram mais forte perto de 65 Hz (empunhaduras) e 100 Hz (gatilhos), então o mesmo sinal é "
+         "sentido de forma diferente em cada frequência. Depois do tom de referência toca um tom de teste: escolha "
+         "mais forte ou mais fraco até os dois parecerem iguais. Cada efeito é corrigido nessa medida nessa "
+         "frequência. Cada motor leva 2–4 minutos."),
+    "지금 보정: {channels}": "Calibração atual: {channels}",
+    "없음": "nenhuma",
+    "{name} ({count}개 주파수)": "{name} ({count} frequências)",
+    "시작": "Iniciar",
+    "보정 지우기": "Limpar calibração",
+    "저장된 보정을 지워 모든 주파수를 그대로 보냅니다.": "Apaga a calibração salva, e cada frequência é enviada como está.",
+    "컨트롤러를 평소처럼 잡으세요. 패드 버튼으로 답할 수 있습니다: 십자키 ↑ 더 세게, ↓ 더 약하게, A 같음, X 다시 듣기, B 그만. 키보드는 ↑ ↓ Enter R Esc입니다. 재생 중에 눌러도 바로 반영됩니다.":
+        ("Segure o controle como de costume. Você pode responder com os botões do controle: direcional ↑ mais forte, "
+         "↓ mais fraco, A igual, X repetir, B parar. No teclado: ↑ ↓ Enter R Esc. As respostas valem mesmo durante "
+         "os tons."),
+    "▲ 더 세게": "▲ Mais forte",
+    "▼ 더 약하게": "▼ Mais fraco",
+    "✓ 같음": "✓ Igual",
+    "↻ 다시 듣기": "↻ Repetir",
+    "그만": "Parar",
+    "보정하지 못했습니다: {error}": "Não foi possível calibrar: {error}",
+    "보정을 저장했습니다: {channels}. 다음 시작부터 적용됩니다.": "Calibração salva: {channels}. Vale a partir do próximo início.",
+    "저장한 보정이 없습니다. 모터 하나를 끝까지 맞추면 저장됩니다.":
+        "Nenhuma calibração salva. Um motor é salvo quando todas as suas frequências forem ajustadas.",
+    "다시 보정": "Calibrar de novo",
+    "저장된 보정을 지울까요?": "Apagar a calibração salva?",
+    "{name} {index}/{count} · {freq} Hz": "{name} {index}/{count} · {freq} Hz",
+    "(한계: 같음으로 이 값을 씁니다)": "(limite: Igual fica com este valor)",
+    "기준음 {reference} Hz와 비교 · 시험음 ×{gain}": "Contra a referência de {reference} Hz · tom de teste ×{gain}",
+    "그만두는 중…": "Parando…",
+    "기준음 → 시험음 재생 중…": "Tocando referência → tom de teste…",
+    "시험음이 기준음보다 어땠나요?": "Como o tom de teste pareceu em relação à referência?",
 }

@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import os
+import queue
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
@@ -29,10 +30,11 @@ from dataclasses import asdict
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+import calibrate
 import i18n
 import plugin_install
 import updater
-from apex6 import StreamStats
+from apex6 import Apex6, DeviceUnavailable, StreamStats
 from ats_haptics import Runner, run
 from blocklog import LOG_DIR
 from errorlog import log_exception
@@ -40,7 +42,7 @@ from i18n import N_, t
 from version import __version__
 from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Equalizer, Gains, route_of
 from gamewatch import GameWatcher
-from settings import load_app_options, load_eq, load_gains, save_app_options, save_gains
+from settings import load_app_options, load_eq, load_gains, save_app_options, save_eq, save_gains
 from widgets import (ACCENT, BG, BOTH_COLOR, CARD, FAINT, FIELD_HI, GO, GRIP_COLOR, MUTED, STOP, TEXT, TILE,
                      TRIGGER_COLOR, WARN, Button, Link, Meter, Segmented, Slider, Switch, apply_theme, card,
                      dark_title_bar, font, tip)
@@ -159,6 +161,7 @@ class App:
         self.saved = asdict(self.gains)
         self.runner: Runner | None = None
         self.thread: threading.Thread | None = None
+        self.calibration: CalibrationDialog | None = None
         self.error: str | None = None
         self.connected: str | None = None
         self.session_stats: StreamStats | None = None  # set by the worker when it releases the pad
@@ -307,6 +310,10 @@ class App:
             meter = Meter(output, color, length=200)
             tip(meter, meter_tip).grid(row=row, column=2, padx=6, pady=4)
             self.meters.append(meter)
+        tip(Button(output, t("모터 보정…"), self.open_calibration, size=9, height=28, bg=CARD),
+            t("모터가 주파수마다 다르게 울리는 정도를 손으로 느끼며 맞춥니다. 결과는 모든 효과에 주파수별로 "
+              "적용됩니다. 출력을 정지한 상태에서 씁니다.")).grid(
+            row=len(OUTPUT_SLIDERS) + 1 + len(METER_LABELS), column=1, columnspan=2, sticky="w", pady=(8, 0))
 
         info = card(right, t("텔레메트리"), t("게임에서 받고 있는 값"))
         info.outer.pack(fill="x", pady=(12, 0))
@@ -485,6 +492,15 @@ class App:
     def _on_source(self, source: str) -> None:
         self.source.set(source)
 
+    def open_calibration(self) -> None:
+        if self.calibration and self.calibration.top.winfo_exists():
+            self.calibration.top.lift()
+            return
+        if self.thread and self.thread.is_alive():
+            messagebox.showinfo(t("모터 보정"), t("출력을 정지한 다음 보정하세요."))
+            return
+        self.calibration = CalibrationDialog(self.root)
+
     def open_plugin_dialog(self) -> None:
         PluginDialog(self.root)
 
@@ -560,6 +576,8 @@ class App:
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
             return
+        if self.calibration and self.calibration.busy:  # it holds the controller; a game launch waits too
+            return
         self.error = None
         self.connected = None
         self.events.delete(0, "end")
@@ -603,6 +621,8 @@ class App:
             if answer:
                 self.save()
         self.stop()
+        if self.calibration:
+            self.calibration.abort()
         if self.thread:
             self.thread.join(timeout=2.0)  # lets the controller release its motors
         self.watcher.close()
@@ -797,6 +817,220 @@ class PluginDialog:
             return
         messagebox.showinfo(t("플러그인 설치"), t("설치했습니다.") + f"\n{target}", parent=self.top)
         self._render()
+
+
+class CalibrationDialog:
+    """Matches each frequency's strength by feel (calibrate.Session) on a worker thread.
+
+    The answers come from the buttons here, the keyboard or the pad's own
+    buttons; _poll shows where the worker stands.
+    """
+
+    NAMES = {"grip": N_("그립"), "trigger": N_("트리거")}
+
+    def __init__(self, parent: tk.Tk) -> None:
+        self.top = tk.Toplevel(parent, bg=BG)
+        self.top.title(t("모터 보정"))
+        self.top.resizable(False, False)
+        self.top.transient(parent)
+        dark_title_bar(self.top)
+        self.top.protocol("WM_DELETE_WINDOW", self.close)
+        self.answers: queue.SimpleQueue[str] = queue.SimpleQueue()
+        self.thread: threading.Thread | None = None
+        self.session: calibrate.Session | None = None
+        self.cancelled = False
+        self.phase = "start"  # start, playing, waiting, stopping, done, error: set by the worker
+        self.error = ""
+        self.shown = ""
+        self.channels = {channel: tk.BooleanVar(value=True) for channel in calibrate.FREQS}
+        for key, answer in (("<Up>", calibrate.STRONGER), ("<Down>", calibrate.WEAKER), ("<Return>", calibrate.SAME),
+                            ("r", calibrate.REPLAY), ("<Escape>", calibrate.CANCEL)):
+            self.top.bind(key, lambda _event, a=answer: self.answer(a))
+        self.body = tk.Frame(self.top, bg=BG)
+        self.body.pack(fill="both", padx=18, pady=16)
+        self._poll()
+
+    @property
+    def busy(self) -> bool:
+        return bool(self.thread and self.thread.is_alive())
+
+    # -- screens --------------------------------------------------------------
+
+    def _clear(self) -> tk.Frame:
+        for child in self.body.winfo_children():
+            child.destroy()
+        return self.body
+
+    def _text(self, parent: tk.Misc, text: str, **options) -> tk.Label:
+        options = {"bg": BG, "fg": TEXT, "justify": "left", "anchor": "w", "wraplength": 470, **options}
+        return tk.Label(parent, text=text, **options)
+
+    def _render_start(self) -> None:
+        body = self._clear()
+        self._text(body, t("모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 "
+                           "다르게 느껴집니다. 기준음 다음에 시험음이 울리면 같은 세기로 느껴질 때까지 더 세게 또는 "
+                           "더 약하게를 고르세요. 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 2~4분 걸립니다."
+                           )).pack(fill="x")
+        stored = [t(self.NAMES[c]) for c in calibrate.FREQS if c in load_eq()]
+        self._text(body, t("지금 보정: {channels}", channels=", ".join(stored) or t("없음")), fg=MUTED).pack(
+            fill="x", pady=(10, 0))
+        picks = tk.Frame(body, bg=BG)
+        picks.pack(fill="x", pady=(12, 0))
+        for channel, var in self.channels.items():
+            Switch(picks, var, lambda: None, color=GRIP_COLOR if channel == "grip" else TRIGGER_COLOR,
+                   bg=BG).pack(side="left")
+            self._text(picks, t("{name} ({count}개 주파수)", name=t(self.NAMES[channel]),
+                                count=len(calibrate.FREQS[channel]))).pack(side="left", padx=(8, 22))
+        self._text(body, self._controls_hint(), fg=MUTED).pack(fill="x", pady=(12, 0))
+        buttons = tk.Frame(body, bg=BG)
+        buttons.pack(fill="x", pady=(16, 0))
+        Button(buttons, t("시작"), self.begin, kind="primary", min_width=96).pack(side="left")
+        tip(Button(buttons, t("보정 지우기"), self.reset), t("저장된 보정을 지워 모든 주파수를 그대로 보냅니다.")).pack(
+            side="left", padx=(8, 0))
+        Button(buttons, t("닫기"), self.close).pack(side="right")
+
+    def _controls_hint(self) -> str:
+        return t("컨트롤러를 평소처럼 잡으세요. 패드 버튼으로 답할 수 있습니다: 십자키 ↑ 더 세게, ↓ 더 약하게, A 같음, "
+                 "X 다시 듣기, B 그만. 키보드는 ↑ ↓ Enter R Esc입니다. 재생 중에 눌러도 바로 반영됩니다.")
+
+    def _render_session(self) -> None:
+        body = self._clear()
+        self.progress = self._text(body, "", font=font(13, "bold"))
+        self.progress.pack(fill="x")
+        self.gain = self._text(body, "", fg=MUTED)
+        self.gain.pack(fill="x", pady=(4, 0))
+        self.state = self._text(body, "")
+        self.state.pack(fill="x", pady=(10, 0))
+        row = tk.Frame(body, bg=BG)
+        row.pack(fill="x", pady=(12, 0))
+        for text, answer, kind in ((t("▲ 더 세게"), calibrate.STRONGER, "ghost"),
+                                   (t("▼ 더 약하게"), calibrate.WEAKER, "ghost"),
+                                   (t("✓ 같음"), calibrate.SAME, "primary"),
+                                   (t("↻ 다시 듣기"), calibrate.REPLAY, "ghost")):
+            Button(row, text, lambda a=answer: self.answer(a), kind=kind, min_width=96).pack(side="left", padx=(0, 8))
+        self._text(body, self._controls_hint(), fg=FAINT, font=font(9)).pack(fill="x", pady=(12, 0))
+        Button(body, t("그만"), lambda: self.answer(calibrate.CANCEL), kind="danger").pack(anchor="e", pady=(12, 0))
+
+    def _render_end(self) -> None:
+        body = self._clear()
+        session = self.session
+        if self.phase == "error":
+            text = t("보정하지 못했습니다: {error}", error=self.error)
+        elif session and session.finished:
+            text = t("보정을 저장했습니다: {channels}. 다음 시작부터 적용됩니다.",
+                     channels=", ".join(t(self.NAMES[c]) for c in session.finished))
+        else:
+            text = t("저장한 보정이 없습니다. 모터 하나를 끝까지 맞추면 저장됩니다.")
+        self._text(body, text).pack(fill="x")
+        for channel in (session.finished if session else []):  # no-break spaces keep "50 Hz ×1.19" whole
+            curve = sorted(session.curves[channel].items(), key=lambda kv: float(kv[0]))
+            self._text(body, f"{t(self.NAMES[channel])}: " + "  ".join(f"{f} Hz ×{g:.2f}" for f, g in curve),
+                       fg=MUTED, font=font(9)).pack(fill="x", pady=(6, 0))
+        buttons = tk.Frame(body, bg=BG)
+        buttons.pack(fill="x", pady=(16, 0))
+        Button(buttons, t("다시 보정"), self._restart).pack(side="left")
+        Button(buttons, t("닫기"), self.close, kind="primary", min_width=96).pack(side="right")
+
+    def _restart(self) -> None:
+        self.phase = "start"
+
+    # -- actions ----------------------------------------------------------------
+
+    def begin(self) -> None:
+        channels = [c for c, var in self.channels.items() if var.get()]
+        if not channels or self.busy:
+            return
+        self.session = calibrate.Session(channels)
+        self.cancelled = False
+        self.error = ""
+        while not self.answers.empty():
+            self.answers.get_nowait()
+        self.phase = "playing"
+        self.thread = threading.Thread(target=self._work, args=(self.session,), daemon=True)
+        self.thread.start()
+
+    def answer(self, answer: str) -> None:
+        if self.busy:
+            if answer == calibrate.CANCEL:
+                self.cancelled = True
+            self.answers.put(answer)
+        elif answer == calibrate.CANCEL:
+            self.close()
+
+    def reset(self) -> None:
+        if messagebox.askyesno(t("모터 보정"), t("저장된 보정을 지울까요?"), parent=self.top):
+            save_eq({})
+            self.shown = ""  # redraw "지금 보정"
+
+    def abort(self) -> None:
+        """Stop a running calibration and wait for the controller to be let go."""
+        if self.busy:
+            self.cancelled = True
+            self.answers.put(calibrate.CANCEL)
+            self.thread.join(timeout=4.0)
+
+    def close(self) -> None:
+        if self.busy:
+            self.answer(calibrate.CANCEL)
+            self.top.after(100, self.close)  # once the current tone has stopped
+            return
+        self.top.destroy()
+
+    # -- worker -------------------------------------------------------------------
+
+    def _work(self, session: calibrate.Session) -> None:
+        buttons = calibrate.PadButtons()
+
+        def listen() -> str | None:
+            try:
+                return self.answers.get_nowait()
+            except queue.Empty:
+                return buttons.poll()
+
+        try:
+            with Apex6() as pad:
+                while session.current and not self.cancelled:
+                    self.phase = "playing"
+                    answer = calibrate.play(pad, session, listen)
+                    if answer is None:
+                        self.phase = "waiting"
+                        answer = calibrate.wait(listen, lambda: self.cancelled)
+                    if answer == calibrate.CANCEL:
+                        break
+                    if session.answer(answer):
+                        calibrate.save(session)
+            self.phase = "done"
+        except DeviceUnavailable as exc:
+            self.error, self.phase = str(exc), "error"
+        except Exception as exc:  # the traceback goes to error.log
+            log_exception(exc, "calibration")
+            self.error, self.phase = f"{type(exc).__name__}: {exc}", "error"
+
+    # -- refresh --------------------------------------------------------------------
+
+    def _poll(self) -> None:
+        if not self.top.winfo_exists():
+            return
+        screen = {"playing": "session", "waiting": "session"}.get(self.phase, self.phase)
+        if screen in ("done", "error"):
+            screen = "end"
+        if screen != self.shown:
+            self.shown = screen
+            {"start": self._render_start, "session": self._render_session, "end": self._render_end}[screen]()
+        if screen == "session" and self.session and self.session.current:
+            session = self.session
+            channel, freq = session.current
+            first = session.steps.index((channel, calibrate.FREQS[channel][0]))
+            self.progress.config(text=t("{name} {index}/{count} · {freq} Hz", name=t(self.NAMES[channel]),
+                                        index=session.index - first + 1, count=len(calibrate.FREQS[channel]),
+                                        freq=f"{freq:g}"))
+            limit = " " + t("(한계: 같음으로 이 값을 씁니다)") if session.at_limit else ""
+            self.gain.config(text=t("기준음 {reference} Hz와 비교 · 시험음 ×{gain}",
+                                    reference=f"{calibrate.REFERENCE[channel]:g}", gain=f"{session.gain:.2f}") + limit)
+            self.state.config(text=t("그만두는 중…") if self.cancelled else
+                              t("기준음 → 시험음 재생 중…") if self.phase == "playing" else
+                              t("시험음이 기준음보다 어땠나요?"))
+        self.top.after(50, self._poll)
 
 
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)

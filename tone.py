@@ -15,7 +15,6 @@ import argparse
 import math
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE, SUBFRAMES, Apex6, Block, Route
-from effects import Equalizer
 
 TARGETS = {
     "left": (False, True, False, Route.MUTE),
@@ -230,59 +229,62 @@ def run_split(pad: Apex6, freq: float, amps: list[float], seconds: float,
     print(f"\n저장: {path}")
 
 
-# Equal-strength calibration for effects.Equalizer. The voice coils resonate
-# (grips near 65 Hz, triggers near 100 Hz), so the same drive feels weaker off
-# resonance. Each test tone follows the reference at the same drive and is
-# raised or lowered by feel until it is as strong; the factor that took is the
-# gain the synth then gives that frequency on that motor. Saved in config.json.
-CAL_REFERENCE = {"grip": 65.0, "trigger": 100.0}
-CAL_FREQS = {"grip": (30.0, 40.0, 50.0, 80.0, 100.0, 130.0, 160.0, 200.0, 250.0),
-             "trigger": (50.0, 65.0, 80.0, 130.0, 160.0, 200.0, 250.0)}
-CAL_TARGETS = {"grip": "grips", "trigger": "triggers"}
 CAL_NAMES = {"grip": "그립", "trigger": "트리거"}
-CAL_STEP_DB = 1.5
+# console keys besides the pad's buttons; arrows come as a 0xE0 prefix and a code
+CAL_KEYS = {"+": "stronger", "=": "stronger", "-": "weaker", "\r": "same", "r": "replay", "q": "cancel",
+            "\x1b": "cancel"}
+CAL_ARROWS = {"H": "stronger", "P": "weaker"}
 
 
-def calibration_step(gain: float, answer: str) -> float | None:
-    """The next test gain: '+' when the test felt weaker, '-' when stronger; None once it matches (Enter)."""
-    if answer == "":
+def _console_key() -> str | None:
+    """A key waiting in the console, as a calibration answer; never blocks."""
+    import msvcrt
+    if not msvcrt.kbhit():
         return None
-    step = 10 ** (CAL_STEP_DB / 20)
-    low, high = Equalizer.LIMITS
-    return min(high, max(low, gain * step if answer == "+" else gain / step))
+    key = msvcrt.getwch()
+    if key in ("\x00", "\xe0"):
+        return CAL_ARROWS.get(msvcrt.getwch())
+    return CAL_KEYS.get(key.lower())
 
 
 def run_calibrate(pad: Apex6, channels: list[str], amp: float, seconds: float) -> None:
-    from settings import CONFIG_PATH, load_eq, save_eq
+    import calibrate
+    from settings import CONFIG_PATH
 
-    curves = load_eq()
+    session = calibrate.Session(channels, amp, seconds)
+    buttons = calibrate.PadButtons()
+
+    def listen() -> str | None:
+        return buttons.poll() or _console_key()
+
     print("컨트롤러를 평소처럼 잡으세요. 기준음 다음에 0.4초 쉬고 시험음이 울립니다.")
-    print("시험음이 기준음보다 약하면 +, 세면 -, 같게 느껴지면 그냥 Enter. r은 다시 듣기입니다.\n")
-    for channel in channels:
-        reference, target = CAL_REFERENCE[channel], CAL_TARGETS[channel]
-        curve = {f"{reference:g}": 1.0}
-        print(f"--- {CAL_NAMES[channel]}: 기준음 {reference:g} Hz, 세기 {amp:g}% ---")
-        for freq in CAL_FREQS[channel]:
-            gain = 1.0
-            while True:
-                pad.stream(tone_renderer(target, reference, reference, amp, seconds))
-                pad.stream(lambda first: Block() if first < 400 else None)
-                pad.stream(tone_renderer(target, freq, freq, min(100.0, amp * gain), seconds))
-                answer = input(f"  {freq:g} Hz (x{gain:.2f}): + / - / Enter / r: ").strip()
-                if answer not in ("", "+", "-"):
-                    continue
-                following = calibration_step(gain, answer)
-                if following is None:
-                    break
-                if following == gain:
-                    print(f"  한계 x{gain:.2f}에 닿았습니다. 이 값으로 둡니다.")
-                    break
-                gain = following
-            curve[f"{freq:g}"] = round(gain, 3)
-        curves[channel] = curve
-        save_eq(curves)
-        print("  " + "  ".join(f"{f} Hz x{g:.2f}" for f, g in sorted(curve.items(), key=lambda kv: float(kv[0]))))
-    print(f"\n저장: {CONFIG_PATH} (\"eq\"). 다음 시작부터 적용됩니다. 지우려면 tone.py calibrate --reset")
+    print("시험음이 기준음보다 약하면 더 세게, 세면 더 약하게, 같게 느껴지면 같음을 누르세요. 재생 중에 눌러도 됩니다.")
+    print("  패드: 십자키 ↑ 더 세게 / ↓ 더 약하게 / A 같음 / X 다시 듣기 / B 그만")
+    print("  키보드: ↑ 또는 + / ↓ 또는 - / Enter / r / q")
+    if not buttons.connected:
+        print("  (XInput 패드가 안 보여 키보드로만 받습니다)")
+    shown = None
+    while session.current:
+        channel, freq = session.current
+        if (channel, freq) != shown:
+            index = session.index - session.steps.index((channel, calibrate.FREQS[channel][0])) + 1
+            print(f"--- {CAL_NAMES[channel]} {index}/{len(calibrate.FREQS[channel])}: {freq:g} Hz "
+                  f"(기준음 {calibrate.REFERENCE[channel]:g} Hz, 세기 {session.amp:g}%) ---")
+            shown = (channel, freq)
+        print(f"  x{session.gain:.2f}" + ("  (한계: 같음으로 이 값을 씁니다)" if session.at_limit else ""))
+        answer = calibrate.play(pad, session, listen) or calibrate.wait(listen)
+        if answer == calibrate.CANCEL:
+            print("그만둡니다.")
+            break
+        finished = session.answer(answer)
+        if finished:
+            calibrate.save(session)
+            curve = session.curves[finished]
+            print("  저장: " + "  ".join(f"{f} Hz x{g:.2f}" for f, g in sorted(curve.items(), key=lambda kv: float(kv[0]))))
+    if session.finished:
+        print(f"\n{CONFIG_PATH} (\"eq\")에 저장했습니다. 다음 시작부터 적용됩니다. 지우려면 tone.py calibrate --reset")
+    else:
+        print("저장한 보정이 없습니다. 모터 하나를 끝까지 맞추면 저장됩니다.")
 
 
 def main() -> None:
@@ -330,12 +332,13 @@ def main() -> None:
     split.add_argument("--firmware", help="override the controller firmware read from the pad")
     split.add_argument("--dongle", help="override the dongle firmware read from the pad")
 
-    calibrate = sub.add_parser("calibrate", help="match each frequency's strength by feel, for the synth's eq")
-    calibrate.add_argument("--channel", choices=("grip", "trigger", "both"), default="both")
-    calibrate.add_argument("--amp", type=float, default=25.0,
-                           help="reference strength in percent; up to 4x of it must fit in 100")
-    calibrate.add_argument("--seconds", type=float, default=1.0)
-    calibrate.add_argument("--reset", action="store_true", help="forget the calibration (flat), no controller needed")
+    from calibrate import AMP
+    cal = sub.add_parser("calibrate", help="match each frequency's strength by feel, for the synth's eq")
+    cal.add_argument("--channel", choices=("grip", "trigger", "both"), default="both")
+    cal.add_argument("--amp", type=float, default=AMP,
+                     help="reference strength in percent; up to 4x of it must fit in 100")
+    cal.add_argument("--seconds", type=float, default=1.0)
+    cal.add_argument("--reset", action="store_true", help="forget the calibration (flat), no controller needed")
 
     args = parser.parse_args()
     if args.command == "calibrate" and args.reset:

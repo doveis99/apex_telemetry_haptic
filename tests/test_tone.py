@@ -5,8 +5,7 @@ from __future__ import annotations
 import unittest
 
 from apex6 import SUBFRAMES, Route, _parse_device_info
-from effects import Equalizer
-from tone import CAL_STEP_DB, SPLIT_FINGERS, SPLIT_ROUTES, calibration_step, split_renderer, split_verdict
+from tone import SPLIT_FINGERS, SPLIT_ROUTES, split_renderer, split_verdict
 
 # A real 0x01 reply from an APEX 6 Pro (wired, features 0x9F).
 INFO_REPLY = bytes.fromhex("5A A5 01 01 00 96 00 00 00 00 00 2A 45 01 00 90 "
@@ -54,17 +53,6 @@ class SplitVerdictTest(unittest.TestCase):
         table = {("L", "LEFT"): 2, ("L", "RIGHT"): 3, ("L", "BOTH"): 3, ("L", "ALT"): 1,
                  ("R", "LEFT"): 2, ("R", "RIGHT"): 3, ("R", "BOTH"): 3, ("R", "ALT"): 1}
         self.assertTrue(split_verdict(table).startswith("섞임"))
-
-
-class CalibrationStepTest(unittest.TestCase):
-    def test_steps_and_limits(self) -> None:
-        step = 10 ** (CAL_STEP_DB / 20)
-        self.assertAlmostEqual(calibration_step(1.0, "+"), step)  # the test tone felt weaker: more drive
-        self.assertAlmostEqual(calibration_step(1.0, "-"), 1.0 / step)
-        self.assertIsNone(calibration_step(1.3, ""))  # as strong as the reference
-        low, high = Equalizer.LIMITS
-        self.assertEqual(calibration_step(high, "+"), high)
-        self.assertEqual(calibration_step(low, "-"), low)
 
 
 class DeviceInfoTest(unittest.TestCase):

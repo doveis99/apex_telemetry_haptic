@@ -150,9 +150,10 @@ MESSAGES = {
     "트리거 모터에만 적용되는 최종 세기입니다. 0%면 트리거 진동이 완전히 꺼집니다. 손가락이 부담스러우면 여기서 낮추세요. 효과별 비율은 그대로 유지됩니다.":
         ("Intensidade final apenas para os motores dos gatilhos; 0% desliga totalmente a vibração deles. Reduza "
          "aqui se cansar os dedos: a proporção entre os efeitos continua a mesma."),
-    "엔진 점화 주파수(rpm ÷ 60 × 기통 수 ÷ 2)에 2배음을 더한 진동입니다. 엑셀을 밟을수록, rpm이 높을수록 세집니다. 시동이 꺼져 있으면 없습니다.":
+    "엔진 점화 주파수(rpm ÷ 60 × 기통 수 ÷ 2)에 2배음을 더한 진동입니다. 엑셀을 밟을수록, rpm이 높을수록 세집니다. 공회전에서는 실린더마다 폭발이 고르지 않아 울렁이고, 부하가 크면 거칠어집니다. 시동이 꺼져 있으면 없습니다.":
         ("Frequência de ignição do motor (rpm ÷ 60 × cilindros ÷ 2) mais o segundo harmônico. Mais forte com mais "
-         "acelerador e rpm mais alta; nada com o motor desligado."),
+         "acelerador e rpm mais alta. Em marcha lenta os cilindros explodem de forma irregular e o motor balança; "
+         "com carga fica áspero. Nada com o motor desligado."),
     "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 얼음·금속·잔디는 높고 곱게, 나무·눈은 낮고 묵직하게 떨리고, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 실제 노면처럼 1초에 몇 번씩 출렁이고, 험한 길에서는 캡이 덜컹거립니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
         ("A força e a textura seguem o piso (gelo < asfalto < concreto < neve < madeira < metal < grama < terra < "
          "cascalho) e a velocidade. Gelo, metal e grama vibram fino e agudo, madeira e neve grave e pesado, e "

@@ -197,6 +197,44 @@ def tone_level(samples: list[float], freq: float) -> float:
     return 2.0 * math.hypot(re, im) / len(samples)
 
 
+class EngineTest(unittest.TestCase):
+    @staticmethod
+    def engine(**values) -> list[float]:
+        gains = Gains(steady_fade=0.0, disabled=[name for name in TOGGLEABLE if name != "engine"])
+        return left_grip(Synth(effective_gains(gains)), blocks=200, **values)[:1500]
+
+    @staticmethod
+    def firing_peaks(samples: list[float]) -> list[float]:
+        """The crest of each firing: the highest sample between rising zero crossings."""
+        peaks, current = [], None
+        for a, b in zip(samples, samples[1:]):
+            if a <= 0 < b:
+                if current is not None:
+                    peaks.append(current)
+                current = b
+            elif current is not None:
+                current = max(current, b)
+        return peaks
+
+    def spread(self, **values) -> float:
+        peaks = self.firing_peaks(self.engine(**values))
+        mean = sum(peaks) / len(peaks)
+        return math.sqrt(sum((p - mean) ** 2 for p in peaks) / len(peaks)) / mean
+
+    def test_idle_fires_unevenly_and_evens_out_under_load(self) -> None:
+        idle = self.spread(rpm=650.0, game_throttle=0.0, user_throttle=0.0)
+        pulling = self.spread(rpm=1500.0, game_throttle=0.8, user_throttle=0.8)
+        self.assertGreater(idle, 0.08)  # a sine fires every cycle alike
+        self.assertGreater(idle, 1.5 * pulling)
+        self.assertGreater(pulling, 0.01)  # still not a machine
+
+    def test_load_turns_it_harsh(self) -> None:
+        def harshness(load: float) -> float:
+            samples = self.engine(game_throttle=load, user_throttle=load)  # 1300 rpm, 6 cylinders: 65 Hz
+            return tone_level(samples, 195.0) / tone_level(samples, 65.0)
+        self.assertGreater(harshness(0.9), harshness(0.0) + 0.15)
+
+
 class RetarderTest(unittest.TestCase):
     ENGINE_BRAKE = {"motor_brake": True, "game_throttle": 0.0, "user_throttle": 0.0}
 

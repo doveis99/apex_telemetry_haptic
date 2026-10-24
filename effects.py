@@ -45,6 +45,12 @@ LOCK_EDGE = 0.003  # s ramp at each edge: a crisp pulse without the click of a s
 RETARDER_HZ = (40.0, 65.0)  # standing, and from 90 km/h
 JAKE_PEAK = 0.1  # of a firing cycle: the knock peaks this early, then the cylinder is quiet
 _JAKE_MEAN = JAKE_PEAK * math.e * (1.0 - (1.0 + 1.0 / JAKE_PEAK) * math.exp(-1.0 / JAKE_PEAK))
+# A diesel does not fire like a sine: at idle its cylinders fire unevenly (a
+# lope at half the firing rate and below), every firing differs a little from
+# the last, and under load combustion turns harsh.
+ENGINE_JITTER = 0.08  # spread of each firing's strength around its cylinder's
+ENGINE_IMBALANCE = 0.3  # spread between cylinders at idle; gone from moderate load or revs
+ENGINE_HARSH = 0.25  # third harmonic at full load
 
 
 @dataclass(frozen=True)
@@ -450,7 +456,10 @@ class Synth:
     def __init__(self, gains: Gains) -> None:
         self.g = gains
         self.engine_osc = Oscillator()
-        self.engine_harm = Oscillator()
+        # each cylinder's own share of the idle's unevenness, the same every cycle
+        self.cylinder_offsets = [random.Random(11 + n).uniform(-1.0, 1.0) for n in range(12)]
+        self.cylinder = 0
+        self.firing_gain = 1.0
         self.trigger_osc = Oscillator()
         self.trigger_mod = Oscillator()
         self.retarder_osc = Oscillator()
@@ -464,7 +473,8 @@ class Synth:
         self.bursts: list[tuple[str, str, Burst]] = []
         # previous-block state
         self.prev_amp = {"engine": 0.0, "road_l": 0.0, "road_r": 0.0, "rumble_l": 0.0, "rumble_r": 0.0,
-                         "spin": 0.0, "retarder": 0.0, "jake": 0.0, "trigger": 0.0, "squeal": 0.0}
+                         "spin": 0.0, "retarder": 0.0, "jake": 0.0, "trigger": 0.0, "squeal": 0.0,
+                         "harsh": 0.0}
         self.prev_state: dict[str, object] = {}
         self.blinker_idle = 0.0
         self.brake_held = self.brake_peak = 0.0  # how long and how hard the service brake has been held
@@ -754,7 +764,7 @@ class Synth:
         g = self.g
 
         engine_amp = road_l = road_r = rumble_l = rumble_r = spin_amp = retarder_amp = jake_amp = 0.0
-        trigger_amp = squeal_amp = 0.0
+        trigger_amp = squeal_amp = engine_harsh = engine_uneven = 0.0
         engine_freq = rumble_freq = 40.0
         retarder_freq = RETARDER_HZ[0]
         trigger_mode = "-"
@@ -783,6 +793,8 @@ class Synth:
                 # Firing frequency of a 4-stroke engine: rpm/60 * cylinders/2.
                 engine_freq = max(25.0, min(140.0, frame.rpm / 60.0 * g.cylinders / 2.0))
                 engine_amp = g.engine * (0.25 + 0.55 * load + 0.2 * rpm_frac) * self._steady_gain(engine_moved)
+                engine_harsh = ENGINE_HARSH * load
+                engine_uneven = max(0.0, 1.0 - 2.0 * load - rpm_frac)
 
             speed_factor = min(1.0, abs(frame.speed) / 25.0) ** 0.7
             sides = ([w for w in frame.wheels if w.pos_x < 0 and w.on_ground],
@@ -859,13 +871,18 @@ class Synth:
             sp = p["spin"] + (spin_amp - p["spin"]) * k
             rt = p["retarder"] + (retarder_amp - p["retarder"]) * k
             jb = p["jake"] + (jake_amp - p["jake"]) * k
+            eh = p["harsh"] + (engine_harsh - p["harsh"]) * k
             tr = p["trigger"] + (trigger_amp - p["trigger"]) * k
             sq = p["squeal"] + (squeal_amp - p["squeal"]) * k
 
             out = [0.0, 0.0, 0.0]  # left grip, right grip, trigger: events
             bed = [0.0, 0.0, 0.0]  # continuous effects, ducked under the events
             firing = self.engine_osc.phase
-            engine = e * (self.engine_osc.next(engine_freq) + 0.3 * self.engine_harm.next(engine_freq * 2))
+            w = TAU * firing
+            engine = e * self.firing_gain * (self.engine_osc.next(engine_freq) + 0.3 * math.sin(2 * w)
+                                             + eh * math.sin(3 * w))
+            if self.engine_osc.phase < firing:  # a cycle done: the next cylinder fires
+                self._next_firing(engine_uneven)
             _mix(bed, routes["engine"], engine, engine, engine)
             retarder = rt * self.retarder_osc.next(retarder_freq)
             if jb:
@@ -922,7 +939,7 @@ class Synth:
             trigger.append(self._out(out[2], self.g.trigger_level))
         self.prev_amp = {"engine": engine_amp, "road_l": road_l, "road_r": road_r,
                          "rumble_l": rumble_l, "rumble_r": rumble_r, "spin": spin_amp, "retarder": retarder_amp,
-                         "jake": jake_amp, "trigger": trigger_amp, "squeal": squeal_amp}
+                         "jake": jake_amp, "trigger": trigger_amp, "squeal": squeal_amp, "harsh": engine_harsh}
         self.bursts = [entry for entry in self.bursts if not entry[2].done]
 
         lv = self.levels
@@ -940,6 +957,16 @@ class Synth:
             return 0.0
         edge = LOCK_EDGE * LOCK_RATE
         return min(1.0, p / edge, (0.5 - p) / edge)
+
+    def _next_firing(self, uneven: float) -> None:
+        """Strength of the next cylinder's firing: its own share of the unevenness, which grows
+        towards idle, and a little difference from one cycle to the next."""
+        cylinders = max(1, min(len(self.cylinder_offsets), self.g.cylinders))
+        self.cylinder = (self.cylinder + 1) % cylinders
+        used = self.cylinder_offsets[:cylinders]
+        offset = used[self.cylinder] - sum(used) / cylinders
+        self.firing_gain = ((1.0 + ENGINE_IMBALANCE * uneven * offset)
+                            * (1.0 + ENGINE_JITTER * self.rng.uniform(-1.0, 1.0)))
 
     def _out(self, x: float, channel_level: float) -> float:
         # Soft limit so stacked effects saturate smoothly instead of clipping;

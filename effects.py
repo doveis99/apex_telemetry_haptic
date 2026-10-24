@@ -51,25 +51,34 @@ _JAKE_MEAN = JAKE_PEAK * math.e * (1.0 - (1.0 + 1.0 / JAKE_PEAK) * math.exp(-1.0
 class Surface:
     level: float  # relative texture strength
     pitch: float  # Hz, centre of the texture at speed; it drops towards PITCH_STANDING of this when slow
-    grains: float = 0.0  # loose stones per metre that click under a tyre
+    stones: float = 0.0  # loose stones per metre that click under a tyre
+    crunch: float = 0.0  # share of the texture that is those clicks
 
 
 # Matched by substring, first match wins, so the specific road_* variants come
-# before plain "road". Smooth and hard surfaces hiss high and fine, soft ones
-# rumble low, loose ones crackle.
+# before plain "road". Shaped after tyre recordings of each surface (the part
+# below 500 Hz that a 1 kHz stream can carry): asphalt is a smooth, even hiss;
+# gravel a body around 85 Hz with a stone standing out every metre or so; snow
+# a softer body around 70 Hz that crunches; grass a high, soft swish.
 SURFACES = (
-    ("road_smooth", Surface(0.2, 120.0)), ("road_coarse", Surface(0.45, 95.0, 2.0)),
-    ("road_dirt", Surface(0.55, 75.0, 6.0)),
-    ("ice", Surface(0.15, 140.0)), ("snow", Surface(0.45, 55.0, 8.0)),
+    ("road_smooth", Surface(0.2, 120.0)), ("road_coarse", Surface(0.45, 95.0, 0.5, 0.15)),
+    ("road_dirt", Surface(0.55, 75.0, 1.5, 0.35)),
+    ("ice", Surface(0.15, 140.0)), ("snow", Surface(0.45, 70.0, 2.0, 0.4)),
     ("rumble", Surface(0.3, 100.0)),  # the strip itself is the rumble effect; the texture stays that of asphalt
     ("road", Surface(0.3, 100.0)), ("asphalt", Surface(0.3, 100.0)), ("concrete", Surface(0.35, 90.0)),
-    ("wood", Surface(0.55, 65.0)), ("metal", Surface(0.6, 130.0)), ("dirt", Surface(0.75, 60.0, 5.0)),
-    ("grass", Surface(0.7, 50.0, 1.0)), ("gravel", Surface(1.0, 80.0, 14.0)), ("rough", Surface(0.9, 70.0, 6.0)),
+    ("wood", Surface(0.55, 65.0)), ("metal", Surface(0.6, 130.0)), ("dirt", Surface(0.75, 60.0, 1.5, 0.4)),
+    ("grass", Surface(0.7, 130.0)), ("gravel", Surface(1.0, 85.0, 3.0, 0.6)), ("rough", Surface(0.9, 70.0, 2.0, 0.4)),
 )
-DEFAULT_SURFACE = Surface(0.4, 90.0, 1.0)
+DEFAULT_SURFACE = Surface(0.4, 90.0, 0.5, 0.1)
 PITCH_STANDING = 0.6  # share of a surface's pitch at walking pace; all of it from 90 km/h
-GRAIN_RATE_MAX = 200.0  # clicks per second per side, past which they blur into noise anyway
-GRAIN_SHARE = 16.0  # stones per metre at which the clicks would be all of the texture
+# Recorded road noise swells and fades a few times a second (undulations, the
+# tyres' own unevenness); a steady texture feels machine-made.
+SWELL_HZ = 4.0
+SWELL_DEPTH = 0.4  # standard deviation of the swell, as a share of the texture
+# On rough ground the cab rattles: short low knocks, many a second.
+RATTLE_HZ = 55.0
+RATTLE_RATE = 40.0  # knocks per second per side at full roughness
+RATTLE_ROUGH = (0.08, 0.3)  # m/s of roughness where the rattle starts, and where it is full
 # Rumble strips: the game reports a "rumble_stripe" substance under a wheel.
 # It flickers back to road between the grooves, so a short hold bridges the
 # gaps. Grooves are milled about 30 cm apart: 83 Hz at 90 km/h.
@@ -97,8 +106,8 @@ def side_surface(wheels: list[Wheel]) -> Surface:
     total = sum(s.level for s in found)
     if not total:
         return Surface(0.0, DEFAULT_SURFACE.pitch)
-    return Surface(total / len(wheels), sum(s.level * s.pitch for s in found) / total,
-                   sum(s.level * s.grains for s in found) / total)
+    return Surface(total / len(wheels), *(sum(s.level * getattr(s, name) for s in found) / total
+                                          for name in ("pitch", "stones", "crunch")))
 
 
 TOGGLEABLE = ("engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarder", "impact", "trigger",
@@ -240,12 +249,12 @@ class BandNoise:
 
 
 class Grains:
-    """Loose stones under a tyre: random clicks, each ringing the band-pass with a peak up to 1."""
+    """Random clicks, each ringing the band-pass with a peak up to 1: mostly small, now and then a big one."""
 
-    Q = 1.5  # rings about 7 ms, so stones a few metres apart stay single clicks
+    Q = 1.5  # rings about 7 ms, so clicks a few metres apart stay single
 
-    def __init__(self, seed: int) -> None:
-        self.filter = Resonator(100.0, self.Q)
+    def __init__(self, seed: int, center: float = 100.0) -> None:
+        self.filter = Resonator(center, self.Q)
         self.rng = random.Random(seed)
         self.rate = 0.0  # clicks per second
         self.gain = 1.0 / self.filter.impulse_peak()
@@ -259,36 +268,61 @@ class Grains:
     def next(self) -> float:
         click = 0.0
         if self.rate and self.rng.random() < self.rate / SAMPLE_RATE:
-            click = self.rng.uniform(0.3, 1.0) * self.gain
+            click = (0.2 + 0.8 * self.rng.random() ** 3) * self.gain * self.rng.choice((-1.0, 1.0))
         return self.filter.next(click)
 
 
-class Texture:
-    """One side's road texture: noise around the surface's pitch, mixed with stones clicking."""
+class Swell:
+    """Slow random gain around 1: white noise through two one-pole low-passes, SWELL_DEPTH deviation."""
 
-    GRAIN_GAIN = 1.5  # clicks stand out of the noise as a crackle, not a hiss
+    def __init__(self, seed: int) -> None:
+        self.rng = random.Random(seed)
+        self.a = math.exp(-TAU * SWELL_HZ / SAMPLE_RATE)
+        a = self.a
+        # deviation of uniform noise (variance 1/3) after the two poles
+        self.scale = SWELL_DEPTH / math.sqrt((1 - a) ** 4 * (1 + a * a) / (1 - a * a) ** 3 / 3)
+        self.y1 = self.y2 = 0.0
+
+    def next(self) -> float:
+        self.y1 = self.a * self.y1 + (1 - self.a) * self.rng.uniform(-1.0, 1.0)
+        self.y2 = self.a * self.y2 + (1 - self.a) * self.y1
+        return max(0.0, 1.0 + self.scale * self.y2)
+
+
+class Texture:
+    """One side's road texture: noise around the surface's pitch, stones clicking, the cab
+    rattling on rough ground, all swelling and fading a few times a second."""
+
+    STONE_GAIN = 5.0  # few and mostly small; a big one knocks through the noise at full strength
+    RATTLE_GAIN = 3.0  # at full roughness about a third more strength, in knocks
+    SWELL_RMS = math.sqrt(1.0 + SWELL_DEPTH ** 2)  # what the swell adds to the strength, taken back out
 
     def __init__(self, seed: int) -> None:
         self.noise = BandNoise(DEFAULT_SURFACE.pitch, 1.2, seed)
-        self.grains = Grains(seed + 100)
-        self.share = 0.0  # of the texture that is clicks
+        self.stones = Grains(seed + 100)
+        self.rattle = Grains(seed + 200, RATTLE_HZ)
+        self.swell = Swell(seed + 300)
+        self.crunch = 0.0
         self.noise_gain = 1.0
 
-    def tune(self, surface: Surface, speed: float) -> None:
+    def tune(self, surface: Surface, speed: float, roughness: float) -> None:
         pace = min(1.0, speed / 25.0)
         pitch = surface.pitch * (PITCH_STANDING + (1.0 - PITCH_STANDING) * pace)
         self.noise.filter.tune(pitch, 1.2)
         # A band-pass of fixed Q lets through noise in proportion to its centre:
         # keep the strength of the 80 Hz band every surface used to share.
         self.noise_gain = math.sqrt(80.0 / pitch)
-        self.grains.tune(pitch * 1.25, min(GRAIN_RATE_MAX, surface.grains * speed))
-        self.share = min(1.0, surface.grains / GRAIN_SHARE)
+        self.stones.tune(pitch * 1.25, surface.stones * speed)
+        self.crunch = surface.crunch
+        low, full = RATTLE_ROUGH
+        self.rattle.rate = RATTLE_RATE * min(1.0, max(0.0, (roughness - low) / (full - low)))
 
     def next(self) -> float:
-        value = (1.0 - self.share) * self.noise_gain * self.noise.next()
-        if self.share:
-            value += self.share * self.GRAIN_GAIN * self.grains.next()
-        return value
+        value = (1.0 - self.crunch) * self.noise_gain * self.noise.next()
+        if self.crunch:
+            value += self.crunch * self.STONE_GAIN * self.stones.next()
+        value += self.RATTLE_GAIN * self.rattle.next()  # also while the last knock rings out
+        return value * self.swell.next() / self.SWELL_RMS
 
 
 class Burst:
@@ -663,7 +697,7 @@ class Synth:
             road = []
             for side, wheels in enumerate(sides):
                 surface = side_surface(wheels)
-                self.texture[side].tune(surface, speed)
+                self.texture[side].tune(surface, speed, self.roughness[side])
                 texture = surface.level * speed_factor + min(1.0, self.roughness[side] * 1.5)
                 road.append(g.road * min(1.0, texture))
             road_l, road_r = road

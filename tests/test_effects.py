@@ -9,7 +9,7 @@ import random
 import unittest
 
 from apex6 import SAMPLE_RATE
-from effects import DT, TOGGLEABLE, Gains, Synth, effective_gains
+from effects import DT, TOGGLEABLE, Gains, Synth, Texture, effective_gains, surface_of
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
 _render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise
@@ -230,6 +230,34 @@ class SurfaceTest(unittest.TestCase):
     def test_gravel_crackles_and_asphalt_does_not(self) -> None:
         # slow enough that single stones stand apart; noise alone has a kurtosis near 3
         self.assertGreater(self.kurtosis(self.road("gravel", 4.0)), 1.5 * self.kurtosis(self.road("road", 4.0)))
+
+    def test_grass_swishes_high(self) -> None:
+        self.assertGreater(self.crossings(self.road("grass")), self.crossings(self.road("road")))
+
+    @staticmethod
+    def texture(roughness: float = 0.0, steady: bool = False, seconds: float = 4.0) -> list[float]:
+        texture = Texture(seed=5)
+        texture.tune(surface_of("road"), 20.0, roughness)
+        if steady:
+            texture.swell.next = lambda: 1.0
+        return [texture.next() for _ in range(int(seconds * SAMPLE_RATE))]
+
+    def test_texture_swells_a_few_times_a_second(self) -> None:
+        def unevenness(samples: list[float]) -> float:
+            windows = [rms(samples[i:i + 200]) for i in range(0, len(samples) - 200, 200)]  # 0.2 s each
+            mean = sum(windows) / len(windows)
+            return math.sqrt(sum((w - mean) ** 2 for w in windows) / len(windows)) / mean
+        self.assertGreater(unevenness(self.texture()), 1.4 * unevenness(self.texture(steady=True)))
+
+    def test_swell_keeps_the_strength(self) -> None:
+        self.assertAlmostEqual(rms(self.texture(seconds=30.0)) / rms(self.texture(steady=True, seconds=30.0)),
+                               1.0, delta=0.1)
+
+    def test_rough_ground_rattles_the_cab(self) -> None:
+        smooth, rough = self.texture(), self.texture(roughness=0.3)
+        self.assertGreater(rms(rough), 1.15 * rms(smooth))
+        self.assertGreater(self.kurtosis(rough), 1.3 * self.kurtosis(smooth))  # in knocks, not more hiss
+        self.assertEqual(self.texture(roughness=0.05), smooth)  # under the start of the rattle
 
     def test_strength_does_not_follow_the_pitch(self) -> None:
         # neither has stones: ice hisses at 140 Hz, wood at 65 Hz; a plain band-pass made ice 1.5x stronger

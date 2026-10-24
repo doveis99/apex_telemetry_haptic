@@ -152,11 +152,12 @@ MESSAGES = {
     "엔진 점화 주파수(rpm ÷ 60 × 기통 수 ÷ 2)에 2배음을 더한 진동입니다. 엑셀을 밟을수록, rpm이 높을수록 세집니다. 시동이 꺼져 있으면 없습니다.":
         ("Frecuencia de encendido del motor (rpm ÷ 60 × cilindros ÷ 2) más su segundo armónico. Más fuerte con más "
          "acelerador y más rpm; nada con el motor apagado."),
-    "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 얼음·금속은 높고 곱게, 눈·잔디는 낮고 부드럽게 떨리고, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
+    "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 얼음·금속·잔디는 높고 곱게, 나무·눈은 낮고 묵직하게 떨리고, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 실제 노면처럼 1초에 몇 번씩 출렁이고, 험한 길에서는 캡이 덜컹거립니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
         ("La fuerza y el tacto dependen del firme (hielo < asfalto < hormigón < nieve < madera < metal < hierba < "
-         "tierra < grava) y de la velocidad. El hielo y el metal vibran fino y agudo, la nieve y la hierba grave y "
-         "suave, y la grava, la tierra y la nieve añaden el chasquido de piedras sueltas. Más rápido, más denso. "
-         "Ruedas izquierda y derecha por separado."),
+         "tierra < grava) y de la velocidad. El hielo, el metal y la hierba vibran fino y agudo, la madera y la "
+         "nieve grave y pesado, y la grava, la tierra y la nieve añaden el chasquido de piedras sueltas. Como una "
+         "carretera real, sube y baja varias veces por segundo, y en terreno áspero la cabina traquetea. Más rápido, "
+         "más denso. Ruedas izquierda y derecha por separado."),
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 60Hz 펄스를 냅니다. 민감도는 '요철 감지 기준'에서 정합니다.":
         ("Un pulso de 60 Hz en la empuñadura de ese lado cuando la suspensión se sacude en baches, bordillos o "
          "juntas. La sensibilidad se ajusta en «Umbral de baches»."),

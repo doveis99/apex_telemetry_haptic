@@ -160,9 +160,10 @@ MESSAGES = {
          "grave et lourd ; gravier, terre et neige ajoutent le claquement des cailloux. Comme une vraie route, cela "
          "enfle et retombe plusieurs fois par seconde, et sur sol rugueux la cabine claque. Plus vite, plus dense. "
          "Roues gauche et droite séparées."),
-    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 60Hz 펄스를 냅니다. 민감도는 '요철 감지 기준'에서 정합니다.":
-        ("Une impulsion à 60 Hz dans la poignée du côté concerné quand la suspension encaisse un nid-de-poule, un "
-         "trottoir ou un joint. Sensibilité via « Seuil des bosses »."),
+    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다.":
+        ("Un choc dans la poignée du côté de la roue quand la suspension bouge brusquement (nids-de-poule, bordures, "
+         "joints) : un petit joint est un tapotement bref et aigu, un gros nid-de-poule un coup sourd et lourd, et "
+         "après un gros choc la cabine claque un instant. Réglez la sensibilité avec « Seuil des bosses »."),
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("Un brrrr dans la poignée du côté qui roule sur une bande rugueuse de ligne centrale ou "
          "d'accotement. Détectée via le revêtement signalé par le jeu ; plus on va vite, plus c'est fin."),

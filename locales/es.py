@@ -158,9 +158,10 @@ MESSAGES = {
          "nieve grave y pesado, y la grava, la tierra y la nieve añaden el chasquido de piedras sueltas. Como una "
          "carretera real, sube y baja varias veces por segundo, y en terreno áspero la cabina traquetea. Más rápido, "
          "más denso. Ruedas izquierda y derecha por separado."),
-    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 60Hz 펄스를 냅니다. 민감도는 '요철 감지 기준'에서 정합니다.":
-        ("Un pulso de 60 Hz en la empuñadura de ese lado cuando la suspensión se sacude en baches, bordillos o "
-         "juntas. La sensibilidad se ajusta en «Umbral de baches»."),
+    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다.":
+        ("Un golpe en el agarre del lado de esa rueda cuando la suspensión se mueve de repente (baches, bordillos, "
+         "juntas): una junta pequeña es un toque corto y agudo, un bache grande un golpe grave y pesado, y tras un "
+         "golpe fuerte la cabina traquetea un momento. La sensibilidad se ajusta en 'Umbral de baches'."),
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("Un brrrr en la empuñadura del lado que pisa una banda sonora de la línea central o del "
          "arcén. Se detecta por la superficie que informa el juego; cuanto más rápido, más fino."),

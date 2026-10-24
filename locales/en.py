@@ -156,9 +156,10 @@ MESSAGES = {
          "gravel) and the speed. Ice, metal and grass shiver fine and high, wood and snow low and heavy, and gravel, "
          "dirt and snow add the click of loose stones. Like a real road it swells a few times a second, and rough "
          "ground rattles the cab. Faster is denser. Left and right wheels are felt separately."),
-    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 60Hz 펄스를 냅니다. 민감도는 '요철 감지 기준'에서 정합니다.":
-        ("A 60 Hz pulse in that wheel's grip when the suspension jolts on potholes, kerbs or joints. Set the "
-         "sensitivity with 'Bump threshold'."),
+    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다.":
+        ("A hit on that wheel's grip when the suspension moves suddenly (potholes, kerbs, joints): a small joint is "
+         "a short, high tap, a big pothole a low, heavy thud, and after a big hit the cab rattles for a moment. Set "
+         "the sensitivity with 'Bump threshold'."),
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("A brrrr in the grip on the side that runs onto a centre-line or shoulder rumble strip. "
          "Detected from the road surface the game reports; the faster you go, the finer it gets."),

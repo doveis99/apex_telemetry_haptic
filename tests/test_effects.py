@@ -9,7 +9,8 @@ import random
 import unittest
 
 from apex6 import SAMPLE_RATE
-from effects import DT, TOGGLEABLE, Gains, Synth, Texture, effective_gains, surface_of
+from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, TOGGLEABLE, Gains, Synth, Texture, effective_gains,
+                     surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
 _render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise
@@ -98,15 +99,46 @@ class BumpTest(unittest.TestCase):
             for wheel in f.wheels + f.trailer_wheels:
                 wheel.deflection = 0.02 + rng.gauss(0.0, 0.004)
             s.render(f)
-            self.assertLessEqual(effects_of(s).count("bumps"), 34)
+            self.assertLessEqual(effects_of(s).count("bumps"), 34 + BUMP_RATTLE_MAX)  # a pulse each, and the rattle
 
     def test_pulse_rises_to_the_stronger_hit(self) -> None:
         s = synth()
         for depth in (0.02, 0.0225, 0.0325):  # a pothole: a slight dip first, then the hard edge
             s.render(frame(deflection=depth, truck_wheels=1))
-        bumps = [burst for effect, _, burst in s.bursts if effect == "bumps"]
-        self.assertEqual(len(bumps), 1)
-        self.assertAlmostEqual(bumps[0].amplitude, 1.0)
+        pulses = [entry[1] for entry in s.bump_bursts if entry]
+        self.assertEqual(len(pulses), 1)
+        self.assertAlmostEqual(pulses[0].amplitude, 1.0)
+        self.assertAlmostEqual(pulses[0].freq, BUMP_HZ[1])  # and to its depth
+
+    @staticmethod
+    def hit(step: float, trailer: bool = False) -> Synth:
+        """One wheel dropping by step metres within a block."""
+        s = synth()
+        for depth in (0.02, 0.02 + step):
+            f = frame(deflection=depth, truck_wheels=0 if trailer else 1, trailer_wheels=1 if trailer else 0)
+            if trailer:
+                f.trailer_wheels[0].deflection = depth
+            s.render(f)
+        return s
+
+    def test_big_hits_are_lower_and_longer(self) -> None:
+        small, big = (self.hit(step).bump_bursts[0][1] for step in (0.0035, 0.012))  # a joint, a pothole
+        self.assertLess(big.freq, small.freq - 15.0)
+        self.assertGreater(big.decay_s, small.decay_s)
+
+    def test_trailer_hits_land_lighter_and_higher(self) -> None:
+        truck, trailer = self.hit(0.012).bump_bursts[0][1], self.hit(0.012, trailer=True).bump_bursts[0][1]
+        self.assertGreater(trailer.freq, truck.freq)
+        self.assertLess(trailer.amplitude, truck.amplitude)
+
+    def test_a_pothole_leaves_the_cab_rattling(self) -> None:
+        pothole, joint = self.hit(0.012), self.hit(0.0035)
+        knocks = [burst for burst in pothole.bump_rattles]
+        self.assertGreaterEqual(len(knocks), 2)
+        for knock in knocks:  # after the hit, within its tail, softer than it
+            self.assertTrue(-BUMP_RATTLE_S <= knock.age < 0)
+            self.assertLess(knock.amplitude, 0.5 * pothole.bump_bursts[0][1].amplitude)
+        self.assertEqual(joint.bump_rattles, [])
 
 
 class LockChopTest(unittest.TestCase):

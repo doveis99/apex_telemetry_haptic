@@ -158,9 +158,11 @@ MESSAGES = {
          "Schotter, Erde und Schnee mischen das Klicken loser Steine bei. Wie eine echte Straße schwillt es mehrmals "
          "pro Sekunde an und ab, und auf rauem Grund klappert das Fahrerhaus. Je schneller, desto dichter. Linke und "
          "rechte Räder getrennt."),
-    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 60Hz 펄스를 냅니다. 민감도는 '요철 감지 기준'에서 정합니다.":
-        ("Ein 60-Hz-Impuls im Griff der Seite, wenn die Federung an Schlaglöchern, Bordsteinen oder Fugen ruckt. "
-         "Empfindlichkeit über „Schwelle Unebenheit“."),
+    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다.":
+        ("Ein Schlag am Griff auf der Seite des Rades, wenn die Federung plötzlich arbeitet (Schlaglöcher, "
+         "Bordsteine, Fugen): eine kleine Fuge ist ein kurzes, hohes Tippen, ein großes Schlagloch ein tiefer, "
+         "schwerer Stoß, und nach einem harten Schlag klappert kurz das Fahrerhaus. Die Empfindlichkeit stellen Sie "
+         "unter 'Schwelle Unebenheit' ein."),
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("Ein Brrrr im Griff der Seite, die auf einen Rüttelstreifen an Mittellinie oder "
          "Seitenstreifen fährt. Erkannt am Fahrbahnbelag aus dem Spiel; je schneller, desto feiner."),

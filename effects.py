@@ -87,6 +87,16 @@ RUMBLE_HOLD = 0.25  # s
 # Trailer wheels reach the cab through the coupling: their bumps and strips
 # follow the truck's own, softer.
 TRAILER_FEEL = 0.5
+# Bumps, after recordings of joints and potholes: a joint is a short knock
+# around 50-65 Hz, a pothole a heavy low thump after which the cab rattles for
+# a few tenths of a second. Below about 40 Hz the grips give little back, so
+# the biggest hits stop there.
+BUMP_HZ = (65.0, 40.0)  # smallest and biggest hit
+BUMP_DECAY = (0.025, 0.06)  # s
+TRAILER_BUMP_HZ = 10.0  # higher: the trailer's hits come through the coupling lighter
+BUMP_RATTLE_FROM = 0.3  # hit size (0..1) from which the cab rattles after it
+BUMP_RATTLE_S = 0.3
+BUMP_RATTLE_MAX = 16  # knocks alive at once, all wheels together
 
 
 def surface_of(name: str) -> Surface | None:
@@ -352,9 +362,11 @@ class Burst:
         self.phase = (self.phase + self.freq / SAMPLE_RATE) % 1.0
         return value
 
-    def retrigger(self, amplitude: float) -> None:
-        """Restart the envelope at a new peak; the carrier keeps running."""
+    def retrigger(self, amplitude: float, freq: float | None = None, decay_s: float | None = None) -> None:
+        """Restart the envelope at a new peak, optionally retuned; the carrier keeps running."""
         self.amplitude, self.age = amplitude, 0.0
+        self.freq = freq or self.freq
+        self.decay_s = decay_s or self.decay_s
 
     def next(self) -> float:
         if self.age < 0:
@@ -420,7 +432,9 @@ class Synth:
         self.prev_render_time: int | None = None
         self.prev_deflection: list[float] = []
         self.deflection_rate_avg: list[float] = []
-        self.bump_bursts: list[Burst | None] = []  # each wheel's pulse while it rings
+        self.bump_bursts: list[tuple[str, Burst] | None] = []  # each wheel's pulse and its side while it rings
+        self.bump_rattles: list[Burst] = []  # the cab's knocks after big hits, all wheels together
+        self.rng = random.Random(7)
         self.roughness = [0.0, 0.0]
         # s left of each side's rumble after its wheels left the strip; truck, then trailer
         self.rumble_hold = ([0.0, 0.0], [0.0, 0.0])
@@ -493,24 +507,46 @@ class Synth:
                 continue
             threshold = self.g.bump_threshold
             if high > threshold:  # a step in suspension travel: pothole, kerb, joint
-                strength = min(1.0, (high - threshold) / 0.8) * self.g.bumps * (TRAILER_FEEL if trailer else 1.0)
-                current = self.bump_bursts[i]
-                if current is not None and not current.done:
+                size = min(1.0, (high - threshold) / 0.8)
+                strength = size * self.g.bumps * (TRAILER_FEEL if trailer else 1.0)
+                small_hz, big_hz = BUMP_HZ
+                freq = small_hz + (big_hz - small_hz) * size + (TRAILER_BUMP_HZ if trailer else 0.0)
+                decay = BUMP_DECAY[0] + (BUMP_DECAY[1] - BUMP_DECAY[0]) * size
+                rattles = size >= BUMP_RATTLE_FROM and not trailer
+                entry = self.bump_bursts[i]
+                if entry is not None and not entry[1].done:
                     # One pulse per wheel: a pothole spans several blocks and rough
                     # ground trips every block, so lift the ringing pulse to the
                     # stronger hit instead of stacking more. Keeps the work bounded
                     # by the wheel count once trailers multiply the wheels.
+                    where, current = entry
                     if strength > current.level:
-                        current.retrigger(strength)
+                        current.retrigger(strength, freq, decay)
+                        if rattles:
+                            self._rattle(where, strength, size)
                     continue
                 where = "C" if abs(wheel.pos_x) < 0.15 else "LR"[side]
-                burst = Burst(freq=60.0, amplitude=strength, decay_s=0.035)
+                burst = Burst(freq, strength, decay, phase=0.25)  # a hit lands on its edge
                 self.bursts.append(("bumps", where, burst))
-                self.bump_bursts[i] = burst
+                self.bump_bursts[i] = (where, burst)
+                if rattles:
+                    self._rattle(where, strength, size)
         rough_k = 1.0 - math.exp(-dt / ROUGH_TAU)
         for side in (0, 1):
             value = rough[side] / counts[side] if counts[side] else 0.0
             self.roughness[side] += (value - self.roughness[side]) * rough_k
+
+    def _rattle(self, where: str, strength: float, size: float) -> None:
+        """A few small knocks over the next BUMP_RATTLE_S, fading: the cab settling after a hit."""
+        self.bump_rattles = [knock for knock in self.bump_rattles if not knock.done]
+        for _ in range(int(2 + 4 * size)):
+            if len(self.bump_rattles) >= BUMP_RATTLE_MAX:
+                return
+            delay = self.rng.uniform(0.04, BUMP_RATTLE_S)
+            amplitude = strength * 0.3 * self.rng.uniform(0.4, 1.0) * (1.0 - delay / (BUMP_RATTLE_S + 0.05))
+            knock = Burst(self.rng.uniform(55.0, 85.0), amplitude, 0.008, delay_s=delay, phase=0.25)
+            self.bursts.append(("bumps", where, knock))
+            self.bump_rattles.append(knock)
 
     def _gear_event(self, frame: Frame) -> None:
         self.gear_cooldown = max(0.0, self.gear_cooldown - DT)

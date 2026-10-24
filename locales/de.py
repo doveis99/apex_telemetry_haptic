@@ -167,8 +167,8 @@ MESSAGES = {
     "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다.":
         ("Ein „Klonk“ bei jedem Gangwechsel: Die Fahrvibration setzt kurz aus, dann greift der Gang fest. "
          "Funktioniert auch mit Automatik."),
-    "리타더 단계에 비례하는 50Hz 웅웅거림입니다. 엔진 브레이크만 켜져 있으면 약하게 냅니다.":
-        "Ein 50-Hz-Brummen proportional zur Retarderstufe; schwach, wenn nur die Motorbremse an ist.",
+    "리타더 단계에 비례하는 웅웅거림으로, 빠를수록 음이 높아집니다(40~65Hz). 엔진 브레이크는 엔진 점화 박자에 맞춰 '다다닥' 노크하고, 엑셀을 밟으면 멈춥니다.":
+        "Ein Brummen proportional zur Retarderstufe, das mit dem Tempo höher wird (40–65 Hz). Die Motorbremse klopft im Zündtakt des Motors und verstummt, sobald Sie Gas geben.",
     "가속도가 순간적으로 크게 튀면(충돌, 큰 충격) 강한 50Hz 펄스를 냅니다. 기준은 '충돌 감지 기준'에서 정합니다.":
         ("Ein starker 50-Hz-Impuls bei Beschleunigungsspitzen (Unfälle, harte Stöße). Grenze über „Schwelle "
          "Aufprall“."),

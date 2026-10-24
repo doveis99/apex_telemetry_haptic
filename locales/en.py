@@ -166,8 +166,8 @@ MESSAGES = {
     "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다.":
         ("A 'clunk' on every gear change: the driving vibration drops out briefly, then the gear bites firmly. "
          "Works with automatic gearboxes too."),
-    "리타더 단계에 비례하는 50Hz 웅웅거림입니다. 엔진 브레이크만 켜져 있으면 약하게 냅니다.":
-        "A 50 Hz hum in proportion to the retarder stage; faint when only the engine brake is on.",
+    "리타더 단계에 비례하는 웅웅거림으로, 빠를수록 음이 높아집니다(40~65Hz). 엔진 브레이크는 엔진 점화 박자에 맞춰 '다다닥' 노크하고, 엑셀을 밟으면 멈춥니다.":
+        "A hum in proportion to the retarder stage that rises in pitch with speed (40–65 Hz). The engine brake knocks at the engine's firing rate and stops when you press the throttle.",
     "가속도가 순간적으로 크게 튀면(충돌, 큰 충격) 강한 50Hz 펄스를 냅니다. 기준은 '충돌 감지 기준'에서 정합니다.":
         ("A strong 50 Hz pulse when acceleration spikes (crashes, heavy hits). Set the level with 'Impact "
          "threshold'."),

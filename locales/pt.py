@@ -167,8 +167,8 @@ MESSAGES = {
     "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다.":
         ("Um \"clac\" a cada troca: a vibração de rodagem some por um instante e depois a marcha engata firme. "
          "Também funciona com câmbio automático."),
-    "리타더 단계에 비례하는 50Hz 웅웅거림입니다. 엔진 브레이크만 켜져 있으면 약하게 냅니다.":
-        "Um zumbido de 50 Hz proporcional ao estágio do retarder; fraco se só o freio motor estiver ligado.",
+    "리타더 단계에 비례하는 웅웅거림으로, 빠를수록 음이 높아집니다(40~65Hz). 엔진 브레이크는 엔진 점화 박자에 맞춰 '다다닥' 노크하고, 엑셀을 밟으면 멈춥니다.":
+        "Um zumbido proporcional ao estágio do retarder que fica mais agudo com a velocidade (40–65 Hz). O freio motor bate no ritmo de ignição do motor e para ao acelerar.",
     "가속도가 순간적으로 크게 튀면(충돌, 큰 충격) 강한 50Hz 펄스를 냅니다. 기준은 '충돌 감지 기준'에서 정합니다.":
         ("Um pulso forte de 50 Hz quando a aceleração dispara (batidas, impactos fortes). Ajuste em \"Limite de "
          "impacto\"."),

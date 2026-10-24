@@ -8,6 +8,7 @@ import math
 import random
 import unittest
 
+from apex6 import SAMPLE_RATE
 from effects import DT, TOGGLEABLE, Gains, Synth, effective_gains
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
@@ -24,8 +25,10 @@ def frame(gear: int = 10, deflection: float | list[float] = 0.02, truck_wheels: 
           accel: tuple[float, float, float] = (0.2, 0.0, 0.5), **values) -> Frame:
     values.setdefault("trailer_attached", bool(trailer_wheels))
     values.setdefault("render_time", next(_render_time))
-    return Frame(active=True, paused=False, rpm=1300.0, speed=22.0, game_throttle=0.4, user_throttle=0.4,
-                 gear=gear, engine_on=True, accel=accel, wheels=wheels(truck_wheels, deflection),
+    for key, value in (("rpm", 1300.0), ("speed", 22.0), ("game_throttle", 0.4), ("user_throttle", 0.4),
+                       ("engine_on", True)):
+        values.setdefault(key, value)
+    return Frame(active=True, paused=False, gear=gear, accel=accel, wheels=wheels(truck_wheels, deflection),
                  trailer_wheels=wheels(trailer_wheels, 0.02), **values)
 
 
@@ -140,6 +143,46 @@ class LockChopTest(unittest.TestCase):
 
     def test_first_pulse_starts_with_the_lock(self) -> None:
         self.assertLessEqual(self.pulses()[0][0], 10)
+
+
+def only(effect: str) -> Synth:
+    return Synth(effective_gains(Gains(disabled=[name for name in TOGGLEABLE if name != effect])))
+
+
+def left_grip(s: Synth, blocks: int = 60, **values) -> list[float]:
+    """400 samples of the left grip once the effect has faded in."""
+    samples = []
+    for _ in range(blocks):
+        samples.extend(s.render(frame(**values)).left_grip)
+    return samples[80:480]
+
+
+def tone_level(samples: list[float], freq: float) -> float:
+    """Amplitude of one frequency in the samples (a single DFT bin)."""
+    w = math.tau * freq / SAMPLE_RATE
+    re = sum(x * math.cos(w * n) for n, x in enumerate(samples))
+    im = sum(x * math.sin(w * n) for n, x in enumerate(samples))
+    return 2.0 * math.hypot(re, im) / len(samples)
+
+
+class RetarderTest(unittest.TestCase):
+    ENGINE_BRAKE = {"motor_brake": True, "game_throttle": 0.0, "user_throttle": 0.0}
+
+    def test_engine_brake_knocks_at_the_firing_rate(self) -> None:
+        samples = left_grip(only("retarder"), **self.ENGINE_BRAKE)  # 1300 rpm, 6 cylinders: 65 Hz
+        firing = tone_level(samples, 65.0)
+        self.assertGreater(firing, 3 * tone_level(samples, 50.0))
+        self.assertGreater(tone_level(samples, 130.0), 0.3 * firing)  # a knock, not a sine
+
+    def test_no_engine_brake_under_throttle(self) -> None:
+        samples = left_grip(only("retarder"), motor_brake=True)
+        self.assertLess(max(map(abs, samples)), 1.0)
+
+    def test_retarder_hum_rises_with_speed(self) -> None:
+        slow = left_grip(only("retarder"), retarder=2, retarder_steps=4, speed=3.0)  # 43 Hz
+        fast = left_grip(only("retarder"), retarder=2, retarder_steps=4, speed=25.0)  # 65 Hz
+        self.assertGreater(tone_level(slow, 43.0), 3 * tone_level(slow, 65.0))
+        self.assertGreater(tone_level(fast, 65.0), 3 * tone_level(fast, 43.0))
 
 
 def drive(fps: float | None, start: float, end: float) -> tuple[list[float], int]:

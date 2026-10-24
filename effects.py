@@ -39,6 +39,12 @@ ROUGH_TAU = 0.076  # s, smoothing of the road roughness estimate
 # pulse is the same length (whole blocks gave 40 or 48 ms).
 LOCK_RATE = 12.0  # Hz
 LOCK_EDGE = 0.003  # s ramp at each edge: a crisp pulse without the click of a step
+# Retarder: a smooth hum whose pitch follows the driveline. Engine brake: each
+# cylinder letting its compression go knocks once per firing, a bark at the
+# engine's firing rate that is gone under throttle.
+RETARDER_HZ = (40.0, 65.0)  # standing, and from 90 km/h
+JAKE_PEAK = 0.1  # of a firing cycle: the knock peaks this early, then the cylinder is quiet
+_JAKE_MEAN = JAKE_PEAK * math.e * (1.0 - (1.0 + 1.0 / JAKE_PEAK) * math.exp(-1.0 / JAKE_PEAK))
 
 # Relative texture strength per substance (matched by substring, first match
 # wins, so the specific road_* variants come before plain "road").
@@ -151,9 +157,19 @@ class Oscillator:
         self.phase = 0.0
 
     def next(self, freq: float) -> float:
-        value = math.sin(TAU * self.phase)
-        self.phase = (self.phase + freq / SAMPLE_RATE) % 1.0
-        return value
+        return math.sin(TAU * self.next_phase(freq))
+
+    def next_phase(self, freq: float) -> float:
+        """This sample's phase, 0..1, for waveforms other than a sine."""
+        phase = self.phase
+        self.phase = (phase + freq / SAMPLE_RATE) % 1.0
+        return phase
+
+
+def jake_pulse(phase: float) -> float:
+    """One firing cycle of the engine brake's knock: peak 1 at JAKE_PEAK, zero mean."""
+    u = phase / JAKE_PEAK
+    return (u * math.exp(1.0 - u) - _JAKE_MEAN) / (1.0 - _JAKE_MEAN)
 
 
 class BandNoise:
@@ -252,6 +268,7 @@ class Synth:
         self.trigger_osc = Oscillator()
         self.trigger_mod = Oscillator()
         self.retarder_osc = Oscillator()
+        self.jake_osc = Oscillator()
         self.squeal_osc = Oscillator()
         self.squeal_mod = Oscillator()
         self.noise_left = BandNoise(80.0, 1.2, seed=1)
@@ -264,7 +281,7 @@ class Synth:
         self.bursts: list[tuple[str, str, Burst]] = []
         # previous-block state
         self.prev_amp = {"engine": 0.0, "road_l": 0.0, "road_r": 0.0, "rumble_l": 0.0, "rumble_r": 0.0,
-                         "spin": 0.0, "retarder": 0.0, "trigger": 0.0, "squeal": 0.0}
+                         "spin": 0.0, "retarder": 0.0, "jake": 0.0, "trigger": 0.0, "squeal": 0.0}
         self.prev_state: dict[str, object] = {}
         self.blinker_idle = 0.0
         self.was_live = False
@@ -511,8 +528,10 @@ class Synth:
         live = frame is not None and frame.live
         g = self.g
 
-        engine_amp = road_l = road_r = rumble_l = rumble_r = spin_amp = retarder_amp = trigger_amp = squeal_amp = 0.0
+        engine_amp = road_l = road_r = rumble_l = rumble_r = spin_amp = retarder_amp = jake_amp = 0.0
+        trigger_amp = squeal_amp = 0.0
         engine_freq = rumble_freq = 40.0
+        retarder_freq = RETARDER_HZ[0]
         trigger_mode = "-"
         lock = 0.0
         if live and not self.was_live:
@@ -574,10 +593,13 @@ class Synth:
             if frame.wheels:
                 self.levels.surface = frame.wheels[0].substance
 
+            rolling = min(1.0, speed / 5)
             if frame.retarder and frame.retarder_steps:
-                retarder_amp = g.retarder * frame.retarder / frame.retarder_steps * min(1.0, abs(frame.speed) / 5)
-            elif frame.motor_brake:
-                retarder_amp = g.retarder * 0.3 * min(1.0, abs(frame.speed) / 5)
+                retarder_amp = g.retarder * frame.retarder / frame.retarder_steps * rolling
+                low, high = RETARDER_HZ
+                retarder_freq = low + (high - low) * min(1.0, speed / 25.0)
+            if frame.motor_brake and frame.engine_on and frame.rpm > 100 and load < 0.05:
+                jake_amp = g.retarder * (0.3 + 0.3 * rpm_frac) * rolling
 
             # One trigger channel: follow whichever pedal the player is pressing.
             # A wheel lock is a warning and never fades.
@@ -610,6 +632,7 @@ class Synth:
             ur = p["rumble_r"] + (rumble_r - p["rumble_r"]) * k
             sp = p["spin"] + (spin_amp - p["spin"]) * k
             rt = p["retarder"] + (retarder_amp - p["retarder"]) * k
+            jb = p["jake"] + (jake_amp - p["jake"]) * k
             tr = p["trigger"] + (trigger_amp - p["trigger"]) * k
             sq = p["squeal"] + (squeal_amp - p["squeal"]) * k
 
@@ -617,7 +640,9 @@ class Synth:
             bed = [0.0, 0.0, 0.0]  # continuous effects, ducked under the events
             engine = e * (self.engine_osc.next(engine_freq) + 0.3 * self.engine_harm.next(engine_freq * 2))
             _mix(bed, routes["engine"], engine, engine, engine)
-            retarder = rt * self.retarder_osc.next(50.0)
+            retarder = rt * self.retarder_osc.next(retarder_freq)
+            if jb:
+                retarder += jb * jake_pulse(self.jake_osc.next_phase(engine_freq))
             _mix(bed, routes["retarder"], retarder, retarder, retarder)
             # Independent noises: 0.7 keeps their sum near one side's strength.
             noise_l, noise_r = rl * self.noise_left.next(), rr * self.noise_right.next()
@@ -667,7 +692,7 @@ class Synth:
             trigger.append(self._out(out[2], self.g.trigger_level))
         self.prev_amp = {"engine": engine_amp, "road_l": road_l, "road_r": road_r,
                          "rumble_l": rumble_l, "rumble_r": rumble_r, "spin": spin_amp, "retarder": retarder_amp,
-                         "trigger": trigger_amp, "squeal": squeal_amp}
+                         "jake": jake_amp, "trigger": trigger_amp, "squeal": squeal_amp}
         self.bursts = [entry for entry in self.bursts if not entry[2].done]
 
         lv = self.levels

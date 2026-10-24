@@ -1,10 +1,10 @@
 # ATS 햅틱 for Flydigi APEX 6 Pro
 
+**한국어** · [English](README.en.md) · [日本語](README.ja.md) · [简体中文](README.zh.md)
+
 American Truck Simulator / Euro Truck Simulator 2의 텔레메트리로 Flydigi APEX 6 Pro의 VCM(보이스 코일) 모터를 직접 구동합니다. 게임 소리를 분석하는 X-Haptics와 달리 엔진 rpm, 노면, 서스펜션, 페달 같은 게임 데이터로 진동을 만들고, 창에서 실시간으로 조절합니다.
 
 ![메인 창](docs/screenshot-main.png)
-
-> **English summary** — Drives the Flydigi APEX 6 Pro voice-coil motors directly over HID from ATS/ETS2 telemetry: engine firing pulses, road texture by surface and speed, per-side suspension bumps, gear shifts, retarder, collisions, pedal effects and game events. A tuning window adjusts every effect live; the app can start with the game through a Steam launch option and installs a telemetry plugin if needed. The window is available in Korean, English, Japanese, Simplified Chinese, German, French, Spanish, Brazilian Portuguese, Polish and Russian (language menu at the top right; it follows the Windows display language until you pick one), and every control explains itself in a hover tooltip. Windows only, wired or 2.4 GHz dongle. Unofficial and unaffiliated with Flydigi or SCS Software. GPL-3.0-or-later.
 
 ## 목차
 
@@ -224,7 +224,7 @@ Steam 라이브러리에서 게임 **속성 → 일반 → 실행 옵션**에 �
 - 게임이 일시정지/메뉴 상태인지 확인하세요.
 - 플러그인 창에서 호환 플러그인(RenCloud, TruckDash)이 있는지 확인하고, 없으면 설치한 뒤 게임을 다시 실행하세요.
 
-**트리거가 양쪽 다 울려요.** 현재 펌웨어의 제약입니다. [알려진 제약](#알려진-제약)을 보세요.
+**트리거가 양쪽 다 울려요.** 컨트롤러의 제약입니다. [알려진 제약](#알려진-제약)을 보세요.
 
 **Steam에서 게임을 켜면 창이 안 떠요.**
 - 실행 옵션의 경로와 따옴표를 확인하세요.
@@ -240,7 +240,7 @@ Steam 라이브러리에서 게임 **속성 → 일반 → 실행 옵션**에 �
 
 ## 알려진 제약
 
-- 이 펌웨어에서는 트리거 채널이 좌우 구분 없이 **양쪽 트리거를 함께** 울립니다. 그립은 좌우가 독립입니다.
+- 트리거 채널은 하나뿐이라 좌우 구분 없이 **양쪽 트리거를 함께** 울립니다. 그립은 좌우가 독립입니다. 컨트롤러 펌웨어 9.0.5.5에서 `tone.py split`(기준음과 비교하는 블라인드 점검)으로 확인했고, 라우트를 왼쪽이나 오른쪽으로 지정해도, 블록마다 번갈아 보내도 양쪽 트리거에서 똑같이 느껴졌습니다. Flydigi Space Station과 X-Haptics도 트리거를 좌우 구분 없는 한 부위로 다룹니다.
 - 텔레메트리에는 엔진 기통 수, 와이퍼 속도 같은 정보가 없어서 해당 효과는 수동 설정이거나 제외되어 있습니다.
 - 비공식 리버스 엔지니어링 기반이라 컨트롤러 펌웨어 업데이트로 동작이 바뀔 수 있습니다.
 
@@ -251,7 +251,8 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # 창 (또는 start_gui.cmd)
 .\.venv\Scripts\python.exe ats_haptics.py --monitor   # 명령줄: --simulate, --exit-with-game, 효과별 세기 옵션
-.\.venv\Scripts\python.exe tone.py probe              # 진단: probe | tone | sweep | walk | route-test | diag
+.\.venv\Scripts\python.exe tone.py probe              # 진단: probe | tone | sweep | walk | route-test | diag | split
+.\.venv\Scripts\python.exe tone.py split              # 트리거 좌우 분리 블라인드 점검, 결과는 logs\trigger-split-*.txt
 powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<버전>.zip (소스 포함)
 .\.venv\Scripts\python.exe i18n.py                  # 번역 점검: 빠지거나 안 쓰이거나 {자리} 가 다른 문구
 .\.venv\Scripts\python.exe -m unittest              # 회귀 테스트 (tests\)

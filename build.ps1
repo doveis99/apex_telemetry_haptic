@@ -18,7 +18,8 @@ Remove-Item build, dist -Recurse -Force -ErrorAction SilentlyContinue
 if ($LASTEXITCODE) { throw "PyInstaller failed" }
 
 $out = "dist\ATSHaptics"
-Copy-Item README.md, LICENSE, THIRD_PARTY_NOTICES.md $out
+Copy-Item README.md, README.en.md, README.ja.md, README.zh.md, LICENSE, THIRD_PARTY_NOTICES.md $out
+Copy-Item docs -Destination $out -Recurse  # screenshots the READMEs show
 
 # Tracked and new (not ignored) files: what the repository would contain.
 $src = Join-Path $out "source"

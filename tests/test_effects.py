@@ -476,8 +476,9 @@ class FrameRateTest(unittest.TestCase):
         s = synth()
         for n in range(60):
             game_time = math.floor(n * DT * 30) / 30  # a 30 fps game: each frame read by four blocks
-            # 0.2 m/s, under the 0.25 m/s threshold; per block it looked like 0.8 m/s
-            s.render(frame(deflection=0.02 + 0.2 * game_time, render_time=int(game_time * 1e6)))
+            # three quarters of the threshold; per block it looked like three times the threshold
+            speed = 0.75 * Gains().bump_threshold
+            s.render(frame(deflection=0.02 + speed * game_time, render_time=int(game_time * 1e6)))
         self.assertNotIn("bumps", effects_of(s))
 
     def test_hitch_is_not_a_bump(self) -> None:
@@ -486,7 +487,9 @@ class FrameRateTest(unittest.TestCase):
                 s, game_time = synth(), 0.0
                 for n in range(60):
                     game_time += hitch if n == 30 else 1 / 60
-                    deflection = 0.02 + 0.006 * math.sin(math.tau * 6 * game_time)  # gravel-like settling
+                    # settling at 6 Hz, its fastest at 60% of the threshold
+                    swing = 0.6 * Gains().bump_threshold / (math.tau * 6)
+                    deflection = 0.02 + swing * math.sin(math.tau * 6 * game_time)
                     s.render(frame(deflection=deflection, render_time=int(game_time * 1e6)))
                 self.assertNotIn("bumps", effects_of(s))
 

@@ -172,7 +172,9 @@ class Gains:
     # steady; 0 keeps them constant
     steady_fade: float = 0.6
     cylinders: int = 6
-    bump_threshold: float = 0.25  # m/s of sudden suspension travel
+    # m/s of sudden suspension travel; 0.2 brings a 60 fps game's short joints, which a
+    # frame can straddle, close to what a continuous clock sees at 0.25
+    bump_threshold: float = 0.2
     impact_threshold: float = 12.0  # m/s^2 change from one game frame to the next
     # event effects
     pedal: float = 0.6

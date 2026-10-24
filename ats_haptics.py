@@ -24,10 +24,10 @@ from typing import Callable
 
 from apex6 import FRAME_PERIOD, MAX_SAMPLE, Apex6, Block, DeviceUnavailable, StreamStats
 from blocklog import BlockLog
-from effects import Gains, Synth, effective_gains
+from effects import Equalizer, Gains, Synth, effective_gains
 from gamewatch import GameWatcher
 from i18n import set_language, system_language, t
-from settings import load_app_options, load_gains
+from settings import load_app_options, load_eq, load_gains
 from telemetry import SIMULATED_FPS, Frame, SharedMemoryTelemetry, SimulatedTelemetry
 
 STALE_AFTER_S = 0.3  # game minimized, loading or closed: render_time stops moving
@@ -43,9 +43,11 @@ class Runner:
 
     def __init__(self, gains: Gains, simulate: bool = False,
                  on_state: Callable[[str], None] | None = None, seconds: float | None = None,
-                 log_blocks: bool = False, sim_fps: float | None = SIMULATED_FPS) -> None:
+                 log_blocks: bool = False, sim_fps: float | None = SIMULATED_FPS,
+                 eq: Equalizer | None = None) -> None:
         self.gains = effective_gains(gains)
-        self.synth = Synth(self.gains)
+        self.eq = eq or Equalizer()
+        self.synth = Synth(self.gains, self.eq)
         self.simulated = simulate
         self.source = SimulatedTelemetry(sim_fps) if simulate else SharedMemoryTelemetry()
         self.watcher = None if simulate else GameWatcher()
@@ -112,7 +114,7 @@ class Runner:
 
     def start_session(self) -> None:
         self.game_ended = False
-        self.synth = Synth(self.gains)  # fresh edge detectors: no stale events
+        self.synth = Synth(self.gains, self.eq)  # fresh edge detectors: no stale events
         self._last_render_time = None
         # Map the plugin afresh: the next game may write another plugin's mapping,
         # and holding the old one keeps a dead copy alive.
@@ -257,7 +259,7 @@ def main() -> None:
                  "impact", "trigger", "throttle_pulse", "cylinders"):
         setattr(gains, name, getattr(args, name))
     runner = Runner(gains, simulate=args.simulate, seconds=args.seconds, log_blocks=args.log_blocks,
-                    sim_fps=args.sim_fps or None,
+                    sim_fps=args.sim_fps or None, eq=Equalizer(load_eq()),
                     on_state=lambda s: print(f"\n[{time.strftime('%H:%M:%S')}] {s}", flush=True))
     monitor = args.monitor or args.dry_run
     if monitor:

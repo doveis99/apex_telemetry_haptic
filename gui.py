@@ -38,9 +38,9 @@ from blocklog import LOG_DIR
 from errorlog import log_exception
 from i18n import N_, t
 from version import __version__
-from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Gains, route_of
+from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Equalizer, Gains, route_of
 from gamewatch import GameWatcher
-from settings import load_app_options, load_gains, save_app_options, save_gains
+from settings import load_app_options, load_eq, load_gains, save_app_options, save_gains
 from widgets import (ACCENT, BG, BOTH_COLOR, CARD, FAINT, FIELD_HI, GO, GRIP_COLOR, MUTED, STOP, TEXT, TILE,
                      TRIGGER_COLOR, WARN, Button, Link, Meter, Segmented, Slider, Switch, apply_theme, card,
                      dark_title_bar, font, tip)
@@ -562,7 +562,8 @@ class App:
         self.error = None
         self.connected = None
         self.events.delete(0, "end")
-        self.runner = Runner(self.gains, simulate=self.source.get() == "sim", log_blocks=self.options.debug_log)
+        self.runner = Runner(self.gains, simulate=self.source.get() == "sim", log_blocks=self.options.debug_log,
+                             eq=Equalizer(load_eq()))  # read at each start: a new calibration applies
         self.thread = threading.Thread(target=self._worker, args=(self.runner,), daemon=True)
         self.thread.start()
         self._show_run_state()

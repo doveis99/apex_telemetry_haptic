@@ -212,7 +212,8 @@ When the window opens it checks GitHub for the latest release. If there is a new
 5. To feel an effect in your fingers (e.g. the engine in the throttle trigger), set its output to **Trigger** or **Both**.
 6. If bump pulses come too often on paved roads, raise the **Bump threshold**.
 7. If events such as turn signals or gear shifts get lost while driving, raise **Duck for events** or lower **Engine** and **Road**. If you dislike the driving vibration dipping on every event, lower the ducking.
-8. When you like it, press **Save**.
+8. (Running from source) If the engine feels weak at idle and strong only when cruising, or high ticks such as the turn signals feel faint, match the motors' strength across frequencies with `tone.py calibrate`. The motors ring hardest near 65 Hz (grips) and 100 Hz (triggers), so the same drive feels different at each frequency. Raise or lower each test tone until it feels as strong as the reference; that factor then applies to every effect at that frequency (`eq` in `config.json`, from the next start). Without a measurement nothing is corrected; `tone.py calibrate --reset` clears it.
+9. When you like it, press **Save**.
 
 ## Troubleshooting
 
@@ -254,8 +255,9 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # window (or start_gui.cmd)
 .\.venv\Scripts\python.exe ats_haptics.py --monitor   # command line: --simulate, --exit-with-game, per-effect levels
-.\.venv\Scripts\python.exe tone.py probe              # diagnostics: probe | tone | sweep | walk | route-test | diag | split
+.\.venv\Scripts\python.exe tone.py probe              # diagnostics: probe | tone | sweep | walk | route-test | diag | split | calibrate
 .\.venv\Scripts\python.exe tone.py split              # blind left/right trigger check, results in logs\trigger-split-*.txt
+.\.venv\Scripts\python.exe tone.py calibrate          # match strength across frequencies, --reset clears it
 powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<version>.zip (source included)
 .\.venv\Scripts\python.exe i18n.py                  # translation check: missing, unused or {placeholder}-mismatched strings
 .\.venv\Scripts\python.exe -m unittest              # regression tests (tests\)

@@ -1,7 +1,8 @@
 """Persist effect gains and app options in %APPDATA%\\ATSHaptics\\config.json.
 
-Layout: gain fields at the top level plus an "app" object. Each save
-rewrites only its own part so the two never clobber each other. The
+Layout: gain fields at the top level plus an "app" object and the motors'
+"eq" calibration (tone.py calibrate). Each save rewrites only its own part so
+they never clobber each other. The
 packaged exe may live in a read-only folder, hence the per-user location;
 a config.json left next to the scripts by earlier versions is moved over
 once.
@@ -83,6 +84,18 @@ def load_gains(path: Path | None = None) -> Gains:
 def save_gains(gains: Gains, path: Path | None = None) -> None:
     data = _read(path)
     data.update(asdict(gains))
+    _write(path, data)
+
+
+def load_eq(path: Path | None = None) -> dict:
+    """The motors' calibration, {channel: {Hz: gain}}; empty (flat) until tone.py calibrate has run."""
+    stored = _read(path).get("eq", {})
+    return stored if isinstance(stored, dict) else {}
+
+
+def save_eq(curves: dict, path: Path | None = None) -> None:
+    data = _read(path)
+    data["eq"] = curves
     _write(path, data)
 
 

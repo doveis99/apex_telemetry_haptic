@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from effects import DEFAULT_ROUTES, Gains
-from settings import AppOptions, load_app_options, load_gains, save_app_options, save_gains
+from settings import AppOptions, load_app_options, load_eq, load_gains, save_app_options, save_eq, save_gains
 
 
 class SettingsTest(unittest.TestCase):
@@ -46,6 +46,14 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(load_gains(self.path).engine, 0.9)
         self.assertEqual(load_app_options(self.path).language, "de")
         self.assertEqual([p.name for p in self.path.parent.iterdir()], ["config.json"])
+
+    def test_calibration_survives_the_other_saves(self) -> None:
+        self.assertEqual(load_eq(self.path), {})  # never measured: flat
+        save_eq({"grip": {"30": 2.0}}, self.path)
+        save_gains(Gains(engine=0.9), self.path)
+        save_app_options(AppOptions(language="de"), self.path)
+        self.assertEqual(load_eq(self.path), {"grip": {"30": 2.0}})
+        self.assertEqual(load_gains(self.path).engine, 0.9)
 
 
 if __name__ == "__main__":

@@ -210,7 +210,8 @@ Steam 라이브러리에서 게임 **속성 → 일반 → 실행 옵션**에 �
 5. 특정 효과를 손가락으로 느끼고 싶으면(예: 엔진 진동을 엑셀 트리거로) 그 효과의 진동 위치를 **트리거**나 **둘 다**로 바꾸세요.
 6. 포장도로에서 요철 펄스가 너무 잦으면 **요철 감지 기준**을 올리세요.
 7. 주행 중에 방향지시등이나 변속 같은 이벤트가 잘 안 느껴지면 **주행 진동 양보**를 올리거나 **엔진**·**노면**을 낮추세요. 이벤트 때마다 주행 진동이 출렁이는 느낌이 싫으면 양보를 낮추세요.
-8. 마음에 들면 **저장**을 누르세요.
+8. (소스에서 실행할 때) 엔진이 공회전에서는 약하고 크루즈에서만 세게 느껴지거나, 방향지시등처럼 높은 '틱'이 약하면 `tone.py calibrate`로 모터의 주파수별 체감 세기를 맞추세요. 모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 기준음과 같게 느껴질 때까지 시험음을 올리고 내리면 그 배율이 모든 효과에 주파수별로 적용됩니다(`config.json`의 `eq`, 다음 시작부터). 측정하기 전에는 보정이 없고, `tone.py calibrate --reset`으로 지웁니다.
+9. 마음에 들면 **저장**을 누르세요.
 
 ## 문제 해결
 
@@ -252,8 +253,9 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # 창 (또는 start_gui.cmd)
 .\.venv\Scripts\python.exe ats_haptics.py --monitor   # 명령줄: --simulate, --exit-with-game, 효과별 세기 옵션
-.\.venv\Scripts\python.exe tone.py probe              # 진단: probe | tone | sweep | walk | route-test | diag | split
+.\.venv\Scripts\python.exe tone.py probe              # 진단: probe | tone | sweep | walk | route-test | diag | split | calibrate
 .\.venv\Scripts\python.exe tone.py split              # 트리거 좌우 분리 블라인드 점검, 결과는 logs\trigger-split-*.txt
+.\.venv\Scripts\python.exe tone.py calibrate          # 주파수별 체감 세기 맞추기(보정), --reset으로 지움
 powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<버전>.zip (소스 포함)
 .\.venv\Scripts\python.exe i18n.py                  # 번역 점검: 빠지거나 안 쓰이거나 {자리} 가 다른 문구
 .\.venv\Scripts\python.exe -m unittest              # 회귀 테스트 (tests\)

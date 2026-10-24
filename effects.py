@@ -13,6 +13,7 @@ unit of drive.
 
 from __future__ import annotations
 
+import bisect
 import math
 import random
 from dataclasses import dataclass, field, replace
@@ -191,6 +192,55 @@ class Gains:
     routes: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_ROUTES))
 
 
+FLAT = (1.0, 1.0)
+
+
+class Equalizer:
+    """How much more drive each frequency needs to feel as strong as the reference, per output.
+
+    The voice coils resonate (grips near 65 Hz, triggers near 100 Hz), so the
+    same drive feels far weaker off resonance. tone.py calibrate measures it by
+    matching tones against the reference by feel; until then it is flat.
+    Between the measured points the gain follows a straight line in dB over
+    log frequency, and past the ends it holds.
+    """
+
+    LIMITS = (0.25, 4.0)
+    CHANNELS = ("grip", "trigger")
+
+    def __init__(self, curves: dict | None = None) -> None:
+        self.points: dict[str, list[tuple[float, float]]] = {}
+        for channel in self.CHANNELS:
+            stored = (curves or {}).get(channel)
+            points = []
+            for freq, gain in (stored.items() if isinstance(stored, dict) else ()):
+                try:
+                    freq, gain = float(freq), float(gain)
+                except (TypeError, ValueError):
+                    continue
+                if freq > 0 and gain > 0:
+                    points.append((math.log(freq), math.log(min(max(gain, self.LIMITS[0]), self.LIMITS[1]))))
+            self.points[channel] = sorted(points)
+        self.flat = not any(self.points.values())
+
+    def gain(self, channel: str, freq: float) -> float:
+        points = self.points[channel]
+        if not points or freq <= 0:
+            return 1.0
+        x = math.log(freq)
+        if x <= points[0][0]:
+            return math.exp(points[0][1])
+        if x >= points[-1][0]:
+            return math.exp(points[-1][1])
+        i = bisect.bisect(points, (x, math.inf))
+        (x0, y0), (x1, y1) = points[i - 1], points[i]
+        return math.exp(y0 + (y1 - y0) * (x - x0) / (x1 - x0))
+
+    def pair(self, freq: float) -> tuple[float, float]:
+        """(grip, trigger) gain for a vibration at freq."""
+        return FLAT if self.flat else (self.gain("grip", freq), self.gain("trigger", freq))
+
+
 def route_of(gains: Gains, name: str) -> str:
     route = gains.routes.get(name)
     return route if route in ROUTES else DEFAULT_ROUTES[name]
@@ -327,10 +377,11 @@ class Texture:
         self.swell = Swell(seed + 300)
         self.crunch = 0.0
         self.noise_gain = 1.0
+        self.pitch = DEFAULT_SURFACE.pitch
 
     def tune(self, surface: Surface, speed: float, roughness: float) -> None:
         pace = min(1.0, speed / 25.0)
-        pitch = surface.pitch * (PITCH_STANDING + (1.0 - PITCH_STANDING) * pace)
+        self.pitch = pitch = surface.pitch * (PITCH_STANDING + (1.0 - PITCH_STANDING) * pace)
         self.noise.filter.tune(pitch, 1.2)
         # A band-pass of fixed Q lets through noise in proportion to its centre:
         # keep the strength of the 80 Hz band every surface used to share.
@@ -453,8 +504,9 @@ class Levels:
 
 
 class Synth:
-    def __init__(self, gains: Gains) -> None:
+    def __init__(self, gains: Gains, eq: Equalizer | None = None) -> None:
         self.g = gains
+        self.eq = eq or Equalizer()
         self.engine_osc = Oscillator()
         # each cylinder's own share of the idle's unevenness, the same every cycle
         self.cylinder_offsets = [random.Random(11 + n).uniform(-1.0, 1.0) for n in range(12)]
@@ -859,6 +911,13 @@ class Synth:
             self.lock_phase = 0.0  # the warning starts with a pulse, not up to half a cycle late
         self.was_locked = lock > 0
         routes = {name: route_of(g, name) for name in TOGGLEABLE}
+        # each vibration scaled for how strongly each motor gives back its frequency
+        eq = self.eq.pair
+        eq_engine, eq_retarder, eq_rumble = eq(engine_freq), eq(retarder_freq), eq(rumble_freq)
+        eq_road = (eq(self.texture[0].pitch), eq(self.texture[1].pitch))
+        eq_spin, eq_squeal = eq(self.spin_noise.filter.center), eq(Squeal.HZ)
+        eq_trigger = eq(110.0 if trigger_mode == "brake" and lock > 0 else 100.0)
+        eq_bursts = [eq(burst.freq) for _, _, burst in self.bursts]
         trigger, left, right = [], [], []
         p = self.prev_amp
         for n in range(SUBFRAMES):
@@ -883,26 +942,29 @@ class Synth:
                                              + eh * math.sin(3 * w))
             if self.engine_osc.phase < firing:  # a cycle done: the next cylinder fires
                 self._next_firing(engine_uneven)
-            _mix(bed, routes["engine"], engine, engine, engine)
+            _mix(bed, routes["engine"], engine, engine, engine, eq_engine)
             retarder = rt * self.retarder_osc.next(retarder_freq)
+            _mix(bed, routes["retarder"], retarder, retarder, retarder, eq_retarder)
             if jb:
                 # on the engine's own firing, knock peak on its crest: on a phase of their
                 # own the two could cancel, the same frequency at once
-                retarder += jb * jake_pulse((firing - 0.25 + JAKE_PEAK) % 1.0)
-            _mix(bed, routes["retarder"], retarder, retarder, retarder)
+                jake = jb * jake_pulse((firing - 0.25 + JAKE_PEAK) % 1.0)
+                _mix(bed, routes["retarder"], jake, jake, jake, eq_engine)
             # Independent noises: 0.7 keeps their sum near one side's strength.
             noise_l, noise_r = rl * self.texture[0].next(), rr * self.texture[1].next()
-            _mix(bed, routes["road"], noise_l, noise_r, 0.7 * (noise_l + noise_r))
+            (grip_l, trig_l), (grip_r, trig_r) = eq_road
+            _mix(bed, routes["road"], noise_l * grip_l, noise_r * grip_r,
+                 0.7 * (noise_l * trig_l + noise_r * trig_r))
             if ul or ur:
                 # Soft-clipped sine: each groove lands as a hard edge, a buzz, not a hum.
                 strip_l = ul * math.tanh(2.5 * self.rumble_osc[0].next(rumble_freq))
                 strip_r = ur * math.tanh(2.5 * self.rumble_osc[1].next(rumble_freq))
-                _mix(bed, routes["rumble"], strip_l, strip_r, 0.7 * (strip_l + strip_r))
+                _mix(bed, routes["rumble"], strip_l, strip_r, 0.7 * (strip_l + strip_r), eq_rumble)
             if sp:
                 # Low grinding noise, chattering as the tyres hop between grip and slip.
                 # 2x: noise is spiky, and this has to stand out over a floored engine.
                 grind = 2.0 * sp * self.spin_noise.next() * (0.55 + 0.45 * self.spin_chatter.next(13.0))
-                _mix(bed, routes["wheelspin"], grind, grind, grind)
+                _mix(bed, routes["wheelspin"], grind, grind, grind, eq_spin)
 
             if trigger_mode == "brake" and lock > 0:
                 t = tr * self._lock_chop() * self.trigger_osc.next(110.0)
@@ -913,19 +975,19 @@ class Synth:
                 t = tr * pulse * self.trigger_osc.next(100.0)
             else:
                 t = tr * self.trigger_osc.next(100.0)
-            _mix(bed, routes["trigger"], t, t, t)
+            _mix(bed, routes["trigger"], t, t, t, eq_trigger)
             if sq:
                 squeal = sq * self.squeal.next()
-                _mix(out, routes["squeal"], squeal, squeal, squeal)
+                _mix(out, routes["squeal"], squeal, squeal, squeal, eq_squeal)
             else:
                 self.squeal.restart()
             drive = [0.0, 0.0, 0.0]
-            for effect, side, burst in self.bursts:
+            for (effect, side, burst), burst_eq in zip(self.bursts, eq_bursts):
                 if effect not in DUCK_EXEMPT:
                     d = burst.level
                     _mix(drive, routes[effect], 0.0 if side == "R" else d, 0.0 if side == "L" else d, d)
                 b = burst.next()
-                _mix(out, routes[effect], 0.0 if side == "R" else b, 0.0 if side == "L" else b, b)
+                _mix(out, routes[effect], 0.0 if side == "R" else b, 0.0 if side == "L" else b, b, burst_eq)
             for i in range(3):
                 target = min(1.0, drive[i] / DUCK_FULL) * g.ducking
                 if target > self.duck[i]:
@@ -974,10 +1036,11 @@ class Synth:
         return math.tanh(x * self.g.master * channel_level) * MAX_SAMPLE
 
 
-def _mix(out: list[float], route: str, left: float, right: float, trigger: float) -> None:
-    """Add one effect's sample to the channels its route selects."""
+def _mix(out: list[float], route: str, left: float, right: float, trigger: float,
+         eq: tuple[float, float] = FLAT) -> None:
+    """Add one effect's sample to the channels its route selects, scaled by its (grip, trigger) eq."""
     if route != TRIGGER:
-        out[0] += left
-        out[1] += right
+        out[0] += left * eq[0]
+        out[1] += right * eq[0]
     if route != GRIP:
-        out[2] += trigger
+        out[2] += trigger * eq[1]

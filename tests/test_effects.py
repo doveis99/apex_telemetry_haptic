@@ -9,8 +9,8 @@ import random
 import unittest
 
 from apex6 import SAMPLE_RATE
-from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, TOGGLEABLE, Gains, NoiseBurst, Synth, Texture,
-                     effective_gains, surface_of)
+from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, TOGGLEABLE, Equalizer, Gains, NoiseBurst, Synth,
+                     Texture, effective_gains, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
 _render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise
@@ -233,6 +233,38 @@ class EngineTest(unittest.TestCase):
             samples = self.engine(game_throttle=load, user_throttle=load)  # 1300 rpm, 6 cylinders: 65 Hz
             return tone_level(samples, 195.0) / tone_level(samples, 65.0)
         self.assertGreater(harshness(0.9), harshness(0.0) + 0.15)
+
+
+class EqualizerTest(unittest.TestCase):
+    CURVES = {"grip": {"30": 2.0, "65": 1.0, "250": 2.0}, "trigger": {"100": 1.0, "200": 1.5}}
+
+    def test_flat_until_calibrated(self) -> None:
+        self.assertEqual(Equalizer().pair(40.0), (1.0, 1.0))
+        self.assertEqual(Equalizer({"grip": {"low": "x", "-5": 2.0}, "trigger": [1, 2]}).pair(40.0), (1.0, 1.0))
+
+    def test_follows_the_measured_points_in_db(self) -> None:
+        eq = Equalizer(self.CURVES)
+        self.assertAlmostEqual(eq.gain("grip", 30.0), 2.0)
+        self.assertAlmostEqual(eq.gain("grip", math.sqrt(30.0 * 65.0)), math.sqrt(2.0))  # halfway in both
+        self.assertAlmostEqual(eq.gain("grip", 20.0), 2.0)  # held past the ends
+        self.assertAlmostEqual(eq.gain("trigger", 300.0), 1.5)
+        self.assertEqual(Equalizer({"grip": {"30": 50.0}}).gain("grip", 30.0), Equalizer.LIMITS[1])
+
+    def synths(self, effect: str) -> tuple[Synth, Synth]:
+        gains = Gains(steady_fade=0.0, disabled=[name for name in TOGGLEABLE if name != effect])
+        return Synth(effective_gains(gains)), Synth(effective_gains(gains), Equalizer(self.CURVES))
+
+    def test_idle_engine_gets_the_grips_low_end_boost(self) -> None:
+        values = {"rpm": 650.0, "game_throttle": 0.0, "user_throttle": 0.0}  # 32.5 Hz, x1.86 on this curve
+        flat, boosted = (rms(left_grip(s, **values)) for s in self.synths("engine"))
+        self.assertGreater(boosted, 1.6 * flat)
+
+    def test_trigger_follows_its_own_curve(self) -> None:
+        flat, eq = self.synths("trigger")  # throttle trigger at 100 Hz, where the trigger curve is 1
+        for s in (flat, eq):
+            for _ in range(20):
+                s.render(frame())
+        self.assertEqual(flat.render(frame()).trigger, eq.render(frame()).trigger)
 
 
 class RetarderTest(unittest.TestCase):

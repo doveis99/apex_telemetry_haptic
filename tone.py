@@ -6,6 +6,7 @@ Examples:
   python tone.py sweep --target grips --from 30 --to 300 --seconds 6
   python tone.py walk                        left grip, right grip, left trigger, right trigger
   python tone.py split                       blind left/right trigger separation check
+  python tone.py calibrate                   match each frequency's strength by feel, for the synth's eq
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import argparse
 import math
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE, SUBFRAMES, Apex6, Block, Route
+from effects import Equalizer
 
 TARGETS = {
     "left": (False, True, False, Route.MUTE),
@@ -228,6 +230,61 @@ def run_split(pad: Apex6, freq: float, amps: list[float], seconds: float,
     print(f"\n저장: {path}")
 
 
+# Equal-strength calibration for effects.Equalizer. The voice coils resonate
+# (grips near 65 Hz, triggers near 100 Hz), so the same drive feels weaker off
+# resonance. Each test tone follows the reference at the same drive and is
+# raised or lowered by feel until it is as strong; the factor that took is the
+# gain the synth then gives that frequency on that motor. Saved in config.json.
+CAL_REFERENCE = {"grip": 65.0, "trigger": 100.0}
+CAL_FREQS = {"grip": (30.0, 40.0, 50.0, 80.0, 100.0, 130.0, 160.0, 200.0, 250.0),
+             "trigger": (50.0, 65.0, 80.0, 130.0, 160.0, 200.0, 250.0)}
+CAL_TARGETS = {"grip": "grips", "trigger": "triggers"}
+CAL_NAMES = {"grip": "그립", "trigger": "트리거"}
+CAL_STEP_DB = 1.5
+
+
+def calibration_step(gain: float, answer: str) -> float | None:
+    """The next test gain: '+' when the test felt weaker, '-' when stronger; None once it matches (Enter)."""
+    if answer == "":
+        return None
+    step = 10 ** (CAL_STEP_DB / 20)
+    low, high = Equalizer.LIMITS
+    return min(high, max(low, gain * step if answer == "+" else gain / step))
+
+
+def run_calibrate(pad: Apex6, channels: list[str], amp: float, seconds: float) -> None:
+    from settings import CONFIG_PATH, load_eq, save_eq
+
+    curves = load_eq()
+    print("컨트롤러를 평소처럼 잡으세요. 기준음 다음에 0.4초 쉬고 시험음이 울립니다.")
+    print("시험음이 기준음보다 약하면 +, 세면 -, 같게 느껴지면 그냥 Enter. r은 다시 듣기입니다.\n")
+    for channel in channels:
+        reference, target = CAL_REFERENCE[channel], CAL_TARGETS[channel]
+        curve = {f"{reference:g}": 1.0}
+        print(f"--- {CAL_NAMES[channel]}: 기준음 {reference:g} Hz, 세기 {amp:g}% ---")
+        for freq in CAL_FREQS[channel]:
+            gain = 1.0
+            while True:
+                pad.stream(tone_renderer(target, reference, reference, amp, seconds))
+                pad.stream(lambda first: Block() if first < 400 else None)
+                pad.stream(tone_renderer(target, freq, freq, min(100.0, amp * gain), seconds))
+                answer = input(f"  {freq:g} Hz (x{gain:.2f}): + / - / Enter / r: ").strip()
+                if answer not in ("", "+", "-"):
+                    continue
+                following = calibration_step(gain, answer)
+                if following is None:
+                    break
+                if following == gain:
+                    print(f"  한계 x{gain:.2f}에 닿았습니다. 이 값으로 둡니다.")
+                    break
+                gain = following
+            curve[f"{freq:g}"] = round(gain, 3)
+        curves[channel] = curve
+        save_eq(curves)
+        print("  " + "  ".join(f"{f} Hz x{g:.2f}" for f, g in sorted(curve.items(), key=lambda kv: float(kv[0]))))
+    print(f"\n저장: {CONFIG_PATH} (\"eq\"). 다음 시작부터 적용됩니다. 지우려면 tone.py calibrate --reset")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -273,7 +330,19 @@ def main() -> None:
     split.add_argument("--firmware", help="override the controller firmware read from the pad")
     split.add_argument("--dongle", help="override the dongle firmware read from the pad")
 
+    calibrate = sub.add_parser("calibrate", help="match each frequency's strength by feel, for the synth's eq")
+    calibrate.add_argument("--channel", choices=("grip", "trigger", "both"), default="both")
+    calibrate.add_argument("--amp", type=float, default=25.0,
+                           help="reference strength in percent; up to 4x of it must fit in 100")
+    calibrate.add_argument("--seconds", type=float, default=1.0)
+    calibrate.add_argument("--reset", action="store_true", help="forget the calibration (flat), no controller needed")
+
     args = parser.parse_args()
+    if args.command == "calibrate" and args.reset:
+        from settings import save_eq
+        save_eq({})
+        print("보정을 지웠습니다 (평탄).")
+        return
 
     with Apex6() as pad:
         info = pad.info
@@ -285,6 +354,10 @@ def main() -> None:
             return
         if args.command == "split":
             run_split(pad, args.freq, args.amps, args.seconds, args.firmware, args.dongle)
+            return
+        if args.command == "calibrate":
+            channels = ["grip", "trigger"] if args.channel == "both" else [args.channel]
+            run_calibrate(pad, channels, args.amp, args.seconds)
             return
         if args.command == "diag":
             run_diag(pad, args.freq, args.amp, args.seconds)

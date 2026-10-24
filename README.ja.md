@@ -212,7 +212,8 @@ Steam ライブラリでゲームの **プロパティ → 一般 → 起動オ�
 5. 特定のエフェクトを指で感じたいなら（例: エンジンの振動をアクセルのトリガーで）、そのエフェクトの振動の場所を **トリガー** か **両方** に変えてください。
 6. 舗装路で段差パルスが多すぎるなら **段差しきい値** を上げてください。
 7. 走行中にウインカーやシフトのようなイベントが感じにくいなら、**イベント優先** を上げるか **エンジン**・**路面** を下げてください。イベントのたびに走行振動が揺れる感じが嫌なら、イベント優先を下げてください。
-8. 気に入ったら **保存** を押してください。
+8. （ソースから実行する場合）エンジンがアイドリングでは弱く巡航でだけ強く感じる、ウインカーのような高い「カチ」が弱い、というときは `tone.py calibrate` でモーターの周波数ごとの体感の強さをそろえてください。モーターはグリップ約 65 Hz、トリガー約 100 Hz でいちばん強く鳴るので、同じ強さで送っても周波数ごとに感じ方が違います。基準音と同じに感じるまで試験音を上げ下げすると、その倍率が周波数ごとにすべてのエフェクトにかかります（`config.json` の `eq`、次の開始から）。測る前は補正なしで、`tone.py calibrate --reset` で消せます。
+9. 気に入ったら **保存** を押してください。
 
 ## トラブルシューティング
 
@@ -254,8 +255,9 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # ウィンドウ（または start_gui.cmd）
 .\.venv\Scripts\python.exe ats_haptics.py --monitor   # コマンドライン: --simulate, --exit-with-game, エフェクトごとの強さ
-.\.venv\Scripts\python.exe tone.py probe              # 診断: probe | tone | sweep | walk | route-test | diag | split
+.\.venv\Scripts\python.exe tone.py probe              # 診断: probe | tone | sweep | walk | route-test | diag | split | calibrate
 .\.venv\Scripts\python.exe tone.py split              # トリガー左右分離のブラインドチェック、結果は logs\trigger-split-*.txt
+.\.venv\Scripts\python.exe tone.py calibrate          # 周波数ごとの体感の強さをそろえる（補正）、--reset で消去
 powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<バージョン>.zip（ソース同梱）
 .\.venv\Scripts\python.exe i18n.py                  # 翻訳チェック: 抜け、未使用、{プレースホルダー} の不一致
 .\.venv\Scripts\python.exe -m unittest              # 回帰テスト（tests\）

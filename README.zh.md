@@ -212,7 +212,8 @@
 5. 想用手指感受某个效果（例如在油门扳机上感受发动机振动），把该效果的振动位置改为 **扳机** 或 **两者**。
 6. 如果在铺装路面上颠簸脉冲过于频繁，请调高 **颠簸阈值**。
 7. 如果行驶中转向灯、换挡等事件不容易感觉到，请调高 **为事件让位**，或降低 **发动机**、**路面**。如果不喜欢每次事件时行驶振动起伏的感觉，请调低让位。
-8. 满意后点击 **保存**。
+8. （从源码运行时）如果发动机怠速时偏弱、只在巡航时很强，或者转向灯这类高频“嘀”声偏弱，请用 `tone.py calibrate` 校准电机在各频率下的体感强度。电机在握把约 65 Hz、扳机约 100 Hz 时最强，所以同样的输出在不同频率下感觉不同。把测试音调高或调低，直到感觉和参考音一样强，这个倍数就会按频率作用于所有效果（`config.json` 的 `eq`，下次启动起生效）。未测量时不做校正，用 `tone.py calibrate --reset` 清除。
+9. 满意后点击 **保存**。
 
 ## 故障排除
 
@@ -254,8 +255,9 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # 窗口（或 start_gui.cmd）
 .\.venv\Scripts\python.exe ats_haptics.py --monitor   # 命令行：--simulate, --exit-with-game, 各效果强度选项
-.\.venv\Scripts\python.exe tone.py probe              # 诊断：probe | tone | sweep | walk | route-test | diag | split
+.\.venv\Scripts\python.exe tone.py probe              # 诊断：probe | tone | sweep | walk | route-test | diag | split | calibrate
 .\.venv\Scripts\python.exe tone.py split              # 扳机左右分离盲测，结果保存在 logs\trigger-split-*.txt
+.\.venv\Scripts\python.exe tone.py calibrate          # 校准各频率的体感强度，--reset 清除
 powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<版本>.zip（含源码）
 .\.venv\Scripts\python.exe i18n.py                  # 翻译检查：缺失、未使用或 {占位符} 不一致的文本
 .\.venv\Scripts\python.exe -m unittest              # 回归测试（tests\）

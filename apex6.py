@@ -34,6 +34,10 @@ CMD_REALTIME_MOTOR = 0x57
 PRO_DEVICE_TYPES = {0x96: "APEX 6 Pro", 0x98: "APEX 6 Pro (Phantom Blade Zero)"}
 FEATURE_GRIP_HAPTIC = 0x80
 FEATURE_TRIGGER_HAPTIC = 0x10
+# Protocol-frame offsets of the big-endian u16 versions in the 0x01 reply, in
+# the order Space Station's parser reads them (fwMain, fwRecv, fwSi,
+# fwTrigger, fwScreen, fwAdc, fwSstar; the page labels fwSstar "RF").
+FIRMWARE_OFFSETS = {"controller": 15, "dongle": 17, "si": 19, "trigger": 21, "screen": 23, "adc": 25, "rf": 27}
 
 SAMPLE_RATE = 1000
 SUBFRAMES = 8
@@ -142,6 +146,20 @@ class DeviceInfo:
     device_type: int
     connection_mode: int
     features: int
+    # The whole 0x01 reply, for diagnostics.
+    raw: bytes = b""
+
+    @property
+    def firmware(self) -> dict[str, str]:
+        """Component firmware versions, one nibble per digit (0x90 0x55 -> 9.0.5.5).
+
+        Components reporting 0 are absent (the dongle on a cable, for one) and
+        left out, as Space Station's device page does.
+        """
+        if len(self.raw) < 29:
+            return {}
+        return {name: ".".join(f"{self.raw[i]:02X}{self.raw[i + 1]:02X}")
+                for name, i in FIRMWARE_OFFSETS.items() if self.raw[i] or self.raw[i + 1]}
 
     @property
     def name(self) -> str:
@@ -175,7 +193,7 @@ def _parse_device_info(data: Sequence[int]) -> DeviceInfo | None:
         return None
     if frame[31] != sum(frame[2:31]) & 0xFF:
         return None
-    return DeviceInfo(device_type=frame[5], connection_mode=frame[6], features=frame[29])
+    return DeviceInfo(device_type=frame[5], connection_mode=frame[6], features=frame[29], raw=bytes(frame))
 
 
 class DeviceUnavailable(RuntimeError):

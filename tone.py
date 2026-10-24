@@ -5,6 +5,7 @@ Examples:
   python tone.py tone --target left --freq 80 --amp 50 --seconds 2
   python tone.py sweep --target grips --from 30 --to 300 --seconds 6
   python tone.py walk                        left grip, right grip, left trigger, right trigger
+  python tone.py split                       blind left/right trigger separation check
 """
 
 from __future__ import annotations
@@ -92,6 +93,141 @@ def run_diag(pad: Apex6, freq: float, amp: float, seconds: float) -> None:
     print("\n끝. 단계 번호별 결과를 알려 주세요 (예: 1 양쪽, 2 없음, ...).")
 
 
+# Left/right separation check. ApexSenseBridge plays different LT and RT
+# effects by alternating route LEFT and RIGHT every block, and one of its
+# testers felt each route on its own side (controller firmware 9.0.4.4),
+# while diag above felt LEFT on both triggers. This check rates each route
+# with one fingertip on one trigger at a time, at low amplitude and in a
+# shuffled order, so body transmission and expectation bias show up as such.
+# Every test tone follows a BOTH reference at the same amplitude and is rated
+# against it, so there is no absolute scale to guess; BOTH itself is the
+# control and should come out "비슷".
+SPLIT_ROUTES = ("LEFT", "RIGHT", "BOTH", "ALT")
+SPLIT_FINGERS = {"L": "왼쪽 트리거", "R": "오른쪽 트리거"}
+RATINGS = {"0": "없음", "1": "약함", "2": "비슷", "3": "강함"}
+REFERENCE_GAP = 500  # samples = ms of silence between reference and test
+
+
+def split_renderer(route: str, freq: float, amp_percent: float, seconds: float):
+    """Trigger tone on one route; ALT alternates LEFT (tone) and RIGHT (silent) per block."""
+    tone = tone_renderer("trigger-left", freq, freq, amp_percent, seconds)
+
+    def render(first: int) -> Block | None:
+        block = tone(first)
+        if block is None:
+            return None
+        if route == "ALT":
+            if (first // SUBFRAMES) % 2:
+                block.route, block.trigger = Route.RIGHT, [0.0] * SUBFRAMES
+            else:
+                block.route = Route.LEFT
+        else:
+            block.route = Route[route]
+        return block
+
+    return render
+
+
+def split_verdict(ratings: dict[tuple[str, str], int]) -> str:
+    """Judge one amplitude from {(finger, route): rating 0..3}.
+
+    Separation shows as a route rated differently under the two fingers;
+    the same rating under both means the route reaches both triggers alike.
+    """
+    same = (ratings[("L", "LEFT")], ratings[("R", "RIGHT")])
+    cross = (ratings[("L", "RIGHT")], ratings[("R", "LEFT")])
+    if min(same) == 0:
+        return "판정 불가: 자기 쪽 라우트가 안 느껴짐"
+    if max(cross) == 0:
+        return "분리됨: 한쪽 라우트는 그쪽 트리거에서만 느껴짐"
+    if all(s > c for s, c in zip(same, cross)):
+        return "부분 분리: 반대쪽은 더 약함 (몸체로 전해진 진동일 수 있음)"
+    if all(ratings[("L", r)] == ratings[("R", r)] for r in ("LEFT", "RIGHT")):
+        return "섞임: 라우트마다 손가락 위치와 상관없이 같은 세기 (좌우 구분 안 됨)"
+    return "애매: 손가락별 결과가 일관되지 않음, 다시 측정"
+
+
+def _ask_rating(replay) -> int:
+    while True:
+        answer = input("  기준음과 비교해 시험음은? 0 없음 / 1 약함 / 2 비슷 / 3 강함 / r 다시: ").strip().lower()
+        if answer in RATINGS:
+            return int(answer)
+        if answer == "r":
+            replay()
+
+
+def _firmware_text(info) -> str:
+    names = {"controller": "컨트롤러", "dongle": "동글", "si": "SI", "trigger": "트리거",
+             "screen": "Screen", "adc": "ADC", "rf": "RF"}
+    return ", ".join(f"{names[k]} {v}" for k, v in info.firmware.items()) or "읽지 못함"
+
+
+def run_split(pad: Apex6, freq: float, amps: list[float], seconds: float,
+              firmware: str | None, dongle: str | None) -> None:
+    import random
+    from datetime import datetime
+
+    from blocklog import LOG_DIR
+    from version import __version__
+
+    info = pad.info
+    firmware = firmware or info.firmware.get("controller", "")
+    print(f"펌웨어: {_firmware_text(info)}")
+    dongle = dongle or info.firmware.get("dongle", "")
+    print("\n컨트롤러를 책상에 내려놓고 그립은 잡지 마세요.")
+    print("단계마다 안내하는 트리거 하나에만 손가락 끝을 가볍게 올려 두세요.")
+    print("단계마다 기준음(양쪽 라우트) 다음에 0.5초 쉬고 시험음이 울립니다.")
+    print("시험음이 기준음보다 어땠는지 답하세요. 라우트는 섞어서 나오고, 끝나면 표에서 공개됩니다.\n")
+
+    steps = []
+    for amp in amps:
+        for finger in SPLIT_FINGERS:
+            routes = list(SPLIT_ROUTES)
+            random.shuffle(routes)
+            steps += [(amp, finger, route) for route in routes]
+    ratings: dict[tuple[float, str, str], int] = {}
+    finger_now = None
+    for number, (amp, finger, route) in enumerate(steps, start=1):
+        if finger != finger_now:
+            finger_now = finger
+            print(f"--- 이제 {SPLIT_FINGERS[finger]}에만 손가락을 올려 두세요 (세기 {amp:g}%) ---")
+        input(f"[{number}/{len(steps)}] Enter를 누르면 울립니다...")
+
+        def play(amp=amp, route=route) -> None:
+            pad.stream(split_renderer("BOTH", freq, amp, seconds))
+            pad.stream(lambda first: Block() if first < REFERENCE_GAP else None)
+            pad.stream(split_renderer(route, freq, amp, seconds))
+
+        play()
+        ratings[(amp, finger, route)] = _ask_rating(play)
+
+    lines = [
+        f"트리거 좌우 분리 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        f"컨트롤러 펌웨어: {firmware or '-'}",
+        f"구성 요소 펌웨어: {_firmware_text(info)}",
+        f"동글 펌웨어: {dongle or '-'}",
+        f"기기: {info.name}, connection_mode={info.connection_mode}, features=0x{info.features:02X}",
+        f"0x01 응답: {info.raw.hex(' ').upper()}",
+        f"톤: {freq:g} Hz, {seconds:g}초, 0x53 mode=0x02",
+        "평가: 같은 세기의 기준음(BOTH)과 비교한 시험음 (BOTH 칸은 대조군이라 '비슷'이 정상)",
+        "",
+        "세기   손가락         " + "  ".join(f"{r:>5}" for r in SPLIT_ROUTES),
+    ]
+    for amp in amps:
+        for finger, name in SPLIT_FINGERS.items():
+            cells = "  ".join(f"{RATINGS[str(ratings[(amp, finger, r)])]:>4}" for r in SPLIT_ROUTES)
+            lines.append(f"{amp:>4g}%  {name:<10} {cells}")
+        verdict = split_verdict({(f, r): ratings[(amp, f, r)] for f in SPLIT_FINGERS for r in SPLIT_ROUTES})
+        lines.append(f"       -> {verdict}")
+    lines.append("ALT: 블록마다 LEFT(톤)와 RIGHT(무음)를 번갈아 보냄 (ApexSenseBridge 방식)")
+    report = "\n".join(lines)
+    print("\n" + report)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    path = LOG_DIR / f"trigger-split-{datetime.now():%Y%m%d-%H%M%S}.txt"
+    path.write_text(report + "\n", encoding="utf-8")
+    print(f"\n저장: {path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -130,6 +266,13 @@ def main() -> None:
     diag.add_argument("--amp", type=float, default=30.0)
     diag.add_argument("--seconds", type=float, default=3.0)
 
+    split = sub.add_parser("split", help="blind left/right trigger separation check at low amplitude")
+    split.add_argument("--freq", type=float, default=110.0)
+    split.add_argument("--amps", type=float, nargs="+", default=[10.0, 20.0], help="percent of maximum")
+    split.add_argument("--seconds", type=float, default=2.0)
+    split.add_argument("--firmware", help="override the controller firmware read from the pad")
+    split.add_argument("--dongle", help="override the dongle firmware read from the pad")
+
     args = parser.parse_args()
 
     with Apex6() as pad:
@@ -137,6 +280,11 @@ def main() -> None:
         print(f"{info.name}: connection_mode={info.connection_mode} features=0x{info.features:02X} "
               f"grip_haptics={info.grip_haptics} trigger_haptics={info.trigger_haptics}")
         if args.command == "probe":
+            print(f"firmware: {', '.join(f'{k} {v}' for k, v in info.firmware.items()) or '-'}")
+            print(f"0x01 reply: {info.raw.hex(' ').upper()}")
+            return
+        if args.command == "split":
+            run_split(pad, args.freq, args.amps, args.seconds, args.firmware, args.dongle)
             return
         if args.command == "diag":
             run_diag(pad, args.freq, args.amp, args.seconds)

@@ -231,9 +231,8 @@ def run_split(pad: Apex6, freq: float, amps: list[float], seconds: float,
 
 CAL_NAMES = {"grip": "그립", "trigger": "트리거"}
 # console keys besides the pad's buttons; arrows come as a 0xE0 prefix and a code
-CAL_KEYS = {"+": "stronger", "=": "stronger", "-": "weaker", "\r": "same", "r": "replay", "q": "cancel",
-            "\x1b": "cancel"}
-CAL_ARROWS = {"H": "stronger", "P": "weaker"}
+CAL_KEYS = {"1": "first", "2": "second", "r": "replay", "q": "cancel", "\x1b": "cancel"}
+CAL_ARROWS = {"K": "first", "M": "second"}
 
 
 def _console_key() -> str | None:
@@ -257,26 +256,30 @@ def run_calibrate(pad: Apex6, channels: list[str], amp: float, seconds: float) -
     def listen() -> str | None:
         return buttons.poll() or _console_key()
 
-    print("컨트롤러를 평소처럼 잡으세요. 기준음 다음에 0.4초 쉬고 시험음이 울립니다.")
-    print("시험음이 기준음보다 약하면 더 세게, 세면 더 약하게, 같게 느껴지면 같음을 누르세요. 재생 중에 눌러도 됩니다.")
-    print("  패드: 십자키 ↑ 더 세게 / ↓ 더 약하게 / A 같음 / X 다시 듣기 / B 그만")
-    print("  키보드: ↑ 또는 + / ↓ 또는 - / Enter / r / q")
+    print("컨트롤러를 평소처럼 잡으세요. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지만 고르세요.")
+    print("헷갈리면 아무 쪽이나 골라도 됩니다. 답에 따라 같게 느껴지는 세기를 좁혀 갑니다. 재생 중에 눌러도 됩니다.")
+    print("  패드: 십자키 ← 또는 LB 첫 번째 / → 또는 RB 두 번째 / X 다시 듣기 / B 그만")
+    print("  키보드: ← 또는 1 / → 또는 2 / r / q")
     if not buttons.connected:
         print("  (XInput 패드가 안 보여 키보드로만 받습니다)")
     shown = None
     while session.current:
-        channel, freq = session.current
+        channel, freq, neighbour = session.current
         if (channel, freq) != shown:
-            index = session.index - session.steps.index((channel, calibrate.FREQS[channel][0])) + 1
-            print(f"--- {CAL_NAMES[channel]} {index}/{len(calibrate.FREQS[channel])}: {freq:g} Hz "
-                  f"(기준음 {calibrate.REFERENCE[channel]:g} Hz, 세기 {session.amp:g}%) ---")
+            first = next(i for i, step in enumerate(session.steps) if step[0] == channel)
+            print(f"--- {CAL_NAMES[channel]} {session.index - first + 1}/{len(calibrate.FREQS[channel])}: "
+                  f"{freq:g} Hz와 {neighbour:g} Hz 비교 ---")
             shown = (channel, freq)
-        print(f"  x{session.gain:.2f}" + ("  (한계: 같음으로 이 값을 씁니다)" if session.at_limit else ""))
-        answer = calibrate.play(pad, session, listen) or calibrate.wait(listen)
+        answer = calibrate.play(pad, session, listen)
+        if answer is None:
+            print(f"  비교 {session.staircase.trials + 1}: 첫 번째 / 두 번째?")
+            answer = calibrate.wait(listen)
         if answer == calibrate.CANCEL:
             print("그만둡니다.")
             break
         finished = session.answer(answer)
+        if (channel, freq) != (session.current or (None, None, None))[:2]:
+            print(f"  {freq:g} Hz: x{session.gain(channel, freq):.2f}")
         if finished:
             calibrate.save(session)
             curve = session.curves[finished]
@@ -332,12 +335,12 @@ def main() -> None:
     split.add_argument("--firmware", help="override the controller firmware read from the pad")
     split.add_argument("--dongle", help="override the dongle firmware read from the pad")
 
-    from calibrate import AMP
+    from calibrate import AMP, SECONDS
     cal = sub.add_parser("calibrate", help="match each frequency's strength by feel, for the synth's eq")
     cal.add_argument("--channel", choices=("grip", "trigger", "both"), default="both")
     cal.add_argument("--amp", type=float, default=AMP,
                      help="reference strength in percent; up to 4x of it must fit in 100")
-    cal.add_argument("--seconds", type=float, default=1.0)
+    cal.add_argument("--seconds", type=float, default=SECONDS)
     cal.add_argument("--reset", action="store_true", help="forget the calibration (flat), no controller needed")
 
     args = parser.parse_args()

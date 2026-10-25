@@ -286,22 +286,12 @@ MESSAGES = {
          "frequency by frequency. Use it with the output stopped."),
     "모터 보정": "Motor calibration",
     "출력을 정지한 다음 보정하세요.": "Stop the output before calibrating.",
-    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 기준음 다음에 시험음이 울리면 같은 세기로 느껴질 때까지 더 세게 또는 더 약하게를 고르세요. 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 2~4분 걸립니다.":
-        ("The motors ring hardest near 65 Hz (grips) and 100 Hz (triggers), so the same drive feels different at "
-         "each frequency. After the reference tone a test tone plays: choose stronger or weaker until the two feel "
-         "the same. Every effect is then corrected by that much at that frequency. Each motor takes 2–4 minutes."),
     "지금 보정: {channels}": "Current calibration: {channels}",
     "없음": "none",
     "{name} ({count}개 주파수)": "{name} ({count} frequencies)",
     "시작": "Start",
     "보정 지우기": "Clear calibration",
     "저장된 보정을 지워 모든 주파수를 그대로 보냅니다.": "Clears the saved calibration, so every frequency is sent as it is.",
-    "컨트롤러를 평소처럼 잡으세요. 패드 버튼으로 답할 수 있습니다: 십자키 ↑ 더 세게, ↓ 더 약하게, A 같음, X 다시 듣기, B 그만. 키보드는 ↑ ↓ Enter R Esc입니다. 재생 중에 눌러도 바로 반영됩니다.":
-        ("Hold the controller as usual. You can answer with the pad's buttons: D-pad ↑ stronger, ↓ weaker, A same, X "
-         "replay, B stop. On the keyboard: ↑ ↓ Enter R Esc. Answers count even while the tones play."),
-    "▲ 더 세게": "▲ Stronger",
-    "▼ 더 약하게": "▼ Weaker",
-    "✓ 같음": "✓ Same",
     "↻ 다시 듣기": "↻ Replay",
     "그만": "Stop",
     "보정하지 못했습니다: {error}": "Could not calibrate: {error}",
@@ -310,10 +300,19 @@ MESSAGES = {
         "No calibration saved. A motor is saved once all its frequencies are matched.",
     "다시 보정": "Calibrate again",
     "저장된 보정을 지울까요?": "Clear the saved calibration?",
-    "{name} {index}/{count} · {freq} Hz": "{name} {index}/{count} · {freq} Hz",
-    "(한계: 같음으로 이 값을 씁니다)": "(limit: Same keeps this value)",
-    "기준음 {reference} Hz와 비교 · 시험음 ×{gain}": "Against the {reference} Hz reference · test tone ×{gain}",
     "그만두는 중…": "Stopping…",
-    "기준음 → 시험음 재생 중…": "Playing reference → test tone…",
-    "시험음이 기준음보다 어땠나요?": "How did the test tone feel against the reference?",
+    "컨트롤러를 평소처럼 잡으세요. 패드 버튼으로 답할 수 있습니다: 십자키 ← 또는 LB 첫 번째, → 또는 RB 두 번째, X 다시 듣기, B 그만. 키보드는 ← → (또는 1 2) R Esc입니다. 재생 중에 눌러도 바로 반영됩니다.":
+        ("Hold the controller as usual. You can answer with the pad's buttons: D-pad ← or LB first, → or RB second, "
+         "X replay, B stop. On the keyboard: ← → (or 1 2) R Esc. Answers count even while the tones play."),
+    "◀ 첫 번째": "◀ First",
+    "두 번째 ▶": "Second ▶",
+    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지만 고르세요. 헷갈리면 아무 쪽이나 골라도 됩니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.":
+        ("The motors ring hardest near 65 Hz (grips) and 100 Hz (triggers), so the same drive feels different at "
+         "each frequency. Two neighbouring frequencies play one after the other: just pick the one that felt "
+         "stronger. If you can't tell, pick either. The answers close in on the strength at which the two feel the "
+         "same, and every effect is corrected by that much at each frequency. Each motor takes 3–5 minutes."),
+    "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz": "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz",
+    "비교 {trial}번째": "Comparison {trial}",
+    "첫 번째 → 두 번째 재생 중…": "Playing first → second…",
+    "어느 쪽이 더 셌나요?": "Which one was stronger?",
 }

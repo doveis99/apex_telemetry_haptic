@@ -843,8 +843,8 @@ class CalibrationDialog:
         self.error = ""
         self.shown = ""
         self.channels = {channel: tk.BooleanVar(value=True) for channel in calibrate.FREQS}
-        for key, answer in (("<Up>", calibrate.STRONGER), ("<Down>", calibrate.WEAKER), ("<Return>", calibrate.SAME),
-                            ("r", calibrate.REPLAY), ("<Escape>", calibrate.CANCEL)):
+        for key, answer in (("<Left>", calibrate.FIRST), ("1", calibrate.FIRST), ("<Right>", calibrate.SECOND),
+                            ("2", calibrate.SECOND), ("r", calibrate.REPLAY), ("<Escape>", calibrate.CANCEL)):
             self.top.bind(key, lambda _event, a=answer: self.answer(a))
         self.body = tk.Frame(self.top, bg=BG)
         self.body.pack(fill="both", padx=18, pady=16)
@@ -868,9 +868,9 @@ class CalibrationDialog:
     def _render_start(self) -> None:
         body = self._clear()
         self._text(body, t("모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 "
-                           "다르게 느껴집니다. 기준음 다음에 시험음이 울리면 같은 세기로 느껴질 때까지 더 세게 또는 "
-                           "더 약하게를 고르세요. 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 2~4분 걸립니다."
-                           )).pack(fill="x")
+                           "다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지만 고르세요. 헷갈리면 "
+                           "아무 쪽이나 골라도 됩니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 "
+                           "주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.")).pack(fill="x")
         stored = [t(self.NAMES[c]) for c in calibrate.FREQS if c in load_eq()]
         self._text(body, t("지금 보정: {channels}", channels=", ".join(stored) or t("없음")), fg=MUTED).pack(
             fill="x", pady=(10, 0))
@@ -890,24 +890,23 @@ class CalibrationDialog:
         Button(buttons, t("닫기"), self.close).pack(side="right")
 
     def _controls_hint(self) -> str:
-        return t("컨트롤러를 평소처럼 잡으세요. 패드 버튼으로 답할 수 있습니다: 십자키 ↑ 더 세게, ↓ 더 약하게, A 같음, "
-                 "X 다시 듣기, B 그만. 키보드는 ↑ ↓ Enter R Esc입니다. 재생 중에 눌러도 바로 반영됩니다.")
+        return t("컨트롤러를 평소처럼 잡으세요. 패드 버튼으로 답할 수 있습니다: 십자키 ← 또는 LB 첫 번째, → 또는 RB "
+                 "두 번째, X 다시 듣기, B 그만. 키보드는 ← → (또는 1 2) R Esc입니다. 재생 중에 눌러도 바로 반영됩니다.")
 
     def _render_session(self) -> None:
         body = self._clear()
         self.progress = self._text(body, "", font=font(13, "bold"))
         self.progress.pack(fill="x")
-        self.gain = self._text(body, "", fg=MUTED)
-        self.gain.pack(fill="x", pady=(4, 0))
+        self.trial = self._text(body, "", fg=MUTED)
+        self.trial.pack(fill="x", pady=(4, 0))
         self.state = self._text(body, "")
         self.state.pack(fill="x", pady=(10, 0))
         row = tk.Frame(body, bg=BG)
         row.pack(fill="x", pady=(12, 0))
-        for text, answer, kind in ((t("▲ 더 세게"), calibrate.STRONGER, "ghost"),
-                                   (t("▼ 더 약하게"), calibrate.WEAKER, "ghost"),
-                                   (t("✓ 같음"), calibrate.SAME, "primary"),
+        for text, answer, kind in ((t("◀ 첫 번째"), calibrate.FIRST, "primary"),
+                                   (t("두 번째 ▶"), calibrate.SECOND, "primary"),
                                    (t("↻ 다시 듣기"), calibrate.REPLAY, "ghost")):
-            Button(row, text, lambda a=answer: self.answer(a), kind=kind, min_width=96).pack(side="left", padx=(0, 8))
+            Button(row, text, lambda a=answer: self.answer(a), kind=kind, min_width=120).pack(side="left", padx=(0, 8))
         self._text(body, self._controls_hint(), fg=FAINT, font=font(9)).pack(fill="x", pady=(12, 0))
         Button(body, t("그만"), lambda: self.answer(calibrate.CANCEL), kind="danger").pack(anchor="e", pady=(12, 0))
 
@@ -1019,17 +1018,15 @@ class CalibrationDialog:
             {"start": self._render_start, "session": self._render_session, "end": self._render_end}[screen]()
         if screen == "session" and self.session and self.session.current:
             session = self.session
-            channel, freq = session.current
-            first = session.steps.index((channel, calibrate.FREQS[channel][0]))
-            self.progress.config(text=t("{name} {index}/{count} · {freq} Hz", name=t(self.NAMES[channel]),
+            channel, freq, neighbour = session.current
+            first = next(i for i, step in enumerate(session.steps) if step[0] == channel)
+            self.progress.config(text=t("{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz", name=t(self.NAMES[channel]),
                                         index=session.index - first + 1, count=len(calibrate.FREQS[channel]),
-                                        freq=f"{freq:g}"))
-            limit = " " + t("(한계: 같음으로 이 값을 씁니다)") if session.at_limit else ""
-            self.gain.config(text=t("기준음 {reference} Hz와 비교 · 시험음 ×{gain}",
-                                    reference=f"{calibrate.REFERENCE[channel]:g}", gain=f"{session.gain:.2f}") + limit)
+                                        freq=f"{freq:g}", neighbour=f"{neighbour:g}"))
+            self.trial.config(text=t("비교 {trial}번째", trial=session.staircase.trials + 1))
             self.state.config(text=t("그만두는 중…") if self.cancelled else
-                              t("기준음 → 시험음 재생 중…") if self.phase == "playing" else
-                              t("시험음이 기준음보다 어땠나요?"))
+                              t("첫 번째 → 두 번째 재생 중…") if self.phase == "playing" else
+                              t("어느 쪽이 더 셌나요?"))
         self.top.after(50, self._poll)
 
 

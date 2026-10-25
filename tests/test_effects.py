@@ -10,8 +10,8 @@ import unittest
 from unittest import mock
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE
-from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, TOGGLEABLE, Equalizer, Gains, NoiseBurst, Synth,
-                     Texture, effective_gains, surface_of)
+from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, TOGGLEABLE, Burst, Equalizer, Gains, NoiseBurst,
+                     ResonanceCut, Synth, Texture, effective_gains, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
 _render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise
@@ -299,7 +299,8 @@ class EqualizerTest(unittest.TestCase):
     def test_default_for_a_motor_the_player_has_not_measured(self) -> None:
         untouched = Equalizer.for_player({})
         default = Equalizer.DEFAULT
-        for got, want in zip(untouched.pair(100.0) + untouched.pair(65.0),
+        for got, want in zip((untouched.gain("grip", 100.0), untouched.gain("trigger", 100.0),
+                              untouched.gain("grip", 65.0), untouched.gain("trigger", 65.0)),
                              (default["grip"]["100"] * self.G, 1.0, self.G, default["trigger"]["65"])):
             self.assertAlmostEqual(got, want)
         own = Equalizer.for_player({"grip": self.CURVES["grip"]})
@@ -315,6 +316,45 @@ class EqualizerTest(unittest.TestCase):
         self.assertAlmostEqual(eq.gain("grip", 20.0), 2.0 * self.G)  # held past the ends
         self.assertAlmostEqual(eq.gain("trigger", 300.0), 1.5)
         self.assertAlmostEqual(Equalizer({"grip": {"30": 50.0}}).gain("grip", 30.0), Equalizer.LIMITS[1] * self.G)
+
+    def test_resonance_cut_fitted_to_the_curve(self) -> None:
+        center, depth, q = Equalizer.for_player({}).resonances["grip"]
+        self.assertAlmostEqual(center, 65.0)
+        self.assertAlmostEqual(depth, 20 * math.log10(3.27 / 1.0), places=1)  # the floor: median from 100 Hz up
+        self.assertTrue(3.0 < q < 6.0)
+        self.assertIsNone(Equalizer().resonances["grip"])  # flat
+        self.assertIsNone(Equalizer({"grip": {"50": 1.2, "65": 1.0, "100": 1.2, "200": 1.1}}).resonances["grip"])
+
+    def test_pair_makes_up_the_cut(self) -> None:
+        eq = Equalizer.for_player({})
+        for freq in (30.0, 65.0, 80.0, 160.0):
+            grip, trigger = eq.pair(freq)
+            self.assertAlmostEqual(grip * eq.shapes["grip"].magnitude(freq), eq.gain("grip", freq))
+            self.assertAlmostEqual(trigger * eq.shapes["trigger"].magnitude(freq), eq.gain("trigger", freq))
+
+    def test_steady_tone_as_strong_as_the_curve_says(self) -> None:
+        values = {"retarder": 2, "retarder_steps": 4, "speed": 25.0}  # a pure 65 Hz hum
+        gains = Gains(disabled=[name for name in TOGGLEABLE if name != "retarder"])
+        flat, eq = Synth(effective_gains(gains)), Synth(effective_gains(gains), Equalizer.for_player({}))
+        flat_rms, eq_rms = (rms(left_grip(s, **values)) for s in (flat, eq))
+        self.assertAlmostEqual(eq_rms / flat_rms, Equalizer.for_player({}).gain("grip", 65.0), delta=0.02)
+
+    def test_knock_near_the_resonance_stops_with_the_cut(self) -> None:
+        """Through a motor that resonates as the curve says, a 65 Hz knock rings on without the cut."""
+        eq = Equalizer.for_player({})
+        center, depth, q = eq.resonances["grip"]
+
+        def felt(cut: bool) -> list[float]:
+            knock, motor, shaper = Burst(65.0, 0.5, 0.025, phase=0.25), ResonanceCut(center, -depth, q), eq.cut("grip")
+            gain = eq.pair(65.0)[0] if cut else eq.gain("grip", 65.0)
+            return [motor.next(shaper.next(knock.next() * gain) if cut else knock.next() * gain) for _ in range(300)]
+
+        def length(x: list[float]) -> int:
+            above = [n for n, v in enumerate(x) if abs(v) > 0.1 * max(map(abs, x))]
+            return above[-1] - above[0]
+
+        self.assertLess(length(felt(True)), 60)  # ms: the knock's own 55
+        self.assertGreater(length(felt(False)), 2 * length(felt(True)))
 
     def test_default_grips_as_loud_as_flat_on_the_scripted_drive(self) -> None:
         def left(eq: Equalizer | None) -> list[float]:

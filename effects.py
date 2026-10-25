@@ -14,6 +14,7 @@ unit of drive.
 from __future__ import annotations
 
 import bisect
+import cmath
 import math
 import random
 from dataclasses import dataclass, field, replace
@@ -104,6 +105,8 @@ TRAILER_BUMP_HZ = 10.0  # higher: the trailer's hits come through the coupling l
 BUMP_RATTLE_FROM = 0.3  # hit size (0..1) from which the cab rattles after it
 BUMP_RATTLE_S = 0.3
 BUMP_RATTLE_MAX = 16  # knocks alive at once, all wheels together
+BUMP_RESTRIKE_S = 0.02  # s: a stronger reading this soon is the same step peaking (the next frame from 50 fps)
+BUMP_GAP_S = 0.06  # s before a wheel knocks again: a step's rebound and the next frames of rough ground wait
 
 
 def surface_of(name: str) -> Surface | None:
@@ -201,6 +204,41 @@ class Gains:
 FLAT = (1.0, 1.0)
 
 
+class ResonanceCut:
+    """A motor's resonance taken back out of its drive: a peaking cut (RBJ biquad), 1 away from it.
+
+    A pulse near the resonance ends before it has built the resonance up, then
+    leaves it ringing for tens of milliseconds: through a motor modelled on the
+    default grip curve (+10 dB at 65 Hz, Q 4.4) a 65 Hz joint knock reached a third
+    of its strength and lasted 2.4 times as long, soft and round, and every knock
+    blurred into the same hum. Cut by the curve's
+    own peak, the drive cancels that ringing and the hand gets the pulse as
+    shaped. Each effect's eq makes the cut up at its own frequency (Equalizer.pair),
+    so a steady tone feels as before.
+    """
+
+    def __init__(self, center: float, depth_db: float, q: float) -> None:
+        self.center, self.depth_db, self.q = center, depth_db, q
+        a = 10.0 ** (-depth_db / 40.0)
+        w = TAU * center / SAMPLE_RATE
+        alpha = math.sin(w) / (2.0 * q)
+        a0 = 1.0 + alpha / a
+        self.b0, self.b1, self.b2 = (1.0 + alpha * a) / a0, -2.0 * math.cos(w) / a0, (1.0 - alpha * a) / a0
+        self.a1, self.a2 = -2.0 * math.cos(w) / a0, (1.0 - alpha / a) / a0
+        self.x1 = self.x2 = self.y1 = self.y2 = 0.0
+
+    def magnitude(self, freq: float) -> float:
+        z = cmath.exp(-1j * TAU * freq / SAMPLE_RATE)
+        return abs((self.b0 + self.b1 * z + self.b2 * z * z) / (1.0 + self.a1 * z + self.a2 * z * z))
+
+    def next(self, x: float) -> float:
+        y = self.b0 * x + self.b1 * self.x1 + self.b2 * self.x2 - self.a1 * self.y1 - self.a2 * self.y2
+        if not x and abs(y) < 1e-6 and abs(self.y1) < 1e-6:
+            y = 0.0  # rung out: back to exact silence, which mutes the trigger route
+        self.x2, self.x1, self.y2, self.y1 = self.x1, x, self.y1, y
+        return y
+
+
 class Equalizer:
     """How much more drive each frequency needs to feel as strong as the reference, per output.
 
@@ -211,10 +249,17 @@ class Equalizer:
     over log frequency, and past the ends it holds. A curve plays at its
     channel's LEVEL, so it shifts the balance between frequencies without
     making the channel louder overall.
+
+    A scale per effect only fits a steady tone. The resonance a curve shows
+    also rings after every short pulse, so each channel's output goes through
+    a ResonanceCut fitted to the curve, and pair() makes it up at each effect's
+    frequency.
     """
 
     LIMITS = (0.25, 4.0)
     CHANNELS = ("grip", "trigger")
+    RESONANCE_MIN_DB = 3.0  # a shallower dip is left to the per-effect gains alone
+    RESONANCE_Q = (1.0, 8.0)  # range fitted; past 8 a slightly misplaced cut would miss the peak
     # A grip curve lifts most of the band 3-4x over the 65 Hz reference. At full level that
     # doubled the grips on the scripted drive and put 3% of their output into the soft limit
     # (0.2% flat); at 0.4 their loudness and limiting match the flat curve's again. The trigger
@@ -248,8 +293,43 @@ class Equalizer:
                     points.append((math.log(freq), math.log(min(max(gain, self.LIMITS[0]), self.LIMITS[1])) + level))
             self.points[channel] = sorted(points)
         self.flat = not any(self.points.values())
+        self.resonances = {channel: self._resonance(self.points[channel]) for channel in self.CHANNELS}
+        # stateless copies for their magnitudes
+        self.shapes = {channel: ResonanceCut(*found) if found else None for channel, found in self.resonances.items()}
+
+    def _resonance(self, points: list[tuple[float, float]]) -> tuple[float, float, float] | None:
+        """(Hz, dB, Q) of the resonance a curve shows: its lowest point against the median of the
+        points from half an octave above, as wide as the points within an octave of it say."""
+        if len(points) < 4:
+            return None
+        x0, y0 = min(points, key=lambda point: point[1])
+        above = sorted(y for x, y in points if x >= x0 + math.log(2.0) / 2)
+        if len(above) < 2:
+            return None
+        floor = (above[(len(above) - 1) // 2] + above[len(above) // 2]) / 2
+        depth = (floor - y0) * 20.0 / math.log(10.0)
+        if depth < self.RESONANCE_MIN_DB:
+            return None
+        center = math.exp(x0)
+        # how far each neighbour stands out over the floor; one that needs more than the floor is outside it
+        near = [(math.exp(x), max(0.0, (floor - y) * 20.0 / math.log(10.0)))
+                for x, y in points if 0 < abs(x - x0) <= math.log(2.0)]
+        low, high = self.RESONANCE_Q
+
+        def misfit(q: float) -> float:
+            shape = ResonanceCut(center, depth, q)
+            return sum((-20.0 * math.log10(shape.magnitude(freq)) - lift) ** 2 for freq, lift in near)
+
+        q = min((low + n * 0.1 for n in range(round((high - low) / 0.1) + 1)), key=misfit)
+        return center, depth, q
+
+    def cut(self, channel: str) -> ResonanceCut | None:
+        """A fresh filter for one output of this channel; None when its curve shows no resonance."""
+        found = self.resonances[channel]
+        return ResonanceCut(*found) if found else None
 
     def gain(self, channel: str, freq: float) -> float:
+        """The curve: how much a steady tone at freq is driven, all told."""
         points = self.points[channel]
         if not points or freq <= 0:
             return 1.0
@@ -263,8 +343,11 @@ class Equalizer:
         return math.exp(y0 + (y1 - y0) * (x - x0) / (x1 - x0))
 
     def pair(self, freq: float) -> tuple[float, float]:
-        """(grip, trigger) gain for a vibration at freq."""
-        return FLAT if self.flat else (self.gain("grip", freq), self.gain("trigger", freq))
+        """(grip, trigger) gain for a vibration at freq, ahead of its channel's ResonanceCut."""
+        if self.flat:
+            return FLAT
+        return tuple(self.gain(channel, freq) / (shape.magnitude(freq) if shape else 1.0)
+                     for channel, shape in self.shapes.items())
 
 
 def route_of(gains: Gains, name: str) -> str:
@@ -533,6 +616,7 @@ class Synth:
     def __init__(self, gains: Gains, eq: Equalizer | None = None) -> None:
         self.g = gains
         self.eq = eq or Equalizer()
+        self.cuts = (self.eq.cut("grip"), self.eq.cut("grip"), self.eq.cut("trigger"))  # left, right, trigger
         self.engine_osc = Oscillator()
         # each cylinder's own share of the idle's unevenness, the same every cycle
         self.cylinder_offsets = [random.Random(11 + n).uniform(-1.0, 1.0) for n in range(12)]
@@ -643,12 +727,13 @@ class Synth:
                 rattles = size >= BUMP_RATTLE_FROM and not trailer
                 entry = self.bump_bursts[i]
                 if entry is not None and not entry[1].done:
-                    # One pulse per wheel: a pothole spans several blocks and rough
-                    # ground trips every block, so lift the ringing pulse to the
-                    # stronger hit instead of stacking more. Keeps the work bounded
-                    # by the wheel count once trailers multiply the wheels.
+                    # One pulse per wheel, which keeps the work bounded by the wheel
+                    # count once trailers multiply the wheels. A step trips several
+                    # frames, down and back up; striking again on each one drew a
+                    # 25 ms knock out into 60-150 ms of hum. Only the step's next
+                    # frame may still strike it harder, then the wheel waits.
                     where, current = entry
-                    if strength > current.level:
+                    if strength > current.level and (current.age < BUMP_RESTRIKE_S or current.age >= BUMP_GAP_S):
                         current.retrigger(strength, freq, decay)
                         if rattles:
                             self._rattle(where, strength, size)
@@ -724,7 +809,7 @@ class Synth:
         for key, value in (("throttle", frame.user_throttle), ("brake", frame.user_brake)):
             floored = value >= 0.97
             if self._changed(f"{key}_floor", floored) and floored and g.pedal:
-                self._both("pedal", Burst(130.0, 0.8 * g.pedal, 0.012))
+                self._both("pedal", Burst(130.0, 0.8 * g.pedal, 0.012, phase=0.25))
                 log.append(t("페달 바닥"))
 
         if self._changed("park_brake", frame.park_brake) and g.park_brake:
@@ -765,7 +850,7 @@ class Synth:
         for key, on, side in (("blinker_l", frame.blinker_left, "L"),
                               ("blinker_r", frame.blinker_right, "R")):
             if self._changed(key, on) and g.blinker:
-                self.bursts.append(("blinker", side, Burst(160.0, (1.0 if on else 0.7) * g.blinker, 0.01)))
+                self.bursts.append(("blinker", side, Burst(160.0, (1.0 if on else 0.7) * g.blinker, 0.01, phase=0.25)))
                 if self.blinker_idle > 1.5:
                     log.append(t("방향지시등 좌") if key == "blinker_l" else t("방향지시등 우"))
                 self.blinker_idle = 0.0
@@ -783,7 +868,7 @@ class Synth:
         for i, toggle in enumerate(frame.shifter_toggle):
             if self._changed(f"shifter_{i}", toggle) and g.shifter:
                 s = g.shifter
-                self._both("shifter", Burst(120.0, 1.0 * s, 0.012))
+                self._both("shifter", Burst(120.0, 1.0 * s, 0.012, phase=0.25))
                 log.append(t("레인지 셀렉터") if i == 0 else t("스플리터"))
 
         previous = self.prev_state.get("game_events", frozenset())
@@ -791,8 +876,9 @@ class Synth:
         for name in sorted(frame.game_events - previous):
             if g.game_events:
                 s = g.game_events
-                self._both("game_events", Burst(80.0, 1.0 * s, 0.03))
-                self._both("game_events", Burst(80.0, 1.0 * s, 0.03, delay_s=0.12))
+                # two taps, each over in a few cycles so the pair stays two
+                self._both("game_events", Burst(80.0, 1.0 * s, 0.015, phase=0.25))
+                self._both("game_events", Burst(80.0, 1.0 * s, 0.015, delay_s=0.12, phase=0.25))
             log.append(t(GAME_EVENT_LABELS[name]) if name in GAME_EVENT_LABELS else name)
 
     def _novelty(self, key: str, value: float, scale: float) -> float:
@@ -1015,13 +1101,15 @@ class Synth:
                     _mix(drive, routes[effect], 0.0 if side == "R" else d, 0.0 if side == "L" else d, d)
                 b = burst.next()
                 _mix(out, routes[effect], 0.0 if side == "R" else b, 0.0 if side == "L" else b, b, burst_eq)
-            for i in range(3):
+            for i, cut in enumerate(self.cuts):
                 target = min(1.0, drive[i] / DUCK_FULL) * g.ducking
                 if target > self.duck[i]:
                     self.duck[i] += (target - self.duck[i]) * DUCK_ATTACK
                 else:
                     self.duck[i] = max(target, self.duck[i] * DUCK_RELEASE)
                 out[i] += bed[i] * (1.0 - self.duck[i])
+                if cut:
+                    out[i] = cut.next(out[i])
 
             left.append(self._out(out[0], self.g.grip_level))
             right.append(self._out(out[1], self.g.grip_level))

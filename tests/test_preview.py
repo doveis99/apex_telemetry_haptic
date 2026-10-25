@@ -43,7 +43,7 @@ class PreviewTest(unittest.TestCase):
                 half = len(left) // 2
                 self.assertGreater(peak(left[:half]), 0.1)
                 self.assertEqual(peak(right[:half]), 0.0)
-                self.assertEqual(peak(left[half:]), 0.0)
+                self.assertLess(peak(left[half:]), 0.02)  # at most the last of the resonance cut's tail
                 self.assertGreater(peak(right[half:]), 0.1)
 
     def test_bumps_hit_the_left_wheels_first(self) -> None:

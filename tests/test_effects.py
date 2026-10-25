@@ -7,8 +7,9 @@ import itertools
 import math
 import random
 import unittest
+from unittest import mock
 
-from apex6 import SAMPLE_RATE
+from apex6 import MAX_SAMPLE, SAMPLE_RATE
 from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, TOGGLEABLE, Equalizer, Gains, NoiseBurst, Synth,
                      Texture, effective_gains, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
@@ -287,6 +288,7 @@ class ThrottlePulseTest(unittest.TestCase):
 
 class EqualizerTest(unittest.TestCase):
     CURVES = {"grip": {"30": 2.0, "65": 1.0, "250": 2.0}, "trigger": {"100": 1.0, "200": 1.5}}
+    G = Equalizer.LEVEL["grip"]
 
     def test_flat_without_curves(self) -> None:
         self.assertEqual(Equalizer().pair(40.0), (1.0, 1.0))
@@ -294,26 +296,44 @@ class EqualizerTest(unittest.TestCase):
 
     def test_default_for_a_motor_the_player_has_not_measured(self) -> None:
         untouched = Equalizer.for_player({})
+        default = Equalizer.DEFAULT
         for got, want in zip(untouched.pair(100.0) + untouched.pair(65.0),
-                             (Equalizer.DEFAULT["grip"]["100"], 1.0, 1.0, Equalizer.DEFAULT["trigger"]["65"])):
+                             (default["grip"]["100"] * self.G, 1.0, self.G, default["trigger"]["65"])):
             self.assertAlmostEqual(got, want)
         own = Equalizer.for_player({"grip": self.CURVES["grip"]})
-        self.assertAlmostEqual(own.gain("grip", 30.0), 2.0)
+        self.assertAlmostEqual(own.gain("grip", 30.0), 2.0 * self.G)
         self.assertAlmostEqual(own.gain("trigger", 200.0), Equalizer.DEFAULT["trigger"]["200"])
         for curve in Equalizer.DEFAULT.values():  # inside the limits, so stored as measured
             self.assertTrue(all(Equalizer.LIMITS[0] <= gain <= Equalizer.LIMITS[1] for gain in curve.values()))
 
     def test_follows_the_measured_points_in_db(self) -> None:
         eq = Equalizer(self.CURVES)
-        self.assertAlmostEqual(eq.gain("grip", 30.0), 2.0)
-        self.assertAlmostEqual(eq.gain("grip", math.sqrt(30.0 * 65.0)), math.sqrt(2.0))  # halfway in both
-        self.assertAlmostEqual(eq.gain("grip", 20.0), 2.0)  # held past the ends
+        self.assertAlmostEqual(eq.gain("grip", 30.0), 2.0 * self.G)  # at the grips' level
+        self.assertAlmostEqual(eq.gain("grip", math.sqrt(30.0 * 65.0)), math.sqrt(2.0) * self.G)  # halfway in both
+        self.assertAlmostEqual(eq.gain("grip", 20.0), 2.0 * self.G)  # held past the ends
         self.assertAlmostEqual(eq.gain("trigger", 300.0), 1.5)
-        self.assertEqual(Equalizer({"grip": {"30": 50.0}}).gain("grip", 30.0), Equalizer.LIMITS[1])
+        self.assertAlmostEqual(Equalizer({"grip": {"30": 50.0}}).gain("grip", 30.0), Equalizer.LIMITS[1] * self.G)
+
+    def test_default_grips_as_loud_as_flat_on_the_scripted_drive(self) -> None:
+        def left(eq: Equalizer | None) -> list[float]:
+            clock = [0.0]
+            source = SimulatedTelemetry(None, clock=lambda: clock[0])
+            s = Synth(effective_gains(Gains()), eq)
+            samples = []
+            for n in range(round(25.0 / DT)):  # yard, launch, highway with potholes and a rumble strip
+                clock[0] = n * DT
+                samples.extend(s.render(source.read()).left_grip)
+            return samples
+
+        flat, default = left(None), left(Equalizer.for_player({}))
+        self.assertLess(abs(math.log(rms(default) / rms(flat))), math.log(1.25))  # within 2 dB
+        self.assertLess(sum(abs(x) > 0.9 * MAX_SAMPLE for x in default) / len(default), 0.01)  # rarely limited
 
     def synths(self, effect: str) -> tuple[Synth, Synth]:
         gains = Gains(steady_fade=0.0, disabled=[name for name in TOGGLEABLE if name != effect])
-        return Synth(effective_gains(gains)), Synth(effective_gains(gains), Equalizer(self.CURVES))
+        with mock.patch.dict(Equalizer.LEVEL, grip=1.0):  # the curve's shape alone
+            eq = Equalizer(self.CURVES)
+        return Synth(effective_gains(gains)), Synth(effective_gains(gains), eq)
 
     def test_idle_engine_gets_the_grips_low_end_boost(self) -> None:
         values = {"rpm": 650.0, "game_throttle": 0.0, "user_throttle": 0.0}  # 32.5 Hz, x1.86 on this curve

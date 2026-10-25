@@ -204,11 +204,18 @@ class Equalizer:
     same drive feels far weaker off resonance. The motor calibration measures it
     by matching tones against the reference by feel; until then a motor gets
     DEFAULT. Between the measured points the gain follows a straight line in dB
-    over log frequency, and past the ends it holds.
+    over log frequency, and past the ends it holds. A curve plays at its
+    channel's LEVEL, so it shifts the balance between frequencies without
+    making the channel louder overall.
     """
 
     LIMITS = (0.25, 4.0)
     CHANNELS = ("grip", "trigger")
+    # A grip curve lifts most of the band 3-4x over the 65 Hz reference. At full level that
+    # doubled the grips on the scripted drive and put 3% of their output into the soft limit
+    # (0.2% flat); at 0.4 their loudness and limiting match the flat curve's again. The trigger
+    # effects sit at the triggers' own 100 Hz reference and need no scaling.
+    LEVEL = {"grip": 0.4, "trigger": 1.0}
     # Matched by feel on the developer's APEX in the window's calibration (2026-10-25), then
     # smoothed in dB (1-2-1 along each side; the reference's neighbours kept as measured), which
     # moves no point by more than the 1.5 dB staircase step.
@@ -226,6 +233,7 @@ class Equalizer:
         self.points: dict[str, list[tuple[float, float]]] = {}
         for channel in self.CHANNELS:
             stored = (curves or {}).get(channel)
+            level = math.log(self.LEVEL[channel])
             points = []
             for freq, gain in (stored.items() if isinstance(stored, dict) else ()):
                 try:
@@ -233,7 +241,7 @@ class Equalizer:
                 except (TypeError, ValueError):
                     continue
                 if freq > 0 and gain > 0:
-                    points.append((math.log(freq), math.log(min(max(gain, self.LIMITS[0]), self.LIMITS[1]))))
+                    points.append((math.log(freq), math.log(min(max(gain, self.LIMITS[0]), self.LIMITS[1])) + level))
             self.points[channel] = sorted(points)
         self.flat = not any(self.points.values())
 

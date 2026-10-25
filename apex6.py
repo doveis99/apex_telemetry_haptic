@@ -44,7 +44,6 @@ SUBFRAMES = 8
 FRAME_PERIOD = SUBFRAMES / SAMPLE_RATE  # 8 ms
 MAX_SAMPLE = 112  # ASB never exceeds this; keeps headroom below the int8 limit
 ENABLE_DELAY = 0.094
-IDLE_KEEPALIVE_FRAMES = 6
 # The firmware drops the motor route when something else configures the
 # motors (the game or Steam initialising the gamepad as it loads) or when the
 # controller sleeps and re-pairs with the dongle. Realtime writes keep
@@ -348,15 +347,17 @@ class Apex6:
             if lateness > FRAME_PERIOD * 1000.0:
                 stats.late_frames += 1
                 deadline = now  # resync instead of bursting to catch up
-            # Like ASB: after a run of silent blocks only send a keepalive
-            # every ~48 ms to spare the 2.4 GHz link.
+            # Every block goes out, silence too. ASB thinned a run of silence to
+            # a keepalive every ~48 ms to spare the 2.4 GHz link, but the pad
+            # then plays whatever comes next without slack: wired, a 250 Hz tone
+            # after 0.4 s of thinned silence came out low and pulsing, with no
+            # late frame on this side; after silence sent every 8 ms it did not.
+            self.write_block(block)
+            write_ms = (time.perf_counter() - now) * 1000.0
+            stats.total_write_ms += write_ms
+            stats.max_write_ms = max(stats.max_write_ms, write_ms)
+            stats.frames += 1
             silent_streak = silent_streak + 1 if block.is_silent() else 0
-            if silent_streak <= SUBFRAMES or silent_streak % IDLE_KEEPALIVE_FRAMES == 0:
-                self.write_block(block)
-                write_ms = (time.perf_counter() - now) * 1000.0
-                stats.total_write_ms += write_ms
-                stats.max_write_ms = max(stats.max_write_ms, write_ms)
-                stats.frames += 1
             if now - last_reassert >= (REASSERT_IDLE_S if silent_streak else REASSERT_ACTIVE_S):
                 self.reassert()
                 last_reassert = now

@@ -315,14 +315,20 @@ MESSAGES = {
          "comptent même pendant les sons."),
     "◀ 첫 번째": "◀ Premier",
     "두 번째 ▶": "Second ▶",
-    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지만 고르세요. 헷갈리면 아무 쪽이나 골라도 됩니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.":
+    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지 고르세요. 조금이라도 센 쪽이 있으면 그쪽을, 정말 구분이 안 되면 아무 쪽이나 고르면 됩니다. 구분이 안 된다는 건 거의 같아졌다는 뜻이라 결과가 틀어지지 않습니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.":
         ("Les moteurs vibrent le plus fort vers 65 Hz (poignées) et 100 Hz (gâchettes) : un même signal se ressent "
-         "différemment selon la fréquence. Deux fréquences voisines jouent l'une après l'autre : choisissez "
-         "simplement la plus forte. En cas de doute, choisissez n'importe laquelle. Les réponses resserrent la force "
-         "à laquelle les deux se ressentent pareil, et chaque effet est corrigé d'autant à chaque fréquence. Comptez "
-         "3 à 5 minutes par moteur."),
+         "différemment selon la fréquence. Deux fréquences voisines jouent l'une après l'autre : choisissez la plus "
+         "forte. Si l'une semble même un peu plus forte, choisissez-la ; si vous ne sentez vraiment aucune différence, "
+         "choisissez n'importe laquelle. C'est qu'elles sont déjà presque égales, et cela ne fausse pas le résultat. "
+         "Les réponses resserrent la force à laquelle les deux se ressentent pareil, et chaque effet est corrigé "
+         "d'autant à chaque fréquence. Comptez 3 à 5 minutes par moteur."),
     "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz": "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz",
     "비교 {trial}번째": "Comparaison {trial}",
     "첫 번째 → 두 번째 재생 중…": "Premier → second son en cours…",
     "어느 쪽이 더 셌나요?": "Lequel était le plus fort ?",
+    "조금이라도 센 쪽이 있으면 그쪽을, 구분이 안 되면 아무 쪽이나 고르세요. 거의 같아졌다는 뜻이라 결과가 틀어지지 않습니다. 재생 중에 눌러도 바로 반영됩니다.":
+        ("Si l'un semble même un peu plus fort, choisissez-le ; sinon, choisissez n'importe lequel. C'est qu'ils sont "
+         "presque égaux, et cela ne fausse pas le résultat. Les réponses comptent même pendant les sons."),
+    "패드 {buttons}": "Manette {buttons}",
+    "키보드 {keys}": "Clavier {keys}",
 }

@@ -315,14 +315,21 @@ MESSAGES = {
          "zählen auch, während die Töne laufen."),
     "◀ 첫 번째": "◀ Erster",
     "두 번째 ▶": "Zweiter ▶",
-    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지만 고르세요. 헷갈리면 아무 쪽이나 골라도 됩니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.":
+    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지 고르세요. 조금이라도 센 쪽이 있으면 그쪽을, 정말 구분이 안 되면 아무 쪽이나 고르면 됩니다. 구분이 안 된다는 건 거의 같아졌다는 뜻이라 결과가 틀어지지 않습니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.":
         ("Die Motoren schwingen am stärksten bei etwa 65 Hz (Griffe) und 100 Hz (Trigger), daher fühlt sich dieselbe "
-         "Ansteuerung bei jeder Frequenz anders an. Zwei benachbarte Frequenzen spielen nacheinander: Wählen Sie "
-         "einfach den stärkeren Ton. Wenn Sie unsicher sind, wählen Sie irgendeinen. Die Antworten grenzen die "
-         "Stärke ein, bei der sich beide gleich anfühlen, und jeder Effekt wird bei jeder Frequenz um so viel "
-         "korrigiert. Pro Motor dauert es 3–5 Minuten."),
+         "Ansteuerung bei jeder Frequenz anders an. Zwei benachbarte Frequenzen spielen nacheinander: Wählen Sie den "
+         "stärkeren Ton. Ist einer auch nur etwas stärker, wählen Sie ihn; spüren Sie wirklich keinen Unterschied, "
+         "wählen Sie irgendeinen. Dann sind beide schon fast gleich, das Ergebnis verschiebt sich dadurch nicht. Die "
+         "Antworten grenzen die Stärke ein, bei der sich beide gleich anfühlen, und jeder Effekt wird bei jeder "
+         "Frequenz um so viel korrigiert. Pro Motor dauert es 3–5 Minuten."),
     "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz": "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz",
     "비교 {trial}번째": "Vergleich {trial}",
     "첫 번째 → 두 번째 재생 중…": "Erster → zweiter Ton läuft…",
     "어느 쪽이 더 셌나요?": "Welcher war stärker?",
+    "조금이라도 센 쪽이 있으면 그쪽을, 구분이 안 되면 아무 쪽이나 고르세요. 거의 같아졌다는 뜻이라 결과가 틀어지지 않습니다. 재생 중에 눌러도 바로 반영됩니다.":
+        ("Ist einer auch nur etwas stärker, wählen Sie ihn; spüren Sie keinen Unterschied, wählen Sie irgendeinen. "
+         "Dann sind beide fast gleich, das Ergebnis verschiebt sich dadurch nicht. Antworten zählen auch, während die "
+         "Töne laufen."),
+    "패드 {buttons}": "Pad {buttons}",
+    "키보드 {keys}": "Tastatur {keys}",
 }

@@ -868,9 +868,10 @@ class CalibrationDialog:
     def _render_start(self) -> None:
         body = self._clear()
         self._text(body, t("모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 "
-                           "다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지만 고르세요. 헷갈리면 "
-                           "아무 쪽이나 골라도 됩니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 "
-                           "주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.")).pack(fill="x")
+                           "다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지 고르세요. 조금이라도 "
+                           "센 쪽이 있으면 그쪽을, 정말 구분이 안 되면 아무 쪽이나 고르면 됩니다. 구분이 안 된다는 건 거의 "
+                           "같아졌다는 뜻이라 결과가 틀어지지 않습니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 "
+                           "찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.")).pack(fill="x")
         stored = [t(self.NAMES[c]) for c in calibrate.FREQS if c in load_eq()]
         self._text(body, t("지금 보정: {channels}", channels=", ".join(stored) or t("없음")), fg=MUTED).pack(
             fill="x", pady=(10, 0))
@@ -901,14 +902,25 @@ class CalibrationDialog:
         self.trial.pack(fill="x", pady=(4, 0))
         self.state = self._text(body, "")
         self.state.pack(fill="x", pady=(10, 0))
+        self._text(body, t("조금이라도 센 쪽이 있으면 그쪽을, 구분이 안 되면 아무 쪽이나 고르세요. 거의 같아졌다는 뜻이라 "
+                           "결과가 틀어지지 않습니다. 재생 중에 눌러도 바로 반영됩니다."), fg=MUTED, font=font(9)).pack(
+            fill="x", pady=(4, 0))
         row = tk.Frame(body, bg=BG)
-        row.pack(fill="x", pady=(12, 0))
-        for text, answer, kind in ((t("◀ 첫 번째"), calibrate.FIRST, "primary"),
-                                   (t("두 번째 ▶"), calibrate.SECOND, "primary"),
-                                   (t("↻ 다시 듣기"), calibrate.REPLAY, "ghost")):
-            Button(row, text, lambda a=answer: self.answer(a), kind=kind, min_width=120).pack(side="left", padx=(0, 8))
-        self._text(body, self._controls_hint(), fg=FAINT, font=font(9)).pack(fill="x", pady=(12, 0))
-        Button(body, t("그만"), lambda: self.answer(calibrate.CANCEL), kind="danger").pack(anchor="e", pady=(12, 0))
+        row.pack(fill="x", pady=(14, 0))
+        for text, answer, kind, pad, keys in ((t("◀ 첫 번째"), calibrate.FIRST, "primary", "← / LB", "← / 1"),
+                                              (t("두 번째 ▶"), calibrate.SECOND, "primary", "→ / RB", "→ / 2"),
+                                              (t("↻ 다시 듣기"), calibrate.REPLAY, "ghost", "X", "R")):
+            self._answer_button(row, text, answer, kind, pad, keys).pack(side="left", padx=(0, 8))
+        self._answer_button(row, t("그만"), calibrate.CANCEL, "danger", "B", "Esc", min_width=0).pack(side="right")
+
+    def _answer_button(self, parent: tk.Misc, text: str, answer: str, kind: str, pad: str, keys: str,
+                       min_width: int = 120) -> tk.Frame:
+        """A button with the pad and keyboard buttons that give the same answer written under it."""
+        column = tk.Frame(parent, bg=BG)
+        Button(column, text, lambda: self.answer(answer), kind=kind, min_width=min_width).pack()
+        tk.Label(column, text=t("패드 {buttons}", buttons=pad), bg=BG, fg=MUTED, font=font(9, "bold")).pack(pady=(5, 0))
+        tk.Label(column, text=t("키보드 {keys}", keys=keys), bg=BG, fg=FAINT, font=font(8)).pack()
+        return column
 
     def _render_end(self) -> None:
         body = self._clear()

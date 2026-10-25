@@ -312,13 +312,21 @@ MESSAGES = {
          "mientras suenan los tonos."),
     "◀ 첫 번째": "◀ Primero",
     "두 번째 ▶": "Segundo ▶",
-    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지만 고르세요. 헷갈리면 아무 쪽이나 골라도 됩니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.":
+    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지 고르세요. 조금이라도 센 쪽이 있으면 그쪽을, 정말 구분이 안 되면 아무 쪽이나 고르면 됩니다. 구분이 안 된다는 건 거의 같아졌다는 뜻이라 결과가 틀어지지 않습니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.":
         ("Los motores vibran con más fuerza cerca de 65 Hz (empuñaduras) y 100 Hz (gatillos), así que la misma señal "
-         "se siente distinta en cada frecuencia. Suenan dos frecuencias vecinas, una tras otra: solo elige la que se "
-         "sintió más fuerte. Si dudas, elige cualquiera. Las respuestas acotan la fuerza a la que ambas se sienten "
-         "iguales, y cada efecto se corrige en esa medida en cada frecuencia. Cada motor lleva 3–5 minutos."),
+         "se siente distinta en cada frecuencia. Suenan dos frecuencias vecinas, una tras otra: elige la que se sintió "
+         "más fuerte. Si una se sintió aunque sea un poco más fuerte, elígela; si de verdad no notas diferencia, elige "
+         "cualquiera. Eso significa que ya son casi iguales, así que no desvía el resultado. Las respuestas acotan la "
+         "fuerza a la que ambas se sienten iguales, y cada efecto se corrige en esa medida en cada frecuencia. Cada "
+         "motor lleva 3–5 minutos."),
     "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz": "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz",
     "비교 {trial}번째": "Comparación {trial}",
     "첫 번째 → 두 번째 재생 중…": "Sonando el primero → el segundo…",
     "어느 쪽이 더 셌나요?": "¿Cuál fue más fuerte?",
+    "조금이라도 센 쪽이 있으면 그쪽을, 구분이 안 되면 아무 쪽이나 고르세요. 거의 같아졌다는 뜻이라 결과가 틀어지지 않습니다. 재생 중에 눌러도 바로 반영됩니다.":
+        ("Si uno se sintió aunque sea un poco más fuerte, elígelo; si no notas diferencia, elige cualquiera. Eso "
+         "significa que ya son casi iguales, así que no desvía el resultado. Las respuestas cuentan incluso mientras "
+         "suenan los tonos."),
+    "패드 {buttons}": "Mando {buttons}",
+    "키보드 {keys}": "Teclado {keys}",
 }

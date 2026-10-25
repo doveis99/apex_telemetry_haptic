@@ -306,13 +306,19 @@ MESSAGES = {
          "X replay, B stop. On the keyboard: ← → (or 1 2) R Esc. Answers count even while the tones play."),
     "◀ 첫 번째": "◀ First",
     "두 번째 ▶": "Second ▶",
-    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지만 고르세요. 헷갈리면 아무 쪽이나 골라도 됩니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.":
-        ("The motors ring hardest near 65 Hz (grips) and 100 Hz (triggers), so the same drive feels different at "
-         "each frequency. Two neighbouring frequencies play one after the other: just pick the one that felt "
-         "stronger. If you can't tell, pick either. The answers close in on the strength at which the two feel the "
-         "same, and every effect is corrected by that much at each frequency. Each motor takes 3–5 minutes."),
+    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지 고르세요. 조금이라도 센 쪽이 있으면 그쪽을, 정말 구분이 안 되면 아무 쪽이나 고르면 됩니다. 구분이 안 된다는 건 거의 같아졌다는 뜻이라 결과가 틀어지지 않습니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.":
+        ("The motors ring hardest near 65 Hz (grips) and 100 Hz (triggers), so the same drive feels different at each "
+         "frequency. Two neighbouring frequencies play one after the other: pick the one that felt stronger. If one "
+         "felt even slightly stronger, pick it; if you really can't tell, pick either. Not being able to tell means "
+         "they are nearly equal, so it doesn't skew the result. The answers close in on the strength at which the two "
+         "feel the same, and every effect is corrected by that much at each frequency. Each motor takes 3–5 minutes."),
     "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz": "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz",
     "비교 {trial}번째": "Comparison {trial}",
     "첫 번째 → 두 번째 재생 중…": "Playing first → second…",
     "어느 쪽이 더 셌나요?": "Which one was stronger?",
+    "조금이라도 센 쪽이 있으면 그쪽을, 구분이 안 되면 아무 쪽이나 고르세요. 거의 같아졌다는 뜻이라 결과가 틀어지지 않습니다. 재생 중에 눌러도 바로 반영됩니다.":
+        ("If one felt even slightly stronger, pick it; if you can't tell, pick either. That means they are nearly "
+         "equal, so it doesn't skew the result. Answers count even while the tones play."),
+    "패드 {buttons}": "Pad {buttons}",
+    "키보드 {keys}": "Keyboard {keys}",
 }

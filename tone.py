@@ -257,7 +257,8 @@ def run_calibrate(pad: Apex6, channels: list[str], amp: float, seconds: float) -
         return buttons.poll() or _console_key()
 
     print("컨트롤러를 평소처럼 잡으세요. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지만 고르세요.")
-    print("헷갈리면 아무 쪽이나 골라도 됩니다. 답에 따라 같게 느껴지는 세기를 좁혀 갑니다. 재생 중에 눌러도 됩니다.")
+    print("조금이라도 센 쪽이 있으면 그쪽을, 구분이 안 되면 아무 쪽이나 고르세요. 거의 같아졌다는 뜻이라 "
+          "결과가 틀어지지 않습니다. 답에 따라 같게 느껴지는 세기를 좁혀 갑니다. 재생 중에 눌러도 됩니다.")
     print("  패드: 십자키 ← 또는 LB 첫 번째 / → 또는 RB 두 번째 / X 다시 듣기 / B 그만")
     print("  키보드: ← 또는 1 / → 또는 2 / r / q")
     if not buttons.connected:

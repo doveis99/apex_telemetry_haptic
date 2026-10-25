@@ -303,14 +303,20 @@ MESSAGES = {
          "odtwarzania."),
     "◀ 첫 번째": "◀ Pierwszy",
     "두 번째 ▶": "Drugi ▶",
-    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지만 고르세요. 헷갈리면 아무 쪽이나 골라도 됩니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.":
+    "모터는 그립 약 65Hz, 트리거 약 100Hz에서 가장 세게 울려서, 같은 세기로 보내도 주파수마다 다르게 느껴집니다. 이웃한 두 주파수가 차례로 울리면 어느 쪽이 더 셌는지 고르세요. 조금이라도 센 쪽이 있으면 그쪽을, 정말 구분이 안 되면 아무 쪽이나 고르면 됩니다. 구분이 안 된다는 건 거의 같아졌다는 뜻이라 결과가 틀어지지 않습니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.":
         ("Silniki drgają najmocniej w okolicy 65 Hz (uchwyty) i 100 Hz (spusty), więc ten sam sygnał przy każdej "
          "częstotliwości czuć inaczej. Dwie sąsiednie częstotliwości grają po kolei: wybierz tę, która była "
-         "mocniejsza. Jeśli nie wiesz, wybierz dowolną. Odpowiedzi zawężają siłę, przy której obie są odczuwalne tak "
-         "samo, a każdy efekt zostanie o tyle skorygowany przy każdej częstotliwości. Jeden silnik zajmuje 3–5 "
-         "minut."),
+         "mocniejsza. Jeśli któraś była choć trochę mocniejsza, wybierz ją; jeśli naprawdę nie czujesz różnicy, "
+         "wybierz dowolną. To znaczy, że są już prawie równe, więc nie zaburza to wyniku. Odpowiedzi zawężają siłę, "
+         "przy której obie są odczuwalne tak samo, a każdy efekt zostanie o tyle skorygowany przy każdej "
+         "częstotliwości. Jeden silnik zajmuje 3–5 minut."),
     "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz": "{name} {index}/{count} · {freq} Hz ↔ {neighbour} Hz",
     "비교 {trial}번째": "Porównanie {trial}",
     "첫 번째 → 두 번째 재생 중…": "Gra pierwszy → drugi…",
     "어느 쪽이 더 셌나요?": "Który był mocniejszy?",
+    "조금이라도 센 쪽이 있으면 그쪽을, 구분이 안 되면 아무 쪽이나 고르세요. 거의 같아졌다는 뜻이라 결과가 틀어지지 않습니다. 재생 중에 눌러도 바로 반영됩니다.":
+        ("Jeśli któryś był choć trochę mocniejszy, wybierz go; jeśli nie czujesz różnicy, wybierz dowolny. To znaczy, "
+         "że są już prawie równe, więc nie zaburza to wyniku. Odpowiedzi działają także w trakcie odtwarzania."),
+    "패드 {buttons}": "Pad {buttons}",
+    "키보드 {keys}": "Klawiatura {keys}",
 }

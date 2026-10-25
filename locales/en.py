@@ -264,6 +264,14 @@ MESSAGES = {
     "GitHub 저장소 열기: 소스 코드, 릴리스, 문의(Issues)": "Open the GitHub repository: source code, releases, questions (Issues)",
     "이 효과 켜기/끄기. 꺼도 세기와 진동 위치는 남아서 다시 켜면 그대로 돌아옵니다.":
         "Turns this effect on or off. Its level and output are kept, so it comes back as it was.",
+    "이 효과만 몇 초 동안 울려 봅니다. 지금 세기, 진동 위치, 모터 보정 그대로이고, 꺼 둔 효과도 울립니다. 요철, 차선 요철, 방향지시등은 왼쪽 다음 오른쪽 순서입니다. 출력 중에는 그동안 주행 진동 대신 울립니다.":
+        ("Plays this effect alone for a few seconds, at its current level and output and with the motor "
+         "calibration, even while it is switched off. Bumps, Rumble strips and Turn signals play on the left, "
+         "then on the right. While the output runs, it plays in place of the driving vibration."),
+    "출력이 게임을 기다리는 중이라 지금은 컨트롤러를 쓰지 않습니다. 정지한 다음 테스트하세요.":
+        "The output is waiting for the game, so the controller is not in use. Stop it, then test.",
+    "효과 테스트": "Effect test",
+    "효과 테스트: {name}": "Effect test: {name}",
     "동봉한 RenCloud scs-telemetry.dll을 이 게임의 plugins 폴더에 복사합니다. 다른 플러그인은 건드리지 않습니다.":
         ("Copies the bundled RenCloud scs-telemetry.dll into this game's plugins folder. Other plugins are left "
          "alone."),

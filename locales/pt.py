@@ -264,6 +264,14 @@ MESSAGES = {
     "GitHub 저장소 열기: 소스 코드, 릴리스, 문의(Issues)": "Abrir o repositório no GitHub: código-fonte, versões, dúvidas (Issues)",
     "이 효과 켜기/끄기. 꺼도 세기와 진동 위치는 남아서 다시 켜면 그대로 돌아옵니다.":
         "Liga ou desliga este efeito. O nível e a saída são mantidos e voltam como estavam.",
+    "이 효과만 몇 초 동안 울려 봅니다. 지금 세기, 진동 위치, 모터 보정 그대로이고, 꺼 둔 효과도 울립니다. 요철, 차선 요철, 방향지시등은 왼쪽 다음 오른쪽 순서입니다. 출력 중에는 그동안 주행 진동 대신 울립니다.":
+        ("Toca só este efeito por alguns segundos, com o nível, a saída e a calibração dos motores atuais, mesmo "
+         "desligado. Buracos, Faixas sonoras e Setas tocam primeiro à esquerda e depois à direita. Com a saída "
+         "ligada, ele toca no lugar da vibração de direção enquanto isso."),
+    "출력이 게임을 기다리는 중이라 지금은 컨트롤러를 쓰지 않습니다. 정지한 다음 테스트하세요.":
+        "A saída está esperando o jogo e não está usando o controle agora. Pare-a e depois teste.",
+    "효과 테스트": "Teste de efeito",
+    "효과 테스트: {name}": "Teste de efeito: {name}",
     "동봉한 RenCloud scs-telemetry.dll을 이 게임의 plugins 폴더에 복사합니다. 다른 플러그인은 건드리지 않습니다.":
         ("Copia o RenCloud scs-telemetry.dll incluído para a pasta plugins deste jogo. Outros plugins não são "
          "alterados."),

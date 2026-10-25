@@ -78,6 +78,8 @@ The switch on the left turns each effect on or off. An effect that is off is gre
 
 **Output to** on the right picks where each effect vibrates: **Grip** (blue) | **Trigger** (orange) | **Both** (violet), for driving and event effects alike. The slider takes the colour of the chosen output, so you can see at a glance what goes where. Picking an output on an effect that is off turns it back on. "Default output" in the tables is the initial setting. Sided effects (road, bumps, turn signals) sent to the trigger are summed into it; trigger effects sent to the grips play on both grips. Changes apply at once and are kept when you **Save**.
 
+**▶** at the end of each row plays that effect alone for a few seconds, at its current level and output and with the motor calibration, even while it is switched off. Bumps, Rumble strips and Turn signals play on the left, then on the right, so you can check that the sides come apart; the meters show it too. With the output stopped it takes the controller only for those seconds; while the output runs it plays in place of the driving vibration.
+
 | Effect | Default (range) | Default output | What it does |
 |---|---|---|---|
 | **Engine** | 10% (0–200) | Both grips | The engine firing frequency (rpm ÷ 60 × cylinders ÷ 2, so rpm ÷ 20 for a six) plus its second harmonic. Stronger with more throttle and higher rpm. Each firing differs a little from the last (±8%); at idle the cylinders fire unevenly and it lopes, evening out as rpm and load rise. Under load a third harmonic makes it harsh. Nothing while the engine is off. |
@@ -277,6 +279,7 @@ ATS ─(scs-telemetry shared memory)─▶ telemetry.py ─▶ effects.py (1 kHz
                                        updater.py: GitHub release check and self-update
                                        i18n.py + locales\: interface languages    gui.py + widgets.py: window, tooltips
                                        blocklog.py: debug log           errorlog.py: unexpected error log
+                                       preview.py: each effect's ▶ test
 ```
 
 ## License

@@ -261,6 +261,14 @@ MESSAGES = {
     "GitHub 저장소 열기: 소스 코드, 릴리스, 문의(Issues)": "Otwórz repozytorium GitHub: kod źródłowy, wydania, pytania (Issues)",
     "이 효과 켜기/끄기. 꺼도 세기와 진동 위치는 남아서 다시 켜면 그대로 돌아옵니다.":
         "Włącza lub wyłącza ten efekt. Poziom i wyjście zostają i wracają bez zmian.",
+    "이 효과만 몇 초 동안 울려 봅니다. 지금 세기, 진동 위치, 모터 보정 그대로이고, 꺼 둔 효과도 울립니다. 요철, 차선 요철, 방향지시등은 왼쪽 다음 오른쪽 순서입니다. 출력 중에는 그동안 주행 진동 대신 울립니다.":
+        ("Odtwarza tylko ten efekt przez kilka sekund, z obecnym poziomem, wyjściem i kalibracją silników, nawet "
+         "gdy jest wyłączony. Nierówności, Pasy wibracyjne i Kierunkowskazy grają najpierw z lewej, potem z "
+         "prawej. Gdy wyjście działa, zastępuje na ten czas wibrację jazdy."),
+    "출력이 게임을 기다리는 중이라 지금은 컨트롤러를 쓰지 않습니다. 정지한 다음 테스트하세요.":
+        "Wyjście czeka na grę i nie używa teraz kontrolera. Zatrzymaj je, a potem testuj.",
+    "효과 테스트": "Test efektu",
+    "효과 테스트: {name}": "Test efektu: {name}",
     "동봉한 RenCloud scs-telemetry.dll을 이 게임의 plugins 폴더에 복사합니다. 다른 플러그인은 건드리지 않습니다.":
         "Kopiuje dołączony RenCloud scs-telemetry.dll do folderu plugins tej gry. Innych wtyczek nie rusza.",
     "Steam 밖에 설치했거나 찾지 못한 경우, bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 게임 폴더를 지정합니다.":

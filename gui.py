@@ -11,6 +11,7 @@ reads. Only one window runs at a time; a second launch exits quietly, and
 if it came from the Steam launch option the open window starts the game
 session instead. At start it looks for a newer GitHub release and offers it
 in the top bar. Unexpected errors land in logs\\error.log (errorlog.py).
+The ▶ beside each effect plays it alone for a few seconds (preview.py).
 Every control explains itself in a tooltip. The language menu in the top
 bar rebuilds the window in another language (i18n.py) and remembers it.
 The widgets and dark theme live in widgets.py.
@@ -42,6 +43,7 @@ from i18n import N_, t
 from version import __version__
 from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Equalizer, Gains, route_of
 from gamewatch import GameWatcher
+from preview import Player, Preview
 from settings import load_app_options, load_eq, load_gains, save_app_options, save_eq, save_gains
 from widgets import (ACCENT, BG, BOTH_COLOR, CARD, FAINT, FIELD_HI, GO, GRIP_COLOR, MUTED, STOP, TEXT, TILE,
                      TRIGGER_COLOR, WARN, Button, Link, Meter, Segmented, Slider, Switch, apply_theme, card,
@@ -83,6 +85,7 @@ EVENT_SLIDERS = (
     ("game_events", N_("게임 알림"), 0, 200, 100, "%"),
     ("ducking", N_("└ 주행 진동 양보"), 0, 100, 100, "%"),
 )
+EFFECT_NAMES = {key: label for key, label, *_ in EFFECT_SLIDERS + EVENT_SLIDERS}
 THRESHOLD_SLIDERS = (
     ("bump_threshold", N_("요철 감지 기준"), 5, 100, 100, "cm/s"),
     ("impact_threshold", N_("충돌 감지 기준"), 4, 40, 1, "m/s²"),
@@ -162,6 +165,8 @@ class App:
         self.runner: Runner | None = None
         self.thread: threading.Thread | None = None
         self.calibration: CalibrationDialog | None = None
+        self.player = Player()  # effect tests while the output is stopped
+        self.tested = False  # the status line shows a test, to be put back to 정지됨
         self.error: str | None = None
         self.connected: str | None = None
         self.session_stats: StreamStats | None = None  # set by the worker when it releases the pad
@@ -399,6 +404,10 @@ class App:
                                lambda route, k=key: self._on_route(k, route))
             tip(picker, self._route_tip()).grid(row=row, column=4, padx=(10, 0), pady=3)
             self.route_pickers[key] = picker
+            tip(Button(parent, "▶", lambda k=key: self.test_effect(k), size=8, height=26, bg=CARD),
+                t("이 효과만 몇 초 동안 울려 봅니다. 지금 세기, 진동 위치, 모터 보정 그대로이고, 꺼 둔 효과도 울립니다. "
+                  "요철, 차선 요철, 방향지시등은 왼쪽 다음 오른쪽 순서입니다. 출력 중에는 그동안 주행 진동 대신 "
+                  "울립니다.")).grid(row=row, column=5, padx=(8, 0))
             self._show_effect(key)
         self._on_slider(key)
 
@@ -492,6 +501,20 @@ class App:
     def _on_source(self, source: str) -> None:
         self.source.set(source)
 
+    def test_effect(self, key: str) -> None:
+        """Play this effect alone for a few seconds (preview.py), in place of the drive while it runs."""
+        if self.thread and self.thread.is_alive():
+            if self.runner and (self.connected or self.dry_run):
+                self.runner.preview = Preview(key, self.gains, self.runner.eq)
+            else:
+                messagebox.showinfo(t("효과 테스트"), t("출력이 게임을 기다리는 중이라 지금은 컨트롤러를 쓰지 않습니다. "
+                                                     "정지한 다음 테스트하세요."))
+            return
+        if self.dry_run or (self.calibration and self.calibration.busy):  # no controller, or it holds it
+            return
+        self.error = None
+        self.player.play(Preview(key, self.gains, Equalizer.for_player(load_eq())))
+
     def open_calibration(self) -> None:
         if self.calibration and self.calibration.top.winfo_exists():
             self.calibration.top.lift()
@@ -578,6 +601,7 @@ class App:
             return
         if self.calibration and self.calibration.busy:  # it holds the controller; a game launch waits too
             return
+        self.player.stop()  # a test takes no longer than letting the controller go
         self.error = None
         self.connected = None
         self.events.delete(0, "end")
@@ -621,6 +645,7 @@ class App:
             if answer:
                 self.save()
         self.stop()
+        self.player.stop()
         if self.calibration:
             self.calibration.abort()
         if self.thread:
@@ -712,16 +737,25 @@ class App:
             self._show_dot(GO if self.connected or self.dry_run else WARN)
             self._refresh(runner)
         else:
-            if self.error:
+            if self.player.error:
+                self.error, self.player.error = self.player.error, None
+            testing = self.player.busy
+            if testing:
+                self.status.set(t("효과 테스트: {name}", name=t(EFFECT_NAMES[self.player.name])))
+                self._show_dot(GO)
+                self.tested = True
+            elif self.error:
                 self.status.set(t("오류: {error}", error=self.error))
                 self._show_dot(STOP)
             else:
-                if runner:
+                if runner or self.tested:
                     self.status.set(t("정지됨"))
+                    self.tested = False
                 self._show_dot(FAINT)
-            self.meter_values = [0.0, 0.0, 0.0]
-            for meter in self.meters:
-                meter.set(0.0)
+            peaks = self.player.take_peaks()
+            for i, meter in enumerate(self.meters):
+                self.meter_values[i] = max(peaks[i], self.meter_values[i] * METER_DECAY) if testing else 0.0
+                meter.set(self.meter_values[i])
             if runner and runner.game_ended and self.exit_with_game:
                 self.exit_with_game = False  # ask at most once if the save prompt is cancelled
                 self.on_close()

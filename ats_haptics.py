@@ -27,6 +27,7 @@ from blocklog import BlockLog
 from effects import Equalizer, Gains, Synth, effective_gains
 from gamewatch import GameWatcher
 from i18n import set_language, system_language, t
+from preview import Preview
 from settings import load_app_options, load_eq, load_gains
 from telemetry import SIMULATED_FPS, Frame, SharedMemoryTelemetry, SimulatedTelemetry
 
@@ -65,6 +66,7 @@ class Runner:
         self._last_render_change = 0.0
         self.log_blocks = log_blocks
         self.block_log: BlockLog | None = None
+        self.preview: Preview | None = None  # an effect test playing in place of the drive (preview.py)
 
     def _read_frame(self) -> Frame | None:
         frame = self.source.read()
@@ -151,6 +153,13 @@ class Runner:
         levels.max_accel = 0.0
         stamp = time.strftime("%H:%M:%S")
         self.events.extend(f"{stamp} {event}" for event in levels.events)
+        preview = self.preview
+        if preview is not None:  # the drive renders on underneath, so it carries on where it was
+            solo = preview.render()
+            if solo is None:
+                self.preview = None
+            else:
+                block = solo
         for i, channel in enumerate((block.left_grip, block.right_grip, block.trigger)):
             self.peaks[i] = max(self.peaks[i], max(abs(x) for x in channel) / MAX_SAMPLE)
         if self.block_log is not None:

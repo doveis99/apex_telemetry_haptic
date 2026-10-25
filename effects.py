@@ -156,15 +156,19 @@ class Gains:
     master: float = 1.0
     grip_level: float = 1.0  # final output strength per channel, after all effects
     trigger_level: float = 1.0
-    engine: float = 0.5
-    road: float = 0.6
+    # The player sits in the cab holding the wheel, often for hours. The game's scaled-down
+    # roads change speed every few seconds, so the steady fade rarely gets to work (on such a
+    # drive the engine and trigger keep about 90%): the continuous effects have to be gentle
+    # on their own. The engine is a hum under the road, and the cab's clicks stand out.
+    engine: float = 0.1
+    road: float = 0.5
     bumps: float = 1.0
     rumble: float = 0.8
     wheelspin: float = 0.7
     gear: float = 0.8
-    retarder: float = 0.5
+    retarder: float = 0.3
     impact: float = 1.0
-    trigger: float = 0.4  # xHaptics keeps triggers near 36% of full scale
+    trigger: float = 0.3  # held nearly all the time; xHaptics keeps triggers near 36% of full scale
     # how deep the throttle trigger pulses at the engine firing rate; 0 keeps
     # it steady, 0.8 is the fixed pulse of earlier versions
     throttle_pulse: float = 0.0
@@ -182,9 +186,9 @@ class Gains:
     trailer: float = 0.9
     park_brake: float = 0.7
     air_brake: float = 0.5
-    blinker: float = 0.5
+    blinker: float = 0.7
     engine_start: float = 0.8
-    shifter: float = 0.5
+    shifter: float = 0.7
     game_events: float = 0.5
     # how far the continuous effects dip while an event plays; 0 never
     ducking: float = 0.7

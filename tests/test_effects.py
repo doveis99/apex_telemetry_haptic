@@ -154,8 +154,10 @@ class LockChopTest(unittest.TestCase):
             for wheel in f.wheels:
                 wheel.velocity = 0.0
             samples.extend(s.render(f).trigger)
-        # on while the carrier swings within the last 110 Hz cycle
-        on = [max(abs(x) for x in samples[max(0, n - 9):n + 1]) > 10.0 for n in range(len(samples))]
+        # on while the carrier swings within the last 110 Hz cycle, past a quarter of the peak
+        # (the first pulse ramps up from the braking level, so a fixed level would track the gain)
+        level = 0.25 * max(abs(x) for x in samples)
+        on = [max(abs(x) for x in samples[max(0, n - 9):n + 1]) > level for n in range(len(samples))]
         runs, start = [], None
         for n, value in enumerate(on + [False]):
             if value and start is None:

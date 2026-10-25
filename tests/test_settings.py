@@ -48,7 +48,7 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual([p.name for p in self.path.parent.iterdir()], ["config.json"])
 
     def test_calibration_survives_the_other_saves(self) -> None:
-        self.assertEqual(load_eq(self.path), {})  # never measured: flat
+        self.assertEqual(load_eq(self.path), {})  # never measured: Equalizer.DEFAULT applies
         save_eq({"grip": {"30": 2.0}}, self.path)
         save_gains(Gains(engine=0.9), self.path)
         save_app_options(AppOptions(language="de"), self.path)

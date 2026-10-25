@@ -88,7 +88,7 @@ def save_gains(gains: Gains, path: Path | None = None) -> None:
 
 
 def load_eq(path: Path | None = None) -> dict:
-    """The motors' calibration, {channel: {Hz: gain}}; empty (flat) until tone.py calibrate has run."""
+    """The player's own motor calibration, {channel: {Hz: gain}}; a motor not in it gets Equalizer.DEFAULT."""
     stored = _read(path).get("eq", {})
     return stored if isinstance(stored, dict) else {}
 

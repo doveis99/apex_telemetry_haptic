@@ -342,13 +342,13 @@ def main() -> None:
     cal.add_argument("--amp", type=float, default=AMP,
                      help="reference strength in percent; up to 4x of it must fit in 100")
     cal.add_argument("--seconds", type=float, default=SECONDS)
-    cal.add_argument("--reset", action="store_true", help="forget the calibration (flat), no controller needed")
+    cal.add_argument("--reset", action="store_true", help="forget your calibration (back to the default), no controller needed")
 
     args = parser.parse_args()
     if args.command == "calibrate" and args.reset:
         from settings import save_eq
         save_eq({})
-        print("보정을 지웠습니다 (평탄).")
+        print("보정을 지웠습니다. 기본값을 씁니다.")
         return
 
     with Apex6() as pad:

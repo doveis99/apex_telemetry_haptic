@@ -259,7 +259,7 @@ def main() -> None:
                  "impact", "trigger", "throttle_pulse", "cylinders"):
         setattr(gains, name, getattr(args, name))
     runner = Runner(gains, simulate=args.simulate, seconds=args.seconds, log_blocks=args.log_blocks,
-                    sim_fps=args.sim_fps or None, eq=Equalizer(load_eq()),
+                    sim_fps=args.sim_fps or None, eq=Equalizer.for_player(load_eq()),
                     on_state=lambda s: print(f"\n[{time.strftime('%H:%M:%S')}] {s}", flush=True))
     monitor = args.monitor or args.dry_run
     if monitor:

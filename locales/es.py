@@ -292,11 +292,12 @@ MESSAGES = {
     "모터 보정": "Calibración de motores",
     "출력을 정지한 다음 보정하세요.": "Detén la salida antes de calibrar.",
     "지금 보정: {channels}": "Calibración actual: {channels}",
-    "없음": "ninguna",
     "{name} ({count}개 주파수)": "{name} ({count} frecuencias)",
+    "{name} (기본값)": "{name} (valor predeterminado)",
+    "{name} (직접 측정)": "{name} (medición propia)",
     "시작": "Empezar",
     "보정 지우기": "Borrar calibración",
-    "저장된 보정을 지워 모든 주파수를 그대로 보냅니다.": "Borra la calibración guardada para que cada frecuencia se envíe tal cual.",
+    "저장된 보정을 지워 기본값으로 되돌립니다.": "Borra la calibración guardada y vuelve a la predeterminada.",
     "↻ 다시 듣기": "↻ Repetir",
     "그만": "Parar",
     "보정하지 못했습니다: {error}": "No se pudo calibrar: {error}",
@@ -304,7 +305,7 @@ MESSAGES = {
     "저장한 보정이 없습니다. 모터 하나를 끝까지 맞추면 저장됩니다.":
         "No se guardó ninguna calibración. Un motor se guarda cuando todas sus frecuencias están ajustadas.",
     "다시 보정": "Calibrar de nuevo",
-    "저장된 보정을 지울까요?": "¿Borrar la calibración guardada?",
+    "저장된 보정을 지우고 기본값으로 되돌릴까요?": "¿Borrar la calibración guardada y volver a la predeterminada?",
     "그만두는 중…": "Parando…",
     "컨트롤러를 평소처럼 잡으세요. 패드 버튼으로 답할 수 있습니다: 십자키 ← 또는 LB 첫 번째, → 또는 RB 두 번째, X 다시 듣기, B 그만. 키보드는 ← → (또는 1 2) R Esc입니다. 재생 중에 눌러도 바로 반영됩니다.":
         ("Sujeta el mando como siempre. Puedes responder con los botones del mando: cruceta ← o LB el primero, → o "

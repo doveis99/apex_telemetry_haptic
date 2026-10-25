@@ -288,9 +288,20 @@ class ThrottlePulseTest(unittest.TestCase):
 class EqualizerTest(unittest.TestCase):
     CURVES = {"grip": {"30": 2.0, "65": 1.0, "250": 2.0}, "trigger": {"100": 1.0, "200": 1.5}}
 
-    def test_flat_until_calibrated(self) -> None:
+    def test_flat_without_curves(self) -> None:
         self.assertEqual(Equalizer().pair(40.0), (1.0, 1.0))
         self.assertEqual(Equalizer({"grip": {"low": "x", "-5": 2.0}, "trigger": [1, 2]}).pair(40.0), (1.0, 1.0))
+
+    def test_default_for_a_motor_the_player_has_not_measured(self) -> None:
+        untouched = Equalizer.for_player({})
+        for got, want in zip(untouched.pair(100.0) + untouched.pair(65.0),
+                             (Equalizer.DEFAULT["grip"]["100"], 1.0, 1.0, Equalizer.DEFAULT["trigger"]["65"])):
+            self.assertAlmostEqual(got, want)
+        own = Equalizer.for_player({"grip": self.CURVES["grip"]})
+        self.assertAlmostEqual(own.gain("grip", 30.0), 2.0)
+        self.assertAlmostEqual(own.gain("trigger", 200.0), Equalizer.DEFAULT["trigger"]["200"])
+        for curve in Equalizer.DEFAULT.values():  # inside the limits, so stored as measured
+            self.assertTrue(all(Equalizer.LIMITS[0] <= gain <= Equalizer.LIMITS[1] for gain in curve.values()))
 
     def test_follows_the_measured_points_in_db(self) -> None:
         eq = Equalizer(self.CURVES)

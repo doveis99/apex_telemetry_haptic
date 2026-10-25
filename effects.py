@@ -201,14 +201,26 @@ class Equalizer:
     """How much more drive each frequency needs to feel as strong as the reference, per output.
 
     The voice coils resonate (grips near 65 Hz, triggers near 100 Hz), so the
-    same drive feels far weaker off resonance. tone.py calibrate measures it by
-    matching tones against the reference by feel; until then it is flat.
-    Between the measured points the gain follows a straight line in dB over
-    log frequency, and past the ends it holds.
+    same drive feels far weaker off resonance. The motor calibration measures it
+    by matching tones against the reference by feel; until then a motor gets
+    DEFAULT. Between the measured points the gain follows a straight line in dB
+    over log frequency, and past the ends it holds.
     """
 
     LIMITS = (0.25, 4.0)
     CHANNELS = ("grip", "trigger")
+    # Matched by feel on the developer's APEX in the window's calibration (2026-10-25), then
+    # smoothed in dB (1-2-1 along each side; the reference's neighbours kept as measured), which
+    # moves no point by more than the 1.5 dB staircase step.
+    DEFAULT = {"grip": {"30": 3.89, "40": 3.55, "50": 2.94, "65": 1.0, "80": 2.27, "100": 2.98, "130": 3.47,
+                        "160": 3.3, "200": 3.16, "250": 3.27},
+               "trigger": {"50": 4.0, "65": 3.63, "80": 2.7, "100": 1.0, "130": 2.27, "160": 2.1, "200": 2.15,
+                           "250": 2.12}}
+
+    @classmethod
+    def for_player(cls, own: dict) -> Equalizer:
+        """The player's own calibration, and DEFAULT for a motor they have not measured."""
+        return cls({**cls.DEFAULT, **own})
 
     def __init__(self, curves: dict | None = None) -> None:
         self.points: dict[str, list[tuple[float, float]]] = {}

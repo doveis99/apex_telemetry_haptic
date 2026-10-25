@@ -582,7 +582,7 @@ class App:
         self.connected = None
         self.events.delete(0, "end")
         self.runner = Runner(self.gains, simulate=self.source.get() == "sim", log_blocks=self.options.debug_log,
-                             eq=Equalizer(load_eq()))  # read at each start: a new calibration applies
+                             eq=Equalizer.for_player(load_eq()))  # read at each start: a new calibration applies
         self.thread = threading.Thread(target=self._worker, args=(self.runner,), daemon=True)
         self.thread.start()
         self._show_run_state()
@@ -827,6 +827,7 @@ class CalibrationDialog:
     """
 
     NAMES = {"grip": N_("그립"), "trigger": N_("트리거")}
+    SOURCES = (N_("{name} (기본값)"), N_("{name} (직접 측정)"))  # by whether the player measured it
 
     def __init__(self, parent: tk.Tk) -> None:
         self.top = tk.Toplevel(parent, bg=BG)
@@ -872,8 +873,9 @@ class CalibrationDialog:
                            "센 쪽이 있으면 그쪽을, 정말 구분이 안 되면 아무 쪽이나 고르면 됩니다. 구분이 안 된다는 건 거의 "
                            "같아졌다는 뜻이라 결과가 틀어지지 않습니다. 답에 따라 세기를 좁혀 가며 같게 느껴지는 지점을 "
                            "찾고, 모든 효과가 주파수별로 그만큼 보정됩니다. 모터 하나에 3~5분 걸립니다.")).pack(fill="x")
-        stored = [t(self.NAMES[c]) for c in calibrate.FREQS if c in load_eq()]
-        self._text(body, t("지금 보정: {channels}", channels=", ".join(stored) or t("없음")), fg=MUTED).pack(
+        own = load_eq()
+        sources = [t(self.SOURCES[c in own], name=t(self.NAMES[c])) for c in calibrate.FREQS]
+        self._text(body, t("지금 보정: {channels}", channels=", ".join(sources)), fg=MUTED).pack(
             fill="x", pady=(10, 0))
         picks = tk.Frame(body, bg=BG)
         picks.pack(fill="x", pady=(12, 0))
@@ -886,7 +888,7 @@ class CalibrationDialog:
         buttons = tk.Frame(body, bg=BG)
         buttons.pack(fill="x", pady=(16, 0))
         Button(buttons, t("시작"), self.begin, kind="primary", min_width=96).pack(side="left")
-        tip(Button(buttons, t("보정 지우기"), self.reset), t("저장된 보정을 지워 모든 주파수를 그대로 보냅니다.")).pack(
+        tip(Button(buttons, t("보정 지우기"), self.reset), t("저장된 보정을 지워 기본값으로 되돌립니다.")).pack(
             side="left", padx=(8, 0))
         Button(buttons, t("닫기"), self.close).pack(side="right")
 
@@ -969,7 +971,7 @@ class CalibrationDialog:
             self.close()
 
     def reset(self) -> None:
-        if messagebox.askyesno(t("모터 보정"), t("저장된 보정을 지울까요?"), parent=self.top):
+        if messagebox.askyesno(t("모터 보정"), t("저장된 보정을 지우고 기본값으로 되돌릴까요?"), parent=self.top):
             save_eq({})
             self.shown = ""  # redraw "지금 보정"
 

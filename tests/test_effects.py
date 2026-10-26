@@ -61,6 +61,20 @@ class GearTest(unittest.TestCase):
         s.render(frame(gear=8))
         self.assertIn("gear", effects_of(s))
 
+    def test_lever_comes_out_softly_then_the_gear_clacks_in(self) -> None:
+        s, samples = only("gear"), []  # one sample per ms from the change
+        s.render(frame(gear=7))
+        for _ in range(50):
+            samples.extend(s.render(frame(gear=8)).left_grip)
+        clack = max(range(len(samples)), key=lambda n: abs(samples[n]))
+        self.assertAlmostEqual(clack, 140, delta=5)  # where the recordings have it
+        lever = max(abs(x) for x in samples[20:clack - 10])
+        self.assertGreater(lever, 0.1 * abs(samples[clack]))
+        self.assertLess(lever, 0.4 * abs(samples[clack]))
+        edge = rms(samples[clack:clack + 20])
+        self.assertGreater(rms(samples[clack + 50:clack + 70]), 0.25 * edge)  # it rings on, not just a click
+        self.assertLess(rms(samples[clack + 200:clack + 220]), 0.1 * edge)  # and is 20 dB down by 0.2 s
+
 
 class ResumeTest(unittest.TestCase):
     def gap(self, s: Synth) -> None:

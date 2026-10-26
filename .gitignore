@@ -6,3 +6,5 @@ dist/
 *.spec
 # personal tuning saved by the GUI
 config.json
+# extracted ATS sound mods, reference only: never commit or redistribute
+sound sample/

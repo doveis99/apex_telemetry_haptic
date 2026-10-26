@@ -107,6 +107,23 @@ BUMP_RATTLE_S = 0.3
 BUMP_RATTLE_MAX = 16  # knocks alive at once, all wheels together
 BUMP_RESTRIKE_S = 0.02  # s: a stronger reading this soon is the same step peaking (the next frame from 50 fps)
 BUMP_GAP_S = 0.06  # s before a wheel knocks again: a step's rebound and the next frames of rough ground wait
+# Gear shifts, after the 12 Eaton Fuller shifts (Zeemods) the game plays at each
+# gear change: the lever comes out of gear in a soft knock and slides across
+# the gate, and about 90 ms later the next gear goes in with a clack that rings
+# on in the gearbox. Most of the sound sits above 500 Hz; of what the grips play
+# (30-250 Hz) the clack peaks near 140 Hz, with next to nothing under 100 Hz.
+# Their median 30-250 Hz envelope, aligned at the clack, holds near -16 dB for
+# the 120 ms before it, drops 7 dB within 10 ms after it and is 20 dB down
+# after about 140 ms. The hits were fitted to it through a model of the grip
+# motor, at the felt peak of the shift before (2.8 dB rms off; that one, a 62 Hz
+# hit over a 38 Hz body, 8.8). They keep the recordings' timeline from the gear
+# change, where the clack comes about 140 ms in, so it lands with the sound.
+SHIFT_HZ = 140.0
+# (s after the gear change, strength at gear gain 1, decay s); the clack's edge and its ring start together
+SHIFT_HITS = ((0.02, 0.19, 0.16),  # the lever out of gear and across
+              (0.14, 0.95, 0.005),  # the clack
+              (0.14, 0.43, 0.08))  # its ring
+SHIFT_COOLDOWN = 0.15  # s
 
 
 def surface_of(name: str) -> Surface | None:
@@ -767,13 +784,11 @@ class Synth:
             self.prev_gear = frame.gear
             return
         if frame.gear != self.prev_gear and frame.gear != 0 and self.gear_cooldown == 0.0:
-            # Clutch gap, then the dog clutch engaging: the bed ducks 20 ms
-            # ahead, a hard-edged hit near the grip resonance lands in the
-            # gap and a low body follows.
-            g = self.g.gear
-            self._both("gear", Burst(62.0, 1.3 * g, 0.018, delay_s=0.02, phase=0.25))
-            self._both("gear", Burst(38.0, 0.5 * g, 0.05, delay_s=0.02))
-            self.gear_cooldown = 0.15
+            # The recorded shift on its own timeline (SHIFT_HITS); the bed ducks
+            # under the lever's knock and again just ahead of the clack.
+            for delay, strength, decay in SHIFT_HITS:
+                self._both("gear", Burst(SHIFT_HZ, strength * self.g.gear, decay, delay_s=delay, phase=0.25))
+            self.gear_cooldown = SHIFT_COOLDOWN
             self.levels.events.append(t("변속 {gear}단", gear=frame.gear))
         if frame.gear != 0:
             self.prev_gear = frame.gear

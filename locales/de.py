@@ -194,8 +194,9 @@ MESSAGES = {
         "Ein kurzes „Tock“, sobald Gas oder Bremse am Anschlag ist (97 % oder mehr).",
     "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다.":
         "Ein feines Quietschen in einzelnen Stößen beim sanften Abbremsen bis zum Stillstand unter etwa 14 km/h.",
-    "트레일러를 연결할 때 묵직한 '쿵', 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
-        "Ein schweres „Rums“ beim Ankuppeln; beim Abkuppeln ein Rums mit anschließendem Luftzischen.",
+    "트레일러를 연결할 때 커플러가 0.6초쯤 '덜커덕덜컥' 맞물리고, 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
+        ("Beim Ankuppeln rattert die Sattelkupplung etwa 0,6 s lang; beim Abkuppeln ein Rums mit anschließendem "
+         "Luftzischen."),
     "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
         ("Beim Anziehen der Feststellbremse ein „Klack“, dann fast eine Sekunde lang ausströmende Luft; beim Lösen "
          "ein tiefes „Tock“, dann ein kurzes Zischen."),
@@ -204,11 +205,12 @@ MESSAGES = {
          "gebremst, desto lauter; kurzes Antippen löst es nicht aus. Es kommt bei jedem Loslassen, daher senkt "
          "„Platz für Ereignisse“ die Fahreffekte dafür nicht ab."),
     "방향지시등이 점멸할 때마다 켜진 쪽 그립에 '틱'.": "Bei jedem Blinken ein „Tick“ im Griff der Blinkseite.",
-    "시동을 켤 때 크랭킹에 이어 '부웅', 끌 때 꺼지며 떨림.":
-        "Beim Starten Anlassen und ein „Brumm“; beim Abstellen ein Schütteln beim Auslaufen.",
-    "H-시프터의 레인지 셀렉터나 스플리터를 조작할 때 '딸깍'. 자동/순차 변속에서는 울리지 않습니다.":
-        ("Ein „Klick“ beim Umlegen von Gruppen- oder Splitterschalter der H-Schaltung. Bei Automatik oder "
-         "sequenziell still."),
+    "시동을 켤 때 1초쯤 크랭킹하다가 '부웅' 하고 걸리고, 끌 때 잠깐 더 돌다가 '투둑투둑' 잦아듭니다.":
+        ("Beim Starten etwa eine Sekunde Anlassen, dann springt der Motor mit einem „Brumm“ an; beim Abstellen "
+         "läuft er kurz weiter und tuckert dann aus."),
+    "H-시프터의 레인지 셀렉터나 스플리터를 조작할 때 '딸깍'에 이어 변속기가 '철컥' 넘어갑니다(스플리터는 약하게). 자동/순차 변속에서는 울리지 않습니다.":
+        ("Ein „Klick“ beim Umlegen von Gruppen- oder Splitterschalter der H-Schaltung, danach schaltet das "
+         "Getriebe mit einem „Klack“ um (beim Splitter leise). Bei Automatik oder sequenziell still."),
     "톨게이트, 벌금, 주유, 배송 완료, 페리, 기차 이벤트 때 '톡톡' 두 번.":
         ("Ein doppeltes „Tipp-tipp“ bei Mautstellen, Bußgeldern, Tanken, abgeschlossenen Lieferungen, Fähren und "
          "Zügen."),

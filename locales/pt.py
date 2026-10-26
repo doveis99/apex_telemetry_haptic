@@ -192,8 +192,9 @@ MESSAGES = {
         "Um \"toc\" curto quando o acelerador ou o freio chega ao fundo (97% ou mais).",
     "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다.":
         "Um chiado fino em rajadas ao frear suavemente até parar abaixo de uns 14 km/h.",
-    "트레일러를 연결할 때 묵직한 '쿵', 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
-        "Um \"tum\" pesado ao engatar o reboque; ao desengatar, um tum seguido de um chiado de ar.",
+    "트레일러를 연결할 때 커플러가 0.6초쯤 '덜커덕덜컥' 맞물리고, 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
+        ("Ao engatar o reboque, a quinta roda chacoalha por cerca de 0,6 s; ao desengatar, um tum seguido de um "
+         "chiado de ar."),
     "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
         ("Ao puxar o freio de mão, um \"clac\" e depois quase um segundo de ar escapando; ao soltar, um \"toc\" "
          "grave e depois um sopro curto."),
@@ -202,11 +203,12 @@ MESSAGES = {
          "quanto mais forte a frenagem; um toque rápido não aciona. Vem a cada soltura, então \"Ceder a eventos\" "
          "não abaixa os efeitos de direção por ele."),
     "방향지시등이 점멸할 때마다 켜진 쪽 그립에 '틱'.": "Um \"tique\" na empunhadura do lado da seta a cada piscada.",
-    "시동을 켤 때 크랭킹에 이어 '부웅', 끌 때 꺼지며 떨림.":
-        "Na partida, o motor de arranque e um \"vrum\"; ao desligar, um tremor enquanto ele para.",
-    "H-시프터의 레인지 셀렉터나 스플리터를 조작할 때 '딸깍'. 자동/순차 변속에서는 울리지 않습니다.":
-        ("Um \"clique\" ao acionar o seletor de faixa ou o splitter do câmbio em H. Não toca no automático ou "
-         "sequencial."),
+    "시동을 켤 때 1초쯤 크랭킹하다가 '부웅' 하고 걸리고, 끌 때 잠깐 더 돌다가 '투둑투둑' 잦아듭니다.":
+        ("Na partida, cerca de um segundo de motor de arranque e então o motor pega com um \"vrum\"; ao desligar, "
+         "ele gira mais um instante e morre aos solavancos."),
+    "H-시프터의 레인지 셀렉터나 스플리터를 조작할 때 '딸깍'에 이어 변속기가 '철컥' 넘어갑니다(스플리터는 약하게). 자동/순차 변속에서는 울리지 않습니다.":
+        ("Um \"clique\" ao acionar o seletor de faixa ou o splitter do câmbio em H, e depois a caixa trocando com um"
+         " \"clac\" (fraco no splitter). Não toca no automático ou sequencial."),
     "톨게이트, 벌금, 주유, 배송 완료, 페리, 기차 이벤트 때 '톡톡' 두 번.":
         "Um duplo \"toc-toc\" em pedágios, multas, abastecimentos, entregas concluídas, balsas e trens.",
     "이벤트가 울리는 순간 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":

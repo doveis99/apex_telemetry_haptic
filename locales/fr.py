@@ -195,8 +195,8 @@ MESSAGES = {
         "Un bref « toc » dès que l'accélérateur ou le frein est à fond (97 % ou plus).",
     "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다.":
         "Un léger crissement par à-coups en freinant doucement jusqu'à l'arrêt sous 14 km/h environ.",
-    "트레일러를 연결할 때 묵직한 '쿵', 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
-        "Un « boum » lourd à l'attelage ; au dételage, un boum suivi d'un échappement d'air.",
+    "트레일러를 연결할 때 커플러가 0.6초쯤 '덜커덕덜컥' 맞물리고, 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
+        "La sellette claque pendant environ 0,6 s à l'attelage ; au dételage, un boum suivi d'un échappement d'air.",
     "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
         ("En serrant le frein à main, un « clac » puis près d'une seconde d'air qui s'échappe ; en le desserrant, un "
          "« toc » sourd puis un bref souffle."),
@@ -205,11 +205,13 @@ MESSAGES = {
          "». Plus fort si vous avez freiné fort ; une petite touche ne le déclenche pas. Il vient à chaque "
          "relâchement, donc « Céder aux événements » n'atténue pas les effets de conduite pour lui."),
     "방향지시등이 점멸할 때마다 켜진 쪽 그립에 '틱'.": "Un « tic » dans la poignée du côté du clignotant à chaque clignement.",
-    "시동을 켤 때 크랭킹에 이어 '부웅', 끌 때 꺼지며 떨림.":
-        "Au démarrage, le démarreur puis un « vroum » ; à l'arrêt, un tremblement quand le moteur s'éteint.",
-    "H-시프터의 레인지 셀렉터나 스플리터를 조작할 때 '딸깍'. 자동/순차 변속에서는 울리지 않습니다.":
-        ("Un « clic » quand vous basculez le sélecteur de gamme ou le demi-rapport de la grille en H. Rien en boîte "
-         "automatique ou séquentielle."),
+    "시동을 켤 때 1초쯤 크랭킹하다가 '부웅' 하고 걸리고, 끌 때 잠깐 더 돌다가 '투둑투둑' 잦아듭니다.":
+        ("Au démarrage, environ une seconde de démarreur, puis le moteur prend avec un « vroum » ; à l'arrêt, il "
+         "tourne encore un instant puis s'éteint en hoquetant."),
+    "H-시프터의 레인지 셀렉터나 스플리터를 조작할 때 '딸깍'에 이어 변속기가 '철컥' 넘어갑니다(스플리터는 약하게). 자동/순차 변속에서는 울리지 않습니다.":
+        ("Un « clic » quand vous basculez le sélecteur de gamme ou le demi-rapport de la grille en H, puis la "
+         "boîte qui passe avec un « clac » (léger pour le demi-rapport). Rien en boîte automatique ou "
+         "séquentielle."),
     "톨게이트, 벌금, 주유, 배송 완료, 페리, 기차 이벤트 때 '톡톡' 두 번.":
         "Un double « tac-tac » aux péages, amendes, pleins, livraisons terminées, ferrys et trains.",
     "이벤트가 울리는 순간 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":

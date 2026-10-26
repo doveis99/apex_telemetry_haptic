@@ -146,7 +146,7 @@ SCRIPTS: dict[str, tuple[Script, float]] = {
     "blinker": (_blinker, 3.6),
     "engine_start": (lambda t, _: _parked(t, engine_on=0.3 <= t < 2.2, rpm=650.0 if 0.3 <= t < 2.2 else 0.0),
                      3.4),
-    "shifter": (lambda t, _: _frame(t, shifter_toggle=(0.3 <= t < 1.5, t >= 0.9)), 2.0),
+    "shifter": (lambda t, _: _frame(t, shifter_toggle=(0.3 <= t < 1.5, t >= 0.9)), 2.2),
     "game_events": (lambda t, _: _parked(t, game_events=frozenset({"tollgate"}) if 0.3 <= t < 0.8 else frozenset()),
                     1.0),
 }

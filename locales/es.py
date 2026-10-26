@@ -193,8 +193,9 @@ MESSAGES = {
         "Un «toc» breve en cuanto el acelerador o el freno llegan a fondo (97 % o más).",
     "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다.":
         "Un chirrido fino a ráfagas al frenar suavemente hasta parar por debajo de unos 14 km/h.",
-    "트레일러를 연결할 때 묵직한 '쿵', 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
-        "Un «pum» pesado al enganchar el remolque; al desengancharlo, un golpe seguido de un silbido de aire.",
+    "트레일러를 연결할 때 커플러가 0.6초쯤 '덜커덕덜컥' 맞물리고, 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
+        ("Al enganchar el remolque, la quinta rueda traquetea unos 0,6 s; al desengancharlo, un golpe seguido de "
+         "un silbido de aire."),
     "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
         ("Al poner el freno de mano, un «clac» y luego casi un segundo de aire escapando; al quitarlo, un «toc» "
          "grave y luego un soplido corto."),
@@ -203,11 +204,12 @@ MESSAGES = {
          "cuanto más se frenó; un toque breve no lo produce. Llega en cada suelta, así que «Ceder a eventos» no "
          "atenúa los efectos de conducción por él."),
     "방향지시등이 점멸할 때마다 켜진 쪽 그립에 '틱'.": "Un «tic» en la empuñadura del lado del intermitente con cada parpadeo.",
-    "시동을 켤 때 크랭킹에 이어 '부웅', 끌 때 꺼지며 떨림.":
-        "Al arrancar, el motor de arranque y un «brum»; al apagar, una sacudida mientras se detiene.",
-    "H-시프터의 레인지 셀렉터나 스플리터를 조작할 때 '딸깍'. 자동/순차 변속에서는 울리지 않습니다.":
-        ("Un «clic» al accionar el selector de rango o el splitter de la palanca en H. No suena con cambio "
-         "automático o secuencial."),
+    "시동을 켤 때 1초쯤 크랭킹하다가 '부웅' 하고 걸리고, 끌 때 잠깐 더 돌다가 '투둑투둑' 잦아듭니다.":
+        ("Al arrancar, cerca de un segundo de motor de arranque y luego el motor prende con un «brum»; al apagar, "
+         "sigue un momento y se apaga a trompicones."),
+    "H-시프터의 레인지 셀렉터나 스플리터를 조작할 때 '딸깍'에 이어 변속기가 '철컥' 넘어갑니다(스플리터는 약하게). 자동/순차 변속에서는 울리지 않습니다.":
+        ("Un «clic» al accionar el selector de rango o el splitter de la palanca en H, y luego la caja cambiando "
+         "con un «clac» (suave en el splitter). No suena con cambio automático o secuencial."),
     "톨게이트, 벌금, 주유, 배송 완료, 페리, 기차 이벤트 때 '톡톡' 두 번.":
         "Un doble «toc-toc» en peajes, multas, repostajes, entregas completadas, ferris y trenes.",
     "이벤트가 울리는 순간 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":

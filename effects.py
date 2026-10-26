@@ -97,6 +97,11 @@ RATTLE_ROUGH = (0.08, 0.3)  # m/s of roughness where the rattle starts, and wher
 # gaps. Grooves are milled about 30 cm apart: 83 Hz at 90 km/h.
 RUMBLE_SPACING = 0.3  # m
 RUMBLE_HOLD = 0.25  # s
+# Sound Fixes Pack's rumble strip loops are nearly a sine at the groove rate, not a
+# buzz: second and third harmonics 15 and 19 dB down (median of three loops), and a
+# half-rate component 7 dB down that lands every other groove harder.
+RUMBLE_SHAPE = (0.45, 0.17, 0.11)  # half rate, second, third harmonic, against the fundamental
+RUMBLE_LEVEL = 1.078  # keeps the RMS of the clipped sine, tanh(2.5 sin), the strip used to be
 # Trailer wheels reach the cab through the coupling: their bumps and strips
 # follow the truck's own, softer.
 TRAILER_FEEL = 0.5
@@ -129,6 +134,22 @@ SHIFT_HITS = ((0.02, 0.19, 0.16),  # the lever out of gear and across
               (0.14, 0.95, 0.005),  # the clack
               (0.14, 0.43, 0.08))  # its ring
 SHIFT_COOLDOWN = 0.15  # s
+# Range selector and splitter, after the Zeemods clips the game plays when one is
+# flipped: the knob clicks at once (the range's near 140 Hz, the splitter's a low
+# 60 Hz thock 16 ms in, both 10 dB down within 5 ms), then the gearbox's air shift
+# clacks near 170 Hz (the clips' centroid within 30-250 Hz). The range shift
+# swells to its loudest about 170 ms in, as strong as a gear shift (the clips have
+# it 3 dB louder, which would only drive it into the output limit); the splitter's
+# two clacks 120 and 180 ms in are 12 dB softer. Fitted through the grip motor
+# model: range 5.0 dB rms off the clips' median envelope, splitter 8.6 (its two
+# clips disagree on the timing). The knobs keep the old tap's felt peak.
+# per selector, range then splitter: (s after the flip, Hz, strength at gain 1, decay s)
+SHIFTER_HITS = (((0.0, 140.0, 1.0, 0.005),  # the knob
+                 (0.13, 170.0, 0.38, 0.005), (0.13, 170.0, 0.23, 0.08),  # a first clack and its ring
+                 (0.17, 170.0, 0.63, 0.005), (0.17, 170.0, 0.38, 0.08)),  # the shift going home
+                ((0.016, 60.0, 1.0, 0.003),
+                 (0.12, 170.0, 0.133, 0.005), (0.12, 170.0, 0.08, 0.06),
+                 (0.18, 170.0, 0.133, 0.005), (0.18, 170.0, 0.08, 0.06)))
 
 
 def surface_of(name: str) -> Surface | None:
@@ -166,6 +187,43 @@ DUCK_EXEMPT = ("bumps", "air_brake")
 # milliseconds and falls 20 dB in about 0.3 s, louder the harder it braked.
 AIR_BRAKE_HOLD = 0.3  # s the pedal must be held; a dab sends too little air to hear
 AIR_BRAKE_ON, AIR_BRAKE_OFF = 0.1, 0.03  # pedal travel that holds it, and that lets go
+# The flasher relay, after the relay clicks of Sound Fixes Pack and Zeemods: within
+# 30-250 Hz it sits at the top (centroid 165-200 Hz) and falls 10 dB within 2 ms.
+# One pack clicks as hard when the lamp goes off, the other 20 dB softer.
+BLINKER_HZ = 190.0
+BLINKER_DECAY = 0.003  # s
+# Coupling a trailer, after Sound Fixes Pack's 11 coupling clips: not one thump but
+# the fifth wheel clattering for about 0.6 s, a knock every 20-40 ms (median 30),
+# mostly 7 dB under the loudest, which lands anywhere up to 0.45 s in (median 0.29).
+# The knocks centre on 85-150 Hz (median 118) and fall 10 dB within about 5 ms.
+COUPLE_S = 0.6
+COUPLE_GAP = (0.02, 0.04)  # s between knocks
+COUPLE_MAIN = (0.15, 0.45)  # s, where the loudest knock lands
+COUPLE_HZ = (85.0, 150.0)
+COUPLE_LOUDEST = 1.22  # at gain 1: the felt peak of the single 40 Hz thump it replaces
+COUPLE_KNOCKS = (0.25, 0.7)  # the others, against the loudest
+COUPLE_DECAY = 0.004  # s
+# Starting and stopping, after the start and stop clips of two engine packs
+# (Zeemods DD60 and Cummins X15). The starter engages with a knock and cranks for
+# about a second, a compression knock every 0.12 s or so (X15's exhaust); then the
+# engine catches, firing faster and faster (DD60's exhaust: 53 ms between the first
+# firings, 27 ms by 0.3 s), loudest 0.2-0.3 s after catching and 15 dB down by
+# 0.5 s, where the engine effect takes over. Stopping, it fires on at idle for about
+# 0.3 s, then falls 12 dB and runs down over most of a second, slower and sparser.
+# Like the effect before, this takes the game to report the engine on as the
+# starter begins.
+ENGINE_FIRING_HZ = 80.0  # the exhaust pulses' centroid within 30-250 Hz (DD60 83-94, X15 72-85)
+ENGINE_FIRING_DECAY = 0.012  # s
+ENGINE_START_PEAK = 1.18  # the catch's loudest firing at gain 1: the felt peak of the start before
+ENGINE_CRANK = ((0.311, -14), (0.476, -10), (0.588, -14), (0.71, -14), (0.827, -12), (0.947, -16))  # (s, dB)
+ENGINE_CATCH_AT = 1.04  # s
+ENGINE_CATCH = ((0.0, -15), (0.053, -10), (0.095, -10), (0.138, -6), (0.173, -8), (0.205, 0), (0.235, -4),
+                (0.262, -5), (0.29, 0), (0.317, 0), (0.343, -4), (0.392, -7), (0.418, -9), (0.451, -8),
+                (0.488, -12), (0.535, -17))  # (s after catching, dB)
+ENGINE_STOP_PEAK = 0.73  # the stop's loudest firing at gain 1: the felt peak of the stop before
+ENGINE_STOP = ((0.003, -4), (0.033, -1), (0.068, -2), (0.103, -1), (0.138, -4), (0.173, 0), (0.209, -5),
+               (0.243, -1), (0.279, -2), (0.318, -4), (0.357, -12), (0.384, -13), (0.42, -12), (0.486, -14),
+               (0.515, -16), (0.627, -16), (0.652, -15), (0.677, -17))  # (s, dB)
 DUCK_FULL = 0.25  # burst envelope that ducks by the full Gains.ducking
 DUCK_ATTACK = 1.0 - math.exp(-1.0 / (0.001 * SAMPLE_RATE))  # 1 ms, avoids a step in the bed
 DUCK_RELEASE = math.exp(-1.0 / (0.08 * SAMPLE_RATE))  # 80 ms back to full
@@ -649,6 +707,7 @@ class Synth:
         self.squeal = Squeal(seed=4)
         self.texture = (Texture(seed=1), Texture(seed=2))
         self.rumble_osc = (Oscillator(), Oscillator())
+        self.rumble_half = (Oscillator(), Oscillator())  # locked to rumble_osc at half its rate
         self.spin_noise = BandNoise(45.0, 1.5, seed=3)
         self.spin_chatter = Oscillator()
         # (effect, side, burst); side "L"/"R" is one grip, "C" both. The
@@ -848,7 +907,7 @@ class Synth:
         if self._changed("trailer", frame.trailer_attached) and g.trailer:
             s = g.trailer
             if frame.trailer_attached:
-                self._both("trailer", Burst(40.0, 1.0 * s, 0.08))
+                self._couple(s)
                 log.append(t("트레일러 연결"))
             else:
                 self._both("trailer", Burst(50.0, 0.9 * s, 0.05))
@@ -870,7 +929,8 @@ class Synth:
         for key, on, side in (("blinker_l", frame.blinker_left, "L"),
                               ("blinker_r", frame.blinker_right, "R")):
             if self._changed(key, on) and g.blinker:
-                self.bursts.append(("blinker", side, Burst(160.0, (1.0 if on else 0.7) * g.blinker, 0.01, phase=0.25)))
+                self.bursts.append(("blinker", side, Burst(BLINKER_HZ, (1.0 if on else 0.7) * g.blinker, BLINKER_DECAY,
+                                                           phase=0.25)))
                 if self.blinker_idle > 1.5:
                     log.append(t("방향지시등 좌") if key == "blinker_l" else t("방향지시등 우"))
                 self.blinker_idle = 0.0
@@ -878,17 +938,22 @@ class Synth:
         if self._changed("engine_on", frame.engine_on) and g.engine_start:
             s = g.engine_start
             if frame.engine_on:
-                self._both("engine_start", NoiseBurst(60.0, 0.8 * s, 0.35))
-                self._both("engine_start", Burst(35.0, 0.9 * s, 0.25, delay_s=0.25))
+                peak = ENGINE_START_PEAK * s
+                self._both("engine_start", NoiseBurst(110.0, 0.1 * s, 0.8, delay_s=0.05, attack_s=0.05))  # the starter
+                engaging = Burst(115.0, peak * 10 ** (-7 / 20), 0.01, delay_s=0.08, phase=0.25)
+                self._both("engine_start", engaging)
+                for at, db in ENGINE_CRANK:  # compression knocks, low like the exhaust's
+                    self._both("engine_start", Burst(70.0, peak * 10 ** (db / 20), 0.015, delay_s=at, phase=0.25))
+                self._firings(ENGINE_CATCH, peak, ENGINE_CATCH_AT)
                 log.append(t("시동"))
             else:
-                self._both("engine_start", Burst(30.0, 0.7 * s, 0.3))
+                self._firings(ENGINE_STOP, ENGINE_STOP_PEAK * s)
                 log.append(t("시동 끔"))
 
         for i, toggle in enumerate(frame.shifter_toggle):
             if self._changed(f"shifter_{i}", toggle) and g.shifter:
-                s = g.shifter
-                self._both("shifter", Burst(120.0, 1.0 * s, 0.012, phase=0.25))
+                for delay, freq, strength, decay in SHIFTER_HITS[min(i, 1)]:
+                    self._both("shifter", Burst(freq, strength * g.shifter, decay, delay_s=delay, phase=0.25))
                 log.append(t("레인지 셀렉터") if i == 0 else t("스플리터"))
 
         previous = self.prev_state.get("game_events", frozenset())
@@ -900,6 +965,25 @@ class Synth:
                 self._both("game_events", Burst(80.0, 1.0 * s, 0.015, phase=0.25))
                 self._both("game_events", Burst(80.0, 1.0 * s, 0.015, delay_s=0.12, phase=0.25))
             log.append(t(GAME_EVENT_LABELS[name]) if name in GAME_EVENT_LABELS else name)
+
+    def _couple(self, strength: float) -> None:
+        """The fifth wheel's clatter as a trailer couples (COUPLE_*), different every time."""
+        knocks, at = [], 0.0
+        while at < COUPLE_S:
+            knocks.append(at)
+            at += self.rng.uniform(*COUPLE_GAP)
+        main = self.rng.uniform(*COUPLE_MAIN)
+        loudest = min(knocks, key=lambda k: abs(k - main))
+        for at in knocks:
+            level = COUPLE_LOUDEST if at == loudest else COUPLE_LOUDEST * self.rng.uniform(*COUPLE_KNOCKS)
+            self._both("trailer", Burst(self.rng.uniform(*COUPLE_HZ), level * strength, COUPLE_DECAY, delay_s=at,
+                                        phase=0.25))
+
+    def _firings(self, firings: tuple[tuple[float, float], ...], peak: float, start: float = 0.0) -> None:
+        """The engine's firings as it starts or stops: (s, dB against peak) each."""
+        for at, db in firings:
+            self._both("engine_start", Burst(ENGINE_FIRING_HZ, peak * 10 ** (db / 20), ENGINE_FIRING_DECAY,
+                                             delay_s=start + at, phase=0.25))
 
     def _novelty(self, key: str, value: float, scale: float) -> float:
         """1 just after value moved by scale or more, falling to 0 as it holds steady."""
@@ -1045,6 +1129,7 @@ class Synth:
         # each vibration scaled for how strongly each motor gives back its frequency
         eq = self.eq.pair
         eq_engine, eq_retarder, eq_rumble = eq(engine_freq), eq(retarder_freq), eq(rumble_freq)
+        eq_rumble_half = eq(rumble_freq / 2)
         eq_road = (eq(self.texture[0].pitch), eq(self.texture[1].pitch))
         eq_spin, eq_squeal = eq(self.spin_noise.filter.center), eq(Squeal.HZ)
         eq_trigger = eq(110.0 if trigger_mode == "brake" and lock > 0 else 100.0)
@@ -1087,10 +1172,11 @@ class Synth:
             _mix(bed, routes["road"], noise_l * grip_l, noise_r * grip_r,
                  0.7 * (noise_l * trig_l + noise_r * trig_r))
             if ul or ur:
-                # Soft-clipped sine: each groove lands as a hard edge, a buzz, not a hum.
-                strip_l = ul * math.tanh(2.5 * self.rumble_osc[0].next(rumble_freq))
-                strip_r = ur * math.tanh(2.5 * self.rumble_osc[1].next(rumble_freq))
+                # the half-rate part takes the eq of its own frequency
+                (strip_l, half_l), (strip_r, half_r) = self._strip(0, rumble_freq), self._strip(1, rumble_freq)
+                strip_l, half_l, strip_r, half_r = ul * strip_l, ul * half_l, ur * strip_r, ur * half_r
                 _mix(bed, routes["rumble"], strip_l, strip_r, 0.7 * (strip_l + strip_r), eq_rumble)
+                _mix(bed, routes["rumble"], half_l, half_r, 0.7 * (half_l + half_r), eq_rumble_half)
             if sp:
                 # Low grinding noise, chattering as the tyres hop between grip and slip.
                 # 2x: noise is spiky, and this has to stand out over a floored engine.
@@ -1145,6 +1231,13 @@ class Synth:
         any_trigger = any(trigger)
         return Block(trigger=trigger, left_grip=left, right_grip=right,
                      route=Route.BOTH if any_trigger else Route.MUTE)
+
+    def _strip(self, side: int, freq: float) -> tuple[float, float]:
+        """One sample of a side's strip (RUMBLE_SHAPE): the grooves with their harmonics, and the half-rate part."""
+        w = TAU * self.rumble_osc[side].phase
+        half, second, third = RUMBLE_SHAPE
+        grooves = self.rumble_osc[side].next(freq) + second * math.sin(2 * w) + third * math.sin(3 * w)
+        return RUMBLE_LEVEL * grooves, RUMBLE_LEVEL * half * self.rumble_half[side].next(freq / 2)
 
     def _lock_chop(self) -> float:
         """Wheel-lock gate: on for the first half of each LOCK_RATE cycle, with LOCK_EDGE ramps."""

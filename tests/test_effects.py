@@ -10,8 +10,8 @@ import unittest
 from unittest import mock
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE
-from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, TOGGLEABLE, Burst, Equalizer, Gains, NoiseBurst,
-                     ResonanceCut, Synth, Texture, effective_gains, surface_of)
+from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, RUMBLE_SPACING, TOGGLEABLE, Burst, Equalizer, Gains,
+                     NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
 _render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise
@@ -572,6 +572,66 @@ class EventShapeTest(unittest.TestCase):
         windows = [rms(samples[i:i + 20]) for i in range(0, len(samples), 20)]
         quiet = sum(1 for w in windows if w < 0.05 * max(windows)) / len(windows)
         self.assertGreater(quiet, 0.08)  # the old one wobbled at 5 Hz and never went quiet
+
+    @staticmethod
+    def event(effect: str, blocks: int, before: dict, after: dict) -> list[float]:
+        """The left grip from the moment a state changes, the effect alone."""
+        s, samples = only(effect), []
+        s.render(frame(**before))
+        for _ in range(blocks):
+            samples.extend(s.render(frame(**after)).left_grip)
+        return samples
+
+    @staticmethod
+    def peak(samples: list[float]) -> float:
+        return max(abs(x) for x in samples)
+
+    def test_the_air_shift_follows_the_knob(self) -> None:
+        def flip(selector: int) -> list[float]:
+            return self.event("shifter", 50, {"shifter_toggle": (False, False)},
+                              {"shifter_toggle": (selector == 0, selector == 1)})
+        range_, split = flip(0), flip(1)
+        knob = self.peak(range_[:30])
+        self.assertLess(self.peak(range_[40:110]), 0.2 * knob)
+        clack = self.peak(range_[120:260])
+        self.assertGreater(clack, 0.7 * knob)  # the gearbox shifting, as hard as a gear shift
+        self.assertLess(self.peak(split[100:260]), 0.5 * clack)  # the splitter's 12 dB softer
+
+    def test_the_flasher_relay_clicks_short(self) -> None:
+        samples = self.event("blinker", 10, {"blinker_left": False}, {"blinker_left": True})
+        self.assertLess(self.peak(samples[10:40]), 0.25 * self.peak(samples))
+
+    def test_coupling_clatters(self) -> None:
+        samples = self.event("trailer", 100, {}, {"trailer_attached": True})
+        windows = [self.peak(samples[i:i + 20]) for i in range(0, 600, 20)]
+        self.assertGreaterEqual(sum(w > 0.15 * self.peak(samples) for w in windows), 15)  # knocks all through 0.6 s
+
+    def test_the_engine_cranks_for_a_second_then_catches(self) -> None:
+        samples = self.event("engine_start", 250, {"engine_on": False}, {"engine_on": True})
+        loudest = max(range(len(samples)), key=lambda n: abs(samples[n]))
+        self.assertTrue(1100 < loudest < 1500)
+        self.assertGreater(self.peak(samples[300:1000]), 0.1 * abs(samples[loudest]))  # compression knocks
+
+    def test_stopping_fires_on_then_runs_down(self) -> None:
+        samples = self.event("engine_start", 125, {"engine_on": True}, {"engine_on": False})
+        idle = self.peak(samples[200:320])
+        self.assertLess(self.peak(samples[360:460]), 0.4 * idle)  # 8 dB down once it stops firing
+        self.assertGreater(self.peak(samples[600:700]), 0.05 * idle)  # and still running down
+
+
+class RumbleTest(unittest.TestCase):
+    def test_strip_hums_with_every_other_groove_harder(self) -> None:
+        s, samples = only("rumble"), []
+        for _ in range(60):
+            f = frame(speed=22.0)
+            for wheel in f.wheels:
+                wheel.substance = "rumble_stripe"
+            samples.extend(s.render(f).left_grip)
+        groove = 22.0 / RUMBLE_SPACING
+        samples = samples[80:480]
+        fundamental = tone_level(samples, groove)
+        self.assertGreater(tone_level(samples, groove / 2), 0.2 * fundamental)
+        self.assertLess(tone_level(samples, 3 * groove), 0.15 * fundamental)  # not a clipped buzz
 
 
 def drive(fps: float | None, start: float, end: float) -> tuple[list[float], int]:

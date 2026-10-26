@@ -190,8 +190,9 @@ MESSAGES = {
         "A short 'thud' the moment throttle or brake reaches the floor (97% or more).",
     "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다.":
         "A thin squeal in separate bursts while braking gently to a stop below about 14 km/h.",
-    "트레일러를 연결할 때 묵직한 '쿵', 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
-        "A heavy 'thump' when coupling a trailer; on uncoupling a thump followed by an air hiss.",
+    "트레일러를 연결할 때 커플러가 0.6초쯤 '덜커덕덜컥' 맞물리고, 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
+        ("The fifth wheel clattering for about 0.6 s as a trailer couples; on uncoupling a thump followed by an "
+         "air hiss."),
     "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
         ("Setting the parking brake: a 'clunk', then air venting for most of a second. Releasing it: a low 'thunk', "
          "then a short puff."),
@@ -200,11 +201,12 @@ MESSAGES = {
          "harder you braked; a quick dab does not do it. It comes with every release, so 'Duck for events' leaves "
          "the driving effects alone for it."),
     "방향지시등이 점멸할 때마다 켜진 쪽 그립에 '틱'.": "A 'tick' in the grip on the signalling side with every blink.",
-    "시동을 켤 때 크랭킹에 이어 '부웅', 끌 때 꺼지며 떨림.":
-        "Cranking and a 'vroom' when the engine starts; a shudder as it dies when you switch it off.",
-    "H-시프터의 레인지 셀렉터나 스플리터를 조작할 때 '딸깍'. 자동/순차 변속에서는 울리지 않습니다.":
-        ("A 'click' when you flip the H-shifter's range selector or splitter. Silent with automatic or sequential "
-         "shifting."),
+    "시동을 켤 때 1초쯤 크랭킹하다가 '부웅' 하고 걸리고, 끌 때 잠깐 더 돌다가 '투둑투둑' 잦아듭니다.":
+        ("About a second of cranking, then the engine catches with a 'vroom'; switched off, it fires on for a "
+         "moment and then putters out."),
+    "H-시프터의 레인지 셀렉터나 스플리터를 조작할 때 '딸깍'에 이어 변속기가 '철컥' 넘어갑니다(스플리터는 약하게). 자동/순차 변속에서는 울리지 않습니다.":
+        ("A 'click' when you flip the H-shifter's range selector or splitter, then the gearbox shifting over with "
+         "a 'clack' (faintly for the splitter). Silent with automatic or sequential shifting."),
     "톨게이트, 벌금, 주유, 배송 완료, 페리, 기차 이벤트 때 '톡톡' 두 번.":
         "A double 'tap-tap' on toll gates, fines, refuelling, finished deliveries, ferries and trains.",
     "이벤트가 울리는 순간 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":

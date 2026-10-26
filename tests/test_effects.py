@@ -233,17 +233,31 @@ class EngineTest(unittest.TestCase):
                 current = max(current, b)
         return peaks
 
-    def spread(self, **values) -> float:
-        peaks = self.firing_peaks(self.engine(**values))
+    def firings(self, **values) -> tuple[float, float]:
+        """Spread of the firings' crests over 16 s: the pattern each cycle of the cylinders
+        repeats, and what is left from firing to firing."""
+        gains = Gains(steady_fade=0.0, disabled=[name for name in TOGGLEABLE if name != "engine"])
+        s, samples = Synth(effective_gains(gains)), []
+        for _ in range(2000):
+            samples.extend(s.render(frame(**values)).left_grip)
+        peaks = self.firing_peaks(samples[400:])
+        cylinders = gains.cylinders
+        peaks = peaks[:len(peaks) // cylinders * cylinders]
         mean = sum(peaks) / len(peaks)
-        return math.sqrt(sum((p - mean) ** 2 for p in peaks) / len(peaks)) / mean
+        pattern = [sum(peaks[i::cylinders]) / len(peaks[i::cylinders]) / mean for i in range(cylinders)]
+        imbalance = math.sqrt(sum((p - 1.0) ** 2 for p in pattern) / cylinders)
+        jitter = math.sqrt(sum((p / mean - pattern[i % cylinders]) ** 2 for i, p in enumerate(peaks)) / len(peaks))
+        return imbalance, jitter
 
-    def test_idle_fires_unevenly_and_evens_out_under_load(self) -> None:
-        idle = self.spread(rpm=650.0, game_throttle=0.0, user_throttle=0.0)
-        pulling = self.spread(rpm=1500.0, game_throttle=0.8, user_throttle=0.8)
-        self.assertGreater(idle, 0.08)  # a sine fires every cycle alike
-        self.assertGreater(idle, 1.5 * pulling)
-        self.assertGreater(pulling, 0.01)  # still not a machine
+    def test_cylinders_fire_unevenly_most_at_idle(self) -> None:
+        # 1300 rpm, not 1500: at 75 Hz the crest's sample repeats every third
+        # firing and passes for a cylinder pattern of 0.02
+        idle = self.firings(rpm=650.0, game_throttle=0.0, user_throttle=0.0)
+        pulling = self.firings(rpm=1300.0, game_throttle=0.8, user_throttle=0.8)
+        self.assertGreater(idle[0], 1.3 * pulling[0])  # the idle's lope
+        self.assertGreater(pulling[0], 0.03)  # the recorded engines never fire quite alike
+        for imbalance, jitter in (idle, pulling):
+            self.assertGreater(jitter, 0.07)  # and every firing differs from the last
 
     def test_load_turns_it_harsh(self) -> None:
         def harshness(load: float) -> float:

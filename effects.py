@@ -47,11 +47,16 @@ LOCK_EDGE = 0.003  # s ramp at each edge: a crisp pulse without the click of a s
 RETARDER_HZ = (40.0, 65.0)  # standing, and from 90 km/h
 JAKE_PEAK = 0.1  # of a firing cycle: the knock peaks this early, then the cylinder is quiet
 _JAKE_MEAN = JAKE_PEAK * math.e * (1.0 - (1.0 + 1.0 / JAKE_PEAK) * math.exp(-1.0 / JAKE_PEAK))
-# A diesel does not fire like a sine: at idle its cylinders fire unevenly (a
-# lope at half the firing rate and below), every firing differs a little from
-# the last, and under load combustion turns harsh.
-ENGINE_JITTER = 0.08  # spread of each firing's strength around its cylinder's
-ENGINE_IMBALANCE = 0.3  # spread between cylinders at idle; gone from moderate load or revs
+# A diesel does not fire like a sine: its cylinders never fire quite alike, most
+# unevenly at idle (a lope at half the firing rate and below), every firing
+# differs from the last, and under load combustion turns harsh. The exhaust
+# loops of two engine packs (Zeemods DD60 and Cummins X15) agree on the first
+# two, within the band the grips play (20-250 Hz): from firing to firing the
+# strength varies about 0.08 (std/mean), and a cylinder pattern of about 0.04
+# stays at cruising revs and under load, where idle has about 0.06.
+ENGINE_JITTER = 0.18  # spread of each firing's strength around its cylinder's
+ENGINE_IMBALANCE = 0.3  # spread between cylinders at idle
+ENGINE_UNEVEN_FLOOR = 0.4  # share of it that stays at any load and revs
 ENGINE_HARSH = 0.25  # third harmonic at full load
 
 
@@ -972,7 +977,7 @@ class Synth:
                 engine_freq = max(25.0, min(140.0, frame.rpm / 60.0 * g.cylinders / 2.0))
                 engine_amp = g.engine * (0.25 + 0.55 * load + 0.2 * rpm_frac) * self._steady_gain(engine_moved)
                 engine_harsh = ENGINE_HARSH * load
-                engine_uneven = max(0.0, 1.0 - 2.0 * load - rpm_frac)
+                engine_uneven = max(ENGINE_UNEVEN_FLOOR, 1.0 - 2.0 * load - rpm_frac)
 
             speed_factor = min(1.0, abs(frame.speed) / 25.0) ** 0.7
             sides = ([w for w in frame.wheels if w.pos_x < 0 and w.on_ground],

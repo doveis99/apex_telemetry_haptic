@@ -194,6 +194,30 @@ class LockChopTest(unittest.TestCase):
         self.assertLessEqual(self.pulses()[0][0], 10)
 
 
+class PedalTriggerTest(unittest.TestCase):
+    @staticmethod
+    def trigger(locked: bool = False, **pedals) -> list[float]:
+        """The trigger for 0.4 s once it has faded in, the pedal effect alone and held."""
+        s = Synth(effective_gains(Gains(steady_fade=0.0, disabled=[n for n in TOGGLEABLE if n != "trigger"])))
+        samples = []
+        for _ in range(60):
+            f = frame(**pedals)
+            if locked:
+                for wheel in f.wheels:
+                    wheel.velocity = 0.0
+            samples.extend(s.render(f).trigger)
+        return samples[80:480]
+
+    def test_braking_is_felt_like_the_throttle(self) -> None:
+        brake, throttle = rms(self.trigger(user_brake=0.3, user_throttle=0.0)), rms(self.trigger(user_throttle=0.3))
+        self.assertTrue(0.5 < brake / throttle < 1.0, brake / throttle)  # 0.25 x pedal made it a sixth
+
+    def test_the_lock_warning_stands_over_a_full_stop(self) -> None:
+        full = self.trigger(user_brake=1.0, user_throttle=0.0)
+        locked = self.trigger(locked=True, user_brake=1.0, user_throttle=0.0)
+        self.assertGreaterEqual(max(map(abs, locked)), max(map(abs, full)))
+
+
 def only(effect: str) -> Synth:
     return Synth(effective_gains(Gains(disabled=[name for name in TOGGLEABLE if name != effect])))
 
@@ -511,6 +535,10 @@ class SurfaceTest(unittest.TestCase):
         self.assertGreater(rms(rough), 1.15 * rms(smooth))
         self.assertGreater(self.kurtosis(rough), 1.3 * self.kurtosis(smooth))  # in knocks, not more hiss
         self.assertEqual(self.texture(roughness=0.05), smooth)  # under the start of the rattle
+
+    def test_static_ground_is_still_paved(self) -> None:
+        # yards, bridges and ramps; it used to drop the road out for seconds at speed
+        self.assertGreater(rms(self.road("static")), 0.8 * rms(self.road("road")))
 
     def test_strength_does_not_follow_the_pitch(self) -> None:
         # neither has stones: ice hisses at 140 Hz, wood at 65 Hz; a plain band-pass made ice 1.5x stronger

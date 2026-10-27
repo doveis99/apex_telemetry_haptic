@@ -79,6 +79,9 @@ SURFACES = (
     ("ice", Surface(0.15, 140.0)), ("snow", Surface(0.45, 70.0, 2.0, 0.4)),
     ("rumble", Surface(0.3, 100.0)),  # the strip itself is the rumble effect; the texture stays that of asphalt
     ("road", Surface(0.3, 100.0)), ("asphalt", Surface(0.3, 100.0)), ("concrete", Surface(0.35, 90.0)),
+    # Anything modelled rather than painted on the terrain: company yards, and bridges and
+    # ramps taken at speed. It is still paved ground, not air.
+    ("static", Surface(0.35, 90.0)),
     ("wood", Surface(0.55, 65.0)), ("metal", Surface(0.6, 130.0)), ("dirt", Surface(0.75, 60.0, 1.5, 0.4)),
     ("grass", Surface(0.7, 130.0)), ("gravel", Surface(1.0, 85.0, 3.0, 0.6)), ("rough", Surface(0.9, 70.0, 2.0, 0.4)),
 )
@@ -155,7 +158,7 @@ SHIFTER_HITS = (((0.0, 140.0, 1.0, 0.005),  # the knob
 def surface_of(name: str) -> Surface | None:
     """The texture of a substance; None for no ground at all."""
     name = name.lower()
-    if not name or name == "static":
+    if not name:
         return None
     for key, surface in SURFACES:
         if key in name:
@@ -248,13 +251,16 @@ class Gains:
     bumps: float = 1.0
     rumble: float = 0.8
     wheelspin: float = 0.7
-    gear: float = 0.8
+    # Gear shift, throttle/brake and its pulse are the developer's own after a 220 mile haul
+    # (2026-10-28): the shift clacks near 90 of 112 even at 0.6, and anything stronger tires
+    # the hands.
+    gear: float = 0.6
     retarder: float = 0.3
     impact: float = 1.0
-    trigger: float = 0.3  # held nearly all the time; xHaptics keeps triggers near 36% of full scale
+    trigger: float = 0.2  # held nearly all the time
     # how deep the throttle trigger pulses at the engine firing rate; 0 keeps
-    # it steady, 0.8 is the fixed pulse of earlier versions
-    throttle_pulse: float = 0.0
+    # it steady, 0.8 is also the fixed pulse of earlier versions
+    throttle_pulse: float = 0.8
     # how far engine and throttle/brake fade while rpm, load and pedals hold
     # steady; 0 keeps them constant
     steady_fade: float = 0.6
@@ -1116,7 +1122,10 @@ class Synth:
                 if lock > 0:
                     trigger_amp = g.trigger * min(1.0, 0.6 + lock)
                 else:
-                    trigger_amp = (g.trigger * 0.25 * frame.user_brake * speed_factor
+                    # 0.25 x pedal left an ordinary stop at 1% of full scale. Now a stop is felt,
+                    # at about 0.6 of the steady throttle on the same pedal (as strong as a pulsed
+                    # one), and flat out it reaches the lock warning's floor.
+                    trigger_amp = (g.trigger * (0.1 + 0.5 * frame.user_brake) * speed_factor
                                    * self._steady_gain(brake_moved))
             elif frame.user_throttle > 0.05 and frame.engine_on:
                 trigger_mode = "throttle"

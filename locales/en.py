@@ -280,12 +280,13 @@ MESSAGES = {
     "Steam 밖에 설치했거나 찾지 못한 경우, bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 게임 폴더를 지정합니다.":
         ("For installs outside Steam or ones not found: point to the game folder that contains "
          "bin\\win_x64\\amtrucks.exe or eurotrucks2.exe."),
+    "디버그 기록 종료": "Debug log stopped",
     "디버그 기록: {name}": "Debug log: {name}",
     "디버그 기록을 열 수 없음 ({error})": "Cannot open the debug log ({error})",
-    "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 다음 시작부터 적용되고 바로 저장됩니다.":
+    "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 주행 중에도 켜고 끄는 즉시 적용되고 바로 저장됩니다.":
         ("When on, every start writes each 8 ms block sent to the controller to a CSV (time, interval, trigger route, "
          "level per channel, speed, surface, events). If a vibration feels wrong, note the time and look it up there. "
-         "About 30 MB per hour; the newest 10 are kept. Applies from the next start and is saved at once."),
+         "About 30 MB per hour; the newest 10 are kept. Takes effect at once, even mid-drive, and is saved at once."),
     "기록 폴더 ↗": "Log folder ↗",
     "디버그 기록이 쌓이는 폴더를 엽니다.": "Opens the folder the debug logs go to.",
     "디버그 기록": "Debug log",

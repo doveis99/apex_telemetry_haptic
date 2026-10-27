@@ -276,7 +276,7 @@ class App:
         # debug log: switch, name and folder link, packed right to left
         log_tip = t("켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, "
                     "트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 "
-                    "보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 다음 시작부터 적용되고 바로 저장됩니다.")
+                    "보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 주행 중에도 켜고 끄는 즉시 적용되고 바로 저장됩니다.")
         tip(Link(footer, t("기록 폴더 ↗"), self._open_log_dir),
             t("디버그 기록이 쌓이는 폴더를 엽니다.") + f"\n{LOG_DIR}").pack(side="right", padx=(0, 18))
         tip(tk.Label(footer, text=t("디버그 기록"), bg=BG, fg=TEXT, font=font(9)), log_tip).pack(
@@ -542,9 +542,11 @@ class App:
         self.last_game = None  # a game that is already running counts as newly detected
 
     def _on_debug_log(self) -> None:
-        # An app option like auto start: saved right away, used from the next start.
+        # Saved right away like auto start, and a running drive starts or stops its log on the next block.
         self.options.debug_log = self.debug_log.get()
         save_app_options(self.options)
+        if self.runner is not None:
+            self.runner.log_blocks = self.options.debug_log
 
     def _open_log_dir(self) -> None:
         LOG_DIR.mkdir(parents=True, exist_ok=True)

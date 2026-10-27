@@ -275,12 +275,13 @@ MESSAGES = {
     "Steam 밖에 설치했거나 찾지 못한 경우, bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 게임 폴더를 지정합니다.":
         ("Dla instalacji spoza Steam lub nieznalezionych: wskaż folder gry zawierający bin\\win_x64\\amtrucks.exe "
          "lub eurotrucks2.exe."),
+    "디버그 기록 종료": "Dziennik debugowania zatrzymany",
     "디버그 기록: {name}": "Dziennik debugowania: {name}",
     "디버그 기록을 열 수 없음 ({error})": "Nie można otworzyć dziennika debugowania ({error})",
-    "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 다음 시작부터 적용되고 바로 저장됩니다.":
+    "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 주행 중에도 켜고 끄는 즉시 적용되고 바로 저장됩니다.":
         ("Po włączeniu każdy start zapisuje do CSV każdy 8-ms blok wysłany do kontrolera (czas, odstęp, trasa spustów, "
          "siła na kanał, prędkość, nawierzchnia, zdarzenia). Gdy wibracja wydaje się dziwna, zapamiętaj godzinę i znajdź ją tam. "
-         "Około 30 MB na godzinę; zostaje 10 najnowszych. Działa od następnego startu, zapisywane od razu."),
+         "Około 30 MB na godzinę; zostaje 10 najnowszych. Działa od razu, także w trakcie jazdy, zapisywane od razu."),
     "기록 폴더 ↗": "Folder dzienników ↗",
     "디버그 기록이 쌓이는 폴더를 엽니다.": "Otwiera folder z dziennikami debugowania.",
     "디버그 기록": "Dziennik debugowania",

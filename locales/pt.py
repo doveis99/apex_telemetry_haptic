@@ -280,12 +280,13 @@ MESSAGES = {
     "Steam 밖에 설치했거나 찾지 못한 경우, bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 게임 폴더를 지정합니다.":
         ("Para instalações fora da Steam ou não encontradas: indique a pasta do jogo que contém "
          "bin\\win_x64\\amtrucks.exe ou eurotrucks2.exe."),
+    "디버그 기록 종료": "Registro de depuração encerrado",
     "디버그 기록: {name}": "Registro de depuração: {name}",
     "디버그 기록을 열 수 없음 ({error})": "Não foi possível abrir o registro de depuração ({error})",
-    "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 다음 시작부터 적용되고 바로 저장됩니다.":
+    "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 주행 중에도 켜고 끄는 즉시 적용되고 바로 저장됩니다.":
         ("Ligado, cada início grava num CSV cada bloco de 8 ms enviado ao controle (hora, intervalo, rota do gatilho, "
          "intensidade por canal, velocidade, superfície, eventos). Se uma vibração parecer estranha, anote a hora e procure ali. "
-         "Cerca de 30 MB por hora; os 10 mais recentes ficam. Vale a partir do próximo início e é salvo na hora."),
+         "Cerca de 30 MB por hora; os 10 mais recentes ficam. Vale na hora, mesmo dirigindo, e é salvo na hora."),
     "기록 폴더 ↗": "Pasta de registros ↗",
     "디버그 기록이 쌓이는 폴더를 엽니다.": "Abre a pasta onde ficam os registros de depuração.",
     "디버그 기록": "Registro de depuração",

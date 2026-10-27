@@ -66,6 +66,26 @@ class RunTest(unittest.TestCase):
         self.assertTrue(log_seen[0].closed)
         self.assertEqual(len(source_closes), 4)  # the mapping is opened afresh for each attempt
 
+    def test_switch_mid_drive_starts_and_stops_the_log(self) -> None:
+        runner = ats_haptics.Runner(Gains(), simulate=True)
+        with mock.patch.object(ats_haptics, "BlockLog", FakeLog):
+            runner._open_log()  # the controller is taken with the switch off
+            runner.render()
+            self.assertIsNone(runner.block_log)
+            runner.log_blocks = True  # switched on from the GUI thread
+            runner.render()
+            log = runner.block_log
+            self.assertEqual(log.rows, 1)
+            runner.log_blocks = False
+            runner.render()
+            self.assertIsNone(runner.block_log)
+            self.assertTrue(log.closed)
+            self.assertEqual(log.rows, 1)
+            runner._close_log()  # controller let go: switching on now waits for the next connection
+            runner.log_blocks = True
+            runner.render()
+            self.assertIsNone(runner.block_log)
+
 
 if __name__ == "__main__":
     unittest.main()

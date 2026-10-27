@@ -64,8 +64,9 @@ class Runner:
         self.max_accel = 0.0
         self._last_render_time = None
         self._last_render_change = 0.0
-        self.log_blocks = log_blocks
+        self.log_blocks = log_blocks  # may be flipped from any thread; the output thread follows it
         self.block_log: BlockLog | None = None
+        self._log_here = False  # the controller is held, so a log may be open
         self.preview: Preview | None = None  # an effect test playing in place of the drive (preview.py)
 
     def _read_frame(self) -> Frame | None:
@@ -129,13 +130,24 @@ class Runner:
         rotate the log that recorded the disconnect out of the folder.
         """
         self._close_log()
-        if not self.log_blocks:
+        self._log_here = True
+        self._follow_log_switch()
+
+    def _follow_log_switch(self) -> None:
+        """Open or close the log when log_blocks was switched mid-drive (output thread only)."""
+        if not self._log_here or self.log_blocks == (self.block_log is not None):
             return
         stamp = time.strftime("%H:%M:%S")
+        if self.block_log is not None:
+            self.block_log.close()
+            self.block_log = None
+            self.events.append(f"{stamp} {t('디버그 기록 종료')}")
+            return
         try:
             self.block_log = BlockLog()
             self.events.append(f"{stamp} {t('디버그 기록: {name}', name=self.block_log.path.name)}")
         except OSError as exc:
+            self._log_here = False  # not again every 8 ms; the next connection tries afresh
             self.events.append(f"{stamp} {t('디버그 기록을 열 수 없음 ({error})', error=exc)}")
 
     def render(self, _first_sample: int = 0) -> Block | None:
@@ -162,6 +174,7 @@ class Runner:
                 block = solo
         for i, channel in enumerate((block.left_grip, block.right_grip, block.trigger)):
             self.peaks[i] = max(self.peaks[i], max(abs(x) for x in channel) / MAX_SAMPLE)
+        self._follow_log_switch()
         if self.block_log is not None:
             self.block_log.add(block, frame, levels.events)
         return block
@@ -175,6 +188,7 @@ class Runner:
         return value
 
     def _close_log(self) -> None:
+        self._log_here = False
         if self.block_log is not None:
             self.block_log.close()
             self.block_log = None

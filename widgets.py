@@ -4,6 +4,10 @@ Plain tkinter only (no extra packages), so the PyInstaller build stays as it
 is. Every widget draws itself on a Canvas: rounded segment buttons, an on/off
 switch, a slider whose fill shows the route colour, a level meter and a
 hover tooltip. The font follows the UI language (i18n.ui_font).
+
+The window draws at the screen's own resolution (make_dpi_aware), so every
+size here is in design pixels, as laid out at 100 % scaling, and px() turns
+it into screen pixels; fonts are in points and scale by themselves.
 """
 
 from __future__ import annotations
@@ -40,6 +44,29 @@ BUTTON_KINDS = {  # fill, hover fill, text
     "primary": (ACCENT, "#7ab6ff", INK),
     "ghost": (FIELD, FIELD_HI, TEXT),
 }
+SCALE = 1.0  # screen pixels per design pixel; set by apply_theme from the screen DPI
+
+
+def make_dpi_aware() -> None:
+    """Draw at the screen's real resolution; call before the first window opens.
+
+    Otherwise Windows draws the window at 96 DPI and stretches the bitmap
+    to the display scaling, which blurs it at 125 % and up. System aware,
+    not per monitor: Tk 8.6 does not redraw for a move to a monitor with
+    another scaling, so there Windows stretches it as before.
+    """
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)  # PROCESS_SYSTEM_DPI_AWARE
+    except (AttributeError, OSError):
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()  # before Windows 8.1
+        except (AttributeError, OSError):
+            pass
+
+
+def px(size: float) -> int:
+    """A design-pixel size in screen pixels."""
+    return round(size * SCALE)
 
 
 def font(size: int = 10, weight: str = "normal") -> tuple[str, int, str]:
@@ -54,7 +81,9 @@ def round_rect(canvas: tk.Canvas, x1: float, y1: float, x2: float, y2: float, r:
 
 
 def apply_theme(root: tk.Tk) -> None:
-    """Dark clam theme for the ttk widgets that remain (dialogs, spinbox)."""
+    """Dark clam theme for the ttk widgets that remain (dialogs, spinbox); also sets SCALE."""
+    global SCALE
+    SCALE = max(1.0, root.winfo_fpixels("1i") / 96)
     root.configure(bg=BG)
     root.option_add("*Font", font())
     style = ttk.Style(root)
@@ -62,10 +91,10 @@ def apply_theme(root: tk.Tk) -> None:
     style.configure(".", background=BG, foreground=TEXT, fieldbackground=FIELD, bordercolor=FIELD,
                     lightcolor=FIELD, darkcolor=FIELD, troughcolor=FIELD, arrowcolor=TEXT,
                     selectbackground=ACCENT, selectforeground=INK, insertcolor=TEXT, font=font())
-    style.configure("TButton", background=FIELD, padding=(12, 5), relief="flat")
+    style.configure("TButton", background=FIELD, padding=(px(12), px(5)), relief="flat")
     style.map("TButton", background=[("disabled", BG), ("active", FIELD_HI)],
               foreground=[("disabled", FAINT)])
-    style.configure("TSpinbox", background=FIELD, arrowsize=12, padding=(6, 2))
+    style.configure("TSpinbox", background=FIELD, arrowsize=px(12), padding=(px(6), px(2)))
     style.map("TSpinbox", background=[("active", FIELD_HI)])
 
 
@@ -88,12 +117,12 @@ def card(parent: tk.Misc, title: str, hint: str = "") -> tk.Frame:
     """A rounded-looking panel with a heading; returns the body frame to fill."""
     outer = tk.Frame(parent, bg=CARD, highlightthickness=1, highlightbackground="#20252f")
     head = tk.Frame(outer, bg=CARD)
-    head.pack(fill="x", padx=14, pady=(10, 4))
+    head.pack(fill="x", padx=px(14), pady=(px(10), px(4)))
     tk.Label(head, text=title, bg=CARD, fg=TEXT, font=font(11, "bold")).pack(side="left")
     if hint:
-        tk.Label(head, text=hint, bg=CARD, fg=FAINT, font=font(9)).pack(side="left", padx=(8, 0), pady=(2, 0))
+        tk.Label(head, text=hint, bg=CARD, fg=FAINT, font=font(9)).pack(side="left", padx=(px(8), 0), pady=(px(2), 0))
     body = tk.Frame(outer, bg=CARD)
-    body.pack(fill="both", expand=True, padx=14, pady=(0, 12))
+    body.pack(fill="both", expand=True, padx=px(14), pady=(0, px(12)))
     body.outer = outer  # type: ignore[attr-defined]  # what the caller lays out
     body.head = head  # type: ignore[attr-defined]
     return body
@@ -104,11 +133,11 @@ class Button(tk.Canvas):
 
     def __init__(self, parent: tk.Misc, text: str, command: Callable[[], None], kind: str = "ghost",
                  size: int = 10, height: int = 32, min_width: int = 0, bg: str = BG) -> None:
-        super().__init__(parent, height=height, bg=bg, highlightthickness=0, bd=0, cursor="hand2")
+        super().__init__(parent, height=px(height), bg=bg, highlightthickness=0, bd=0, cursor="hand2")
         self.command = command
         self.text, self.kind, self.state = text, kind, "normal"
         self.font = font(size, "bold")
-        self.min_width = min_width
+        self.min_width = px(min_width)
         self.hover = False
         self.bind("<Enter>", lambda _: self._hover(True))
         self.bind("<Leave>", lambda _: self._hover(False))
@@ -131,7 +160,7 @@ class Button(tk.Canvas):
             self.command()
 
     def _draw(self) -> None:
-        width = max(self.min_width, tkfont.Font(font=self.font).measure(self.text) + 32)
+        width = max(self.min_width, tkfont.Font(font=self.font).measure(self.text) + px(32))
         height = int(self["height"])
         self.config(width=width, cursor="hand2" if self.state == "normal" else "arrow")
         fill, hover, ink = BUTTON_KINDS[self.kind]
@@ -140,7 +169,7 @@ class Button(tk.Canvas):
         elif self.hover:
             fill = hover
         self.delete("all")
-        round_rect(self, 1, 1, width - 1, height - 1, 9, fill=fill, outline="")
+        round_rect(self, 1, 1, width - 1, height - 1, px(9), fill=fill, outline="")
         self.create_text(width / 2, height / 2, text=self.text, fill=ink, font=self.font)
 
 
@@ -158,9 +187,11 @@ class Segmented(tk.Canvas):
         self.font = font(size, "bold")
         # wide enough for the longest text, which depends on the language
         measure = tkfont.Font(font=self.font).measure
-        self.segment_width = max(segment_width, *(measure(text) + 16 for _, text, _ in self.options))
-        width = self.segment_width * len(self.options) + 6
-        super().__init__(parent, width=width, height=height, bg=bg, highlightthickness=0, bd=0, cursor="hand2")
+        self.inset = px(3)
+        self.segment_width = max(px(segment_width), *(measure(text) + px(16) for _, text, _ in self.options))
+        width = self.segment_width * len(self.options) + 2 * self.inset
+        super().__init__(parent, width=width, height=px(height), bg=bg, highlightthickness=0, bd=0,
+                         cursor="hand2")
         self.command = command
         self.value: str | None = None
         self.dim = self.locked = False
@@ -177,7 +208,7 @@ class Segmented(tk.Canvas):
             self._draw()
 
     def _index(self, x: int) -> int | None:
-        index = (x - 3) // self.segment_width
+        index = (x - self.inset) // self.segment_width
         return index if 0 <= index < len(self.options) else None
 
     def _hover(self, index: int | None) -> None:
@@ -192,22 +223,23 @@ class Segmented(tk.Canvas):
 
     def _draw(self) -> None:
         self.delete("all")
-        width, height = int(self["width"]), int(self["height"])
-        round_rect(self, 0, 0, width, height, 9, fill=FIELD, outline="")
+        width, height, inset = int(self["width"]), int(self["height"]), self.inset
+        round_rect(self, 0, 0, width, height, px(9), fill=FIELD, outline="")
         for i, (value, text, color) in enumerate(self.options):
-            x1 = 3 + i * self.segment_width
+            x1 = inset + i * self.segment_width
             x2 = x1 + self.segment_width
             picked = value == self.value
             if picked and not self.dim:
-                round_rect(self, x1, 3, x2, height - 3, 7, fill=FAINT if self.locked else color, outline="")
+                round_rect(self, x1, inset, x2, height - inset, px(7), fill=FAINT if self.locked else color,
+                           outline="")
                 ink = INK
             elif picked:
-                round_rect(self, x1 + 1, 4, x2 - 1, height - 4, 7, fill=FIELD, outline=FAINT)
+                round_rect(self, x1 + 1, inset + 1, x2 - 1, height - inset - 1, px(7), fill=FIELD, outline=FAINT)
                 ink = MUTED
             else:
                 hover = i == self.hovered and not self.locked
                 if hover:
-                    round_rect(self, x1, 3, x2, height - 3, 7, fill=FIELD_HI, outline="")
+                    round_rect(self, x1, inset, x2, height - inset, px(7), fill=FIELD_HI, outline="")
                 ink = TEXT if hover else (FAINT if self.dim or self.locked else MUTED)
             self.create_text((x1 + x2) / 2, height / 2, text=text, fill=ink, font=self.font)
 
@@ -217,7 +249,7 @@ class Switch(tk.Canvas):
 
     def __init__(self, parent: tk.Misc, variable: tk.BooleanVar, command: Callable[[], None],
                  color: str = GO, bg: str = CARD) -> None:
-        super().__init__(parent, width=36, height=20, bg=bg, highlightthickness=0, bd=0, cursor="hand2")
+        super().__init__(parent, width=px(36), height=px(20), bg=bg, highlightthickness=0, bd=0, cursor="hand2")
         self.variable, self.command, self.color = variable, command, color
         self.bind("<Button-1>", self._click)
         variable.trace_add("write", lambda *_: self._draw())
@@ -229,10 +261,11 @@ class Switch(tk.Canvas):
 
     def _draw(self) -> None:
         on = self.variable.get()
+        width, height = int(self["width"]), int(self["height"])
         self.delete("all")
-        round_rect(self, 0, 0, 36, 20, 10, fill=self.color if on else FIELD_HI, outline="")
-        x = 25 if on else 11
-        self.create_oval(x - 7, 3, x + 7, 17, fill="#ffffff" if on else MUTED, outline="")
+        round_rect(self, 0, 0, width, height, height / 2, fill=self.color if on else FIELD_HI, outline="")
+        x, y, r = (width - height / 2 + 1 if on else height / 2 - 1), height / 2, px(7)
+        self.create_oval(x - r, y - r, x + r, y + r, fill="#ffffff" if on else MUTED, outline="")
 
 
 class Slider(tk.Canvas):
@@ -244,8 +277,10 @@ class Slider(tk.Canvas):
 
     def __init__(self, parent: tk.Misc, variable: tk.DoubleVar, low: float, high: float,
                  command: Callable[[], None], color: str = ACCENT, length: int = 200, bg: str = CARD) -> None:
-        super().__init__(parent, width=length, height=24, bg=bg, highlightthickness=0, bd=0, cursor="hand2")
+        super().__init__(parent, width=px(length), height=px(24), bg=bg, highlightthickness=0, bd=0,
+                         cursor="hand2")
         self.variable, self.low, self.high, self.command = variable, low, high, command
+        self.margin = px(8)  # room for the knob at either end
         self.color = color
         self.step = 5 if high - low >= 100 else 1
         self.bind("<Button-1>", self._drag)
@@ -266,41 +301,41 @@ class Slider(tk.Canvas):
             self.command()
 
     def _drag(self, event: tk.Event) -> None:
-        span = int(self["width"]) - 16
-        self._put(self.low + (event.x - 8) / span * (self.high - self.low))
+        span = int(self["width"]) - 2 * self.margin
+        self._put(self.low + (event.x - self.margin) / span * (self.high - self.low))
 
     def _wheel(self, event: tk.Event) -> None:
         self._put(self.variable.get() + (self.step if event.delta > 0 else -self.step))
 
     def _draw(self) -> None:
-        width, y = int(self["width"]), 12
+        width, y, m, r = int(self["width"]), int(self["height"]) / 2, self.margin, px(7)
         fraction = (self.variable.get() - self.low) / (self.high - self.low)
-        x = 8 + max(0.0, min(1.0, fraction)) * (width - 16)
+        x = m + max(0.0, min(1.0, fraction)) * (width - 2 * m)
         self.delete("all")
-        self.create_line(8, y, width - 8, y, width=4, fill=FIELD_HI, capstyle="round")
-        self.create_line(8, y, x, y, width=4, fill=self.color, capstyle="round")
-        self.create_oval(x - 7, y - 7, x + 7, y + 7, fill="#ffffff", outline=self.color, width=2)
+        self.create_line(m, y, width - m, y, width=px(4), fill=FIELD_HI, capstyle="round")
+        self.create_line(m, y, x, y, width=px(4), fill=self.color, capstyle="round")
+        self.create_oval(x - r, y - r, x + r, y + r, fill="#ffffff", outline=self.color, width=px(2))
 
 
 class Meter(tk.Canvas):
     """Thin level bar, 0..1."""
 
     def __init__(self, parent: tk.Misc, color: str, length: int = 200, bg: str = CARD) -> None:
-        super().__init__(parent, width=length, height=10, bg=bg, highlightthickness=0, bd=0)
+        super().__init__(parent, width=px(length), height=px(10), bg=bg, highlightthickness=0, bd=0)
         self.color = color
         self.shown = -1
         self.set(0.0)
 
     def set(self, level: float) -> None:
-        width = int(self["width"])
+        width, height = int(self["width"]), int(self["height"])
         x = round(max(0.0, min(1.0, level)) * width)
         if x == self.shown:
             return
         self.shown = x
         self.delete("all")
-        round_rect(self, 0, 0, width, 10, 5, fill=FIELD, outline="")
-        if x >= 4:
-            round_rect(self, 0, 0, x, 10, 5, fill=self.color, outline="")
+        round_rect(self, 0, 0, width, height, height / 2, fill=FIELD, outline="")
+        if x >= px(4):
+            round_rect(self, 0, 0, x, height, height / 2, fill=self.color, outline="")
 
 
 class Tooltip:
@@ -333,15 +368,15 @@ class Tooltip:
         top.wm_overrideredirect(True)
         top.attributes("-topmost", True)
         tk.Label(top, text=self.text, bg=TILE, fg=TEXT, font=font(9), justify="left",
-                 wraplength=self.wraplength, padx=9, pady=6).pack(padx=1, pady=1)
+                 wraplength=px(self.wraplength), padx=px(9), pady=px(6)).pack(padx=1, pady=1)
         top.update_idletasks()
-        x = widget.winfo_pointerx() + 12
-        y = widget.winfo_rooty() + widget.winfo_height() + 6
+        x = widget.winfo_pointerx() + px(12)
+        y = widget.winfo_rooty() + widget.winfo_height() + px(6)
         # keep it on the primary screen when the pointer is there
         if x < widget.winfo_screenwidth():
-            x = min(x, widget.winfo_screenwidth() - top.winfo_reqwidth() - 4)
+            x = min(x, widget.winfo_screenwidth() - top.winfo_reqwidth() - px(4))
         if y + top.winfo_reqheight() > widget.winfo_screenheight():
-            y = widget.winfo_rooty() - top.winfo_reqheight() - 6
+            y = widget.winfo_rooty() - top.winfo_reqheight() - px(6)
         top.geometry(f"+{x}+{y}")
 
     def _hide(self, _event: tk.Event | None = None) -> None:

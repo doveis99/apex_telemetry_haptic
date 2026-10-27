@@ -50,7 +50,7 @@ from settings import (delete_preset, load_app_options, load_eq, load_gains, load
                       save_gains, save_preset)
 from widgets import (ACCENT, BG, BOTH_COLOR, CARD, FAINT, FIELD_HI, GO, GRIP_COLOR, MUTED, STOP, TEXT, TILE,
                      TRIGGER_COLOR, WARN, Button, Link, Meter, Segmented, Slider, Switch, apply_theme, card,
-                     dark_title_bar, font, tip)
+                     dark_title_bar, font, make_dpi_aware, px, tip)
 
 POLL_MS = 100
 METER_DECAY = 0.8
@@ -206,33 +206,33 @@ class App:
         # Label columns fit the longest name in this language, the same in every card.
         names = [spec[1] for spec in OUTPUT_SLIDERS + EFFECT_SLIDERS + EVENT_SLIDERS + THRESHOLD_SLIDERS]
         measure = tkfont.Font(font=font()).measure
-        self.label_width = max(measure(t(name)) for name in names + list(METER_LABELS) + [CYLINDERS_LABEL]) + 12
+        self.label_width = max(measure(t(name)) for name in names + list(METER_LABELS) + [CYLINDERS_LABEL]) + px(12)
         root.columnconfigure(0, weight=1)
         root.columnconfigure(1, weight=1)
 
         # header: name, version and repository link on the left; plugin, language and update on the right
         header = tk.Frame(root, bg=BG)
-        header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=18, pady=(14, 8))
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=px(18), pady=(px(14), px(8)))
         tk.Label(header, text=t("ATS 햅틱"), bg=BG, fg=TEXT, font=font(16, "bold")).pack(side="left")
         subtitle = f"APEX 6 Pro · v{__version__}" + (" · dry-run" if self.dry_run else "")
-        tk.Label(header, text=subtitle, bg=BG, fg=MUTED, font=font(9)).pack(side="left", padx=(10, 0), pady=(6, 0))
+        tk.Label(header, text=subtitle, bg=BG, fg=MUTED, font=font(9)).pack(side="left", padx=(px(10), 0), pady=(px(6), 0))
         tip(Link(header, "GitHub ↗", lambda: webbrowser.open(updater.PAGE_URL)),
             t("GitHub 저장소 열기: 소스 코드, 릴리스, 문의(Issues)") + f"\n{updater.PAGE_URL}").pack(
-            side="left", padx=(12, 0), pady=(6, 0))
+            side="left", padx=(px(12), 0), pady=(px(6), 0))
         tip(Button(header, t("텔레메트리 플러그인"), self.open_plugin_dialog, size=9, height=30),
             t("게임에 설치된 텔레메트리 플러그인을 확인하고, 없으면 동봉한 플러그인을 설치합니다.")).pack(side="right")
         self.language_button = Button(header, f"{dict(i18n.LANGUAGES)[i18n.language()]}  ▾", self._language_menu,
                                       size=9, height=30)
-        tip(self.language_button, LANGUAGE_TIP).pack(side="right", padx=(0, 8))
+        tip(self.language_button, LANGUAGE_TIP).pack(side="right", padx=(0, px(8)))
         self.update_button = Button(header, "", self.update, kind="primary", size=9, height=30)  # packed once found
         tip(self.update_button, t("새 버전의 릴리스 노트를 보고, 내려받아 설치한 뒤 다시 시작합니다. 설정은 그대로입니다."))
 
         # control strip: what drives the vibration, start/stop, auto start, status
         control = card(root, t("출력 제어"))
-        control.outer.grid(row=1, column=0, columnspan=2, sticky="ew", padx=18)
+        control.outer.grid(row=1, column=0, columnspan=2, sticky="ew", padx=px(18))
         control.head.pack_forget()
-        control.pack_configure(pady=12)
-        tk.Label(control, text=t("입력"), bg=CARD, fg=MUTED, font=font(9)).pack(side="left", padx=(0, 8))
+        control.pack_configure(pady=px(12))
+        tk.Label(control, text=t("입력"), bg=CARD, fg=MUTED, font=font(9)).pack(side="left", padx=(0, px(8)))
         if not hasattr(self, "source"):  # kept across a language change
             self.source = tk.StringVar(value="game")
             self.source.trace_add("write", lambda *_: self._show_run_state())
@@ -244,39 +244,39 @@ class App:
         self.run_button = Button(control, t("▶  시작"), self.toggle_run, kind="go", size=11, height=36,
                                  min_width=120, bg=CARD)
         tip(self.run_button, t("진동 출력을 시작하거나 멈춥니다. 정지하면 모터를 끄고 컨트롤러를 놓습니다.")).pack(
-            side="left", padx=(14, 18))
+            side="left", padx=(px(14), px(18)))
         self.auto_start = tk.BooleanVar(value=self.options.auto_start_on_game)
         auto_tip = t("창이 정지 상태일 때 게임이 실행되면 자동으로 시작합니다. 게임 도중 직접 정지하면 "
                      "그 게임이 끝날 때까지는 다시 켜지지 않습니다. 바꾸면 바로 저장됩니다.")
         tip(Switch(control, self.auto_start, self._on_auto_start, color=ACCENT), auto_tip).pack(side="left")
-        tip(tk.Label(control, text=t("게임 감지 시 자동 시작"), bg=CARD, fg=TEXT), auto_tip).pack(side="left", padx=(8, 0))
+        tip(tk.Label(control, text=t("게임 감지 시 자동 시작"), bg=CARD, fg=TEXT), auto_tip).pack(side="left", padx=(px(8), 0))
         # Status sits on the right of the strip and wraps, so long messages are not cut off.
         if not hasattr(self, "status"):
             self.status = tk.StringVar(value=t("정지됨"))
         status_tip = t("컨트롤러 상태 · 텔레메트리 상태\n점 색: 초록 출력 중, 노랑 컨트롤러 대기, 빨강 오류, 회색 정지")
         tip(tk.Label(control, textvariable=self.status, bg=CARD, fg=TEXT, anchor="e", justify="right",
-                     wraplength=380), status_tip).pack(side="right")
-        self.status_dot = tk.Canvas(control, width=12, height=12, bg=CARD, highlightthickness=0)
-        tip(self.status_dot, status_tip).pack(side="right", padx=(0, 8))
+                     wraplength=px(380)), status_tip).pack(side="right")
+        self.status_dot = tk.Canvas(control, width=px(12), height=px(12), bg=CARD, highlightthickness=0)
+        tip(self.status_dot, status_tip).pack(side="right", padx=(0, px(8)))
         self._show_dot(FAINT)
 
         # preset bar: one button per preset, the one in use lit
         self.preset_bar = tk.Frame(root, bg=BG)
-        self.preset_bar.grid(row=2, column=0, columnspan=2, sticky="ew", padx=18, pady=(12, 0))
+        self.preset_bar.grid(row=2, column=0, columnspan=2, sticky="ew", padx=px(18), pady=(px(12), 0))
         self._build_presets()
 
         # footer first: _changed (run while the sliders are built) styles the save button
         footer = tk.Frame(root, bg=BG)
-        footer.grid(row=4, column=0, columnspan=2, sticky="ew", padx=18, pady=(10, 14))
+        footer.grid(row=4, column=0, columnspan=2, sticky="ew", padx=px(18), pady=(px(10), px(14)))
         self.save_button = Button(footer, t("저장"), self.save, size=10, min_width=84)
         tip(self.save_button, t("슬라이더, 켜기/끄기, 진동 위치를 %APPDATA%\\ATSHaptics\\config.json에 저장합니다. "
                                 "프리셋을 쓰는 중이면 그 프리셋에도 저장합니다. "
                                 "저장하지 않은 변경이 있으면 버튼이 파랗게 바뀝니다.")).pack(side="left")
         tip(Button(footer, t("기본값"), self.reset, size=10, min_width=84),
             t("모든 세기와 기준, 진동 위치를 기본값으로 되돌리고 모든 효과를 켭니다. 저장은 따로 눌러야 합니다.")).pack(
-            side="left", padx=(8, 0))
+            side="left", padx=(px(8), 0))
         self.save_label = tk.Label(footer, textvariable=self.save_state, bg=BG, fg=WARN, font=font(9))
-        self.save_label.pack(side="left", padx=12)
+        self.save_label.pack(side="left", padx=px(12))
         if not hasattr(self, "timing"):
             self.timing = tk.StringVar()
         tip(tk.Label(footer, textvariable=self.timing, bg=BG, fg=FAINT, font=font(9)),
@@ -287,35 +287,35 @@ class App:
                     "트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 "
                     "보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 주행 중에도 켜고 끄는 즉시 적용되고 바로 저장됩니다.")
         tip(Link(footer, t("기록 폴더 ↗"), self._open_log_dir),
-            t("디버그 기록이 쌓이는 폴더를 엽니다.") + f"\n{LOG_DIR}").pack(side="right", padx=(0, 18))
+            t("디버그 기록이 쌓이는 폴더를 엽니다.") + f"\n{LOG_DIR}").pack(side="right", padx=(0, px(18)))
         tip(tk.Label(footer, text=t("디버그 기록"), bg=BG, fg=TEXT, font=font(9)), log_tip).pack(
-            side="right", padx=(8, 10))
+            side="right", padx=(px(8), px(10)))
         if not hasattr(self, "debug_log"):
             self.debug_log = tk.BooleanVar(value=self.options.debug_log)
         tip(Switch(footer, self.debug_log, self._on_debug_log, color=ACCENT, bg=BG), log_tip).pack(side="right")
 
         left = tk.Frame(root, bg=BG)
-        left.grid(row=3, column=0, sticky="nsew", padx=(18, 6), pady=(12, 0))
+        left.grid(row=3, column=0, sticky="nsew", padx=(px(18), px(6)), pady=(px(12), 0))
         effects = card(left, t("주행 효과"), t("달리는 동안 계속 나는 진동"))
         effects.outer.pack(fill="x")
         self._route_header(effects)
         for row, spec in enumerate(EFFECT_SLIDERS, start=1):
             self._slider(effects, row, *spec)
         events = card(left, t("이벤트 효과"), t("순간적으로 한 번 나는 진동"))
-        events.outer.pack(fill="x", pady=(12, 0))
+        events.outer.pack(fill="x", pady=(px(12), 0))
         self._route_header(events)
         for row, spec in enumerate(EVENT_SLIDERS, start=1):
             self._slider(events, row, *spec)
 
         right = tk.Frame(root, bg=BG)
-        right.grid(row=3, column=1, sticky="nsew", padx=(6, 18), pady=(12, 0))
+        right.grid(row=3, column=1, sticky="nsew", padx=(px(6), px(18)), pady=(px(12), 0))
 
         output = card(right, t("출력 세기"))
         output.outer.pack(fill="x")
         for row, spec in enumerate(OUTPUT_SLIDERS):
             self._slider(output, row, *spec)
         tk.Frame(output, bg="#252a34", height=1).grid(row=len(OUTPUT_SLIDERS), column=0, columnspan=4,
-                                                     sticky="ew", pady=8)
+                                                     sticky="ew", pady=px(8))
         self.meters = []
         meter_tip = t("이 모터로 실제로 나가는 세기입니다. 진동이 약하거나 없을 때 어느 단계에서 줄어드는지 확인하세요.")
         for row, (label, color) in enumerate(zip(METER_LABELS, (GRIP_COLOR, GRIP_COLOR, TRIGGER_COLOR)),
@@ -323,15 +323,15 @@ class App:
             tip(tk.Label(output, text=t(label), bg=CARD, fg=MUTED, anchor="w"), meter_tip).grid(
                 row=row, column=1, sticky="w")
             meter = Meter(output, color, length=200)
-            tip(meter, meter_tip).grid(row=row, column=2, padx=6, pady=4)
+            tip(meter, meter_tip).grid(row=row, column=2, padx=px(6), pady=px(4))
             self.meters.append(meter)
         tip(Button(output, t("모터 보정…"), self.open_calibration, size=9, height=28, bg=CARD),
             t("모터가 주파수마다 다르게 울리는 정도를 손으로 느끼며 맞춥니다. 결과는 모든 효과에 주파수별로 "
               "적용됩니다. 출력을 정지한 상태에서 씁니다.")).grid(
-            row=len(OUTPUT_SLIDERS) + 1 + len(METER_LABELS), column=1, columnspan=2, sticky="w", pady=(8, 0))
+            row=len(OUTPUT_SLIDERS) + 1 + len(METER_LABELS), column=1, columnspan=2, sticky="w", pady=(px(8), 0))
 
         info = card(right, t("텔레메트리"), t("게임에서 받고 있는 값"))
-        info.outer.pack(fill="x", pady=(12, 0))
+        info.outer.pack(fill="x", pady=(px(12), 0))
         self.info = {}
         tiles = tk.Frame(info, bg=CARD)
         tiles.pack(fill="x")
@@ -339,16 +339,16 @@ class App:
         for column, (key, label) in enumerate((("speed", t("속도")), ("rpm", "RPM"), ("gear", t("기어")))):
             tiles.columnconfigure(column, weight=1, uniform="tile")
             tile = tk.Frame(tiles, bg=TILE)
-            tile.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 6, 0))
+            tile.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else px(6), 0))
             tip(tile, tile_tip)
             tip(tk.Label(tile, text=label, bg=TILE, fg=MUTED, font=font(8)), tile_tip).pack(
-                anchor="w", padx=10, pady=(6, 0))
+                anchor="w", padx=px(10), pady=(px(6), 0))
             var = tk.StringVar(value="-")
             tip(tk.Label(tile, textvariable=var, bg=TILE, fg=TEXT, font=font(15, "bold")), tile_tip).pack(
-                anchor="w", padx=10, pady=(0, 6))
+                anchor="w", padx=px(10), pady=(0, px(6)))
             self.info[key] = var
         rows = tk.Frame(info, bg=CARD)
-        rows.pack(fill="x", pady=(8, 0))
+        rows.pack(fill="x", pady=(px(8), 0))
         for row, (key, label, text) in enumerate((
                 ("pedal", t("페달"), t("엑셀/브레이크 입력(0~1)입니다. 크루즈 컨트롤처럼 게임이 대신 밟는 값은 "
                                      "포함하지 않습니다.")),
@@ -357,14 +357,14 @@ class App:
                 ("accel", t("가속도 최대"), t("최근 0.1초 동안 수평 가속도 최대값입니다. 충돌 감지 기준을 정할 때 "
                                           "참고하세요.")))):
             tip(tk.Label(rows, text=label, bg=CARD, fg=MUTED, anchor="w"), text).grid(
-                row=row, column=0, sticky="w", padx=(0, 12))
+                row=row, column=0, sticky="w", padx=(0, px(12)))
             var = tk.StringVar(value="-")
             tip(tk.Label(rows, textvariable=var, bg=CARD, fg=TEXT, anchor="w"), text).grid(
                 row=row, column=1, sticky="w")
             self.info[key] = var
 
         thresholds = card(right, t("감지 기준"))
-        thresholds.outer.pack(fill="x", pady=(12, 0))
+        thresholds.outer.pack(fill="x", pady=(px(12), 0))
         for row, spec in enumerate(THRESHOLD_SLIDERS):
             self._slider(thresholds, row, *spec)
         cylinders_tip = t("엔진 진동 주파수 계산에 씁니다. ATS 순정 트럭은 대부분 직렬 6기통이고, "
@@ -378,10 +378,10 @@ class App:
                               textvariable=self.cylinders)
         # text left unusable shows the count in use again
         spinbox.bind("<FocusOut>", lambda _: self.cylinders.set(self.gains.cylinders))
-        tip(spinbox, cylinders_tip).grid(row=len(THRESHOLD_SLIDERS), column=2, sticky="w", padx=6, pady=(4, 0))
+        tip(spinbox, cylinders_tip).grid(row=len(THRESHOLD_SLIDERS), column=2, sticky="w", padx=px(6), pady=(px(4), 0))
 
         log = card(right, t("이벤트"))
-        log.outer.pack(fill="both", expand=True, pady=(12, 0))
+        log.outer.pack(fill="both", expand=True, pady=(px(12), 0))
         self.events = tk.Listbox(log, height=6, width=40, bg=TILE, fg=TEXT, bd=0, highlightthickness=0,
                                  selectbackground="#2e3441", selectforeground=TEXT, activestyle="none")
         tip(self.events, t("변속, 충돌, 페달, 트레일러, 파킹 브레이크, 방향지시등, 시동, 게임 알림과 "
@@ -396,7 +396,7 @@ class App:
             enabled = tk.BooleanVar(value=key not in self.gains.disabled)
             tip(Switch(parent, enabled, lambda k=key: self._on_toggle(k)),
                 t("이 효과 켜기/끄기. 꺼도 세기와 진동 위치는 남아서 다시 켜면 그대로 돌아옵니다.")).grid(
-                row=row, column=0, padx=(0, 10))
+                row=row, column=0, padx=(0, px(10)))
             self.enabled_vars[key] = enabled
         name = tk.Label(parent, text=t(label), bg=CARD, fg=TEXT, anchor="w")
         tip(name, text).grid(row=row, column=1, sticky="w")
@@ -404,20 +404,20 @@ class App:
         value_label = tk.Label(parent, bg=CARD, fg=TEXT, width=7, anchor="e", font=font(9, "bold"))
         slider = Slider(parent, var, low, high, lambda k=key: self._on_slider(k),
                         color=LEVEL_COLORS.get(key, ACCENT), length=200)
-        tip(slider, text).grid(row=row, column=2, padx=6, pady=4)
-        value_label.grid(row=row, column=3, sticky="e", padx=(0, 4))
+        tip(slider, text).grid(row=row, column=2, padx=px(6), pady=px(4))
+        value_label.grid(row=row, column=3, sticky="e", padx=(0, px(4)))
         self.slider_vars[key] = (var, value_label, scale, unit)
         self.sliders[key] = slider
         if key in TOGGLEABLE:
             self.effect_labels[key] = name
             picker = Segmented(parent, [(route, t(option), color) for route, option, color in ROUTE_OPTIONS],
                                lambda route, k=key: self._on_route(k, route))
-            tip(picker, self._route_tip()).grid(row=row, column=4, padx=(10, 0), pady=3)
+            tip(picker, self._route_tip()).grid(row=row, column=4, padx=(px(10), 0), pady=px(3))
             self.route_pickers[key] = picker
             tip(Button(parent, "▶", lambda k=key: self.test_effect(k), size=8, height=26, bg=CARD),
                 t("이 효과만 몇 초 동안 울려 봅니다. 지금 세기, 진동 위치, 모터 보정 그대로이고, 꺼 둔 효과도 울립니다. "
                   "요철, 차선 요철, 방향지시등은 왼쪽 다음 오른쪽 순서입니다. 출력 중에는 그동안 주행 진동 대신 "
-                  "울립니다.")).grid(row=row, column=5, padx=(8, 0))
+                  "울립니다.")).grid(row=row, column=5, padx=(px(8), 0))
             self._show_effect(key)
         self._on_slider(key)
 
@@ -427,11 +427,11 @@ class App:
 
     def _route_header(self, parent: tk.Frame) -> None:
         tip(tk.Label(parent, text=t("진동 위치"), bg=CARD, fg=FAINT, font=font(8)), self._route_tip()).grid(
-            row=0, column=4, padx=(10, 0))
+            row=0, column=4, padx=(px(10), 0))
 
     def _show_dot(self, color: str) -> None:
         self.status_dot.delete("all")
-        self.status_dot.create_oval(1, 1, 11, 11, fill=color, outline="")
+        self.status_dot.create_oval(px(1), px(1), px(11), px(11), fill=color, outline="")
 
     # -- language ---------------------------------------------------------------
 
@@ -611,7 +611,7 @@ class App:
             child.destroy()
         bar_tip = t("프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수를 통째로 따로 둡니다. 트럭과 트립 모드의 "
                     "승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.")
-        tip(tk.Label(bar, text=t("프리셋"), bg=BG, fg=MUTED, font=font(9)), bar_tip).pack(side="left", padx=(0, 8))
+        tip(tk.Label(bar, text=t("프리셋"), bg=BG, fg=MUTED, font=font(9)), bar_tip).pack(side="left", padx=(0, px(8)))
         active = self._active_preset()
         names = sorted(load_presets(), key=str.casefold)
         button_tip = t("이 프리셋으로 바꿉니다. 오른쪽 클릭: 이름 바꾸기, 삭제")
@@ -619,12 +619,12 @@ class App:
             button = Button(bar, name, lambda n=name: self._switch_preset(n),
                             kind="primary" if name == active else "ghost", size=9, height=30)
             button.bind("<Button-3>", lambda event, n=name: self._preset_actions(event, n))
-            tip(button, button_tip).pack(side="left", padx=(0, 6))
+            tip(button, button_tip).pack(side="left", padx=(0, px(6)))
         if not names:
-            tip(tk.Label(bar, text=t("없음"), bg=BG, fg=FAINT, font=font(9)), bar_tip).pack(side="left", padx=(0, 6))
+            tip(tk.Label(bar, text=t("없음"), bg=BG, fg=FAINT, font=font(9)), bar_tip).pack(side="left", padx=(0, px(6)))
         tip(Button(bar, t("＋ 지금 설정으로 새 프리셋"), self._new_preset, size=9, height=30),
             t("지금 설정(저장하지 않은 변경 포함)을 새 이름으로 보관하고 그 프리셋으로 바꿉니다.")).pack(
-            side="left", padx=(6, 0))
+            side="left", padx=(px(6), 0))
 
     def _keep_changes(self) -> bool:
         """Before leaving a tuning with unsaved changes: save them, drop them, or stay (False)."""
@@ -815,7 +815,7 @@ class App:
         release = self.update_release
         if release and not self.update_button.winfo_ismapped():
             self.update_button.set(text=t("업데이트 {version}", version=release.version))
-            self.update_button.pack(side="right", padx=(0, 8))
+            self.update_button.pack(side="right", padx=(0, px(8)))
         if self.update_error:
             messagebox.showerror(t("업데이트"), t("업데이트하지 못했습니다: {error}", error=self.update_error))
             self.update_error = self.update_progress = None
@@ -928,19 +928,19 @@ class PluginDialog:
         for child in self.body.winfo_children():
             child.destroy()
         ttk.Label(self.body, text=t("진동은 게임의 텔레메트리 플러그인(RenCloud 계열 rev 12) 데이터를 사용합니다."),
-                  ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+                  ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, px(8)))
         if not self.games:
             ttk.Label(self.body, text=t("Steam에서 ATS/ETS2 설치를 찾지 못했습니다. 게임 폴더를 직접 선택하세요."),
                       ).grid(row=1, column=0, columnspan=3, sticky="w")
         for row, game in enumerate(self.games, start=1):
             tip(ttk.Label(self.body, text=game.name, width=24), str(game.path)).grid(row=row, column=0, sticky="w")
-            ttk.Label(self.body, text=game.describe(), width=34).grid(row=row, column=1, sticky="w", padx=8)
+            ttk.Label(self.body, text=game.describe(), width=34).grid(row=row, column=1, sticky="w", padx=px(8))
             text = t("재설치") if game.compatible else t("설치")
             tip(ttk.Button(self.body, text=text, command=lambda g=game: self._install(g)),
                 t("동봉한 RenCloud scs-telemetry.dll을 이 게임의 plugins 폴더에 복사합니다. "
-                  "다른 플러그인은 건드리지 않습니다.")).grid(row=row, column=2, pady=2)
+                  "다른 플러그인은 건드리지 않습니다.")).grid(row=row, column=2, pady=px(2))
         bottom = ttk.Frame(self.body)
-        bottom.grid(row=len(self.games) + 2, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        bottom.grid(row=len(self.games) + 2, column=0, columnspan=3, sticky="ew", pady=(px(10), 0))
         tip(ttk.Button(bottom, text=t("게임 폴더 직접 선택…"), command=self._pick_folder),
             t("Steam 밖에 설치했거나 찾지 못한 경우, bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 "
               "게임 폴더를 지정합니다.")).pack(side="left")
@@ -1007,7 +1007,7 @@ class CalibrationDialog:
                             ("2", calibrate.SECOND), ("r", calibrate.REPLAY), ("<Escape>", calibrate.CANCEL)):
             self.top.bind(key, lambda _event, a=answer: self.answer(a))
         self.body = tk.Frame(self.top, bg=BG)
-        self.body.pack(fill="both", padx=18, pady=16)
+        self.body.pack(fill="both", padx=px(18), pady=px(16))
         self._poll()
 
     @property
@@ -1022,7 +1022,7 @@ class CalibrationDialog:
         return self.body
 
     def _text(self, parent: tk.Misc, text: str, **options) -> tk.Label:
-        options = {"bg": BG, "fg": TEXT, "justify": "left", "anchor": "w", "wraplength": 470, **options}
+        options = {"bg": BG, "fg": TEXT, "justify": "left", "anchor": "w", "wraplength": px(470), **options}
         return tk.Label(parent, text=text, **options)
 
     def _render_start(self) -> None:
@@ -1035,20 +1035,20 @@ class CalibrationDialog:
         own = load_eq()
         sources = [t(self.SOURCES[c in own], name=t(self.NAMES[c])) for c in calibrate.FREQS]
         self._text(body, t("지금 보정: {channels}", channels=", ".join(sources)), fg=MUTED).pack(
-            fill="x", pady=(10, 0))
+            fill="x", pady=(px(10), 0))
         picks = tk.Frame(body, bg=BG)
-        picks.pack(fill="x", pady=(12, 0))
+        picks.pack(fill="x", pady=(px(12), 0))
         for channel, var in self.channels.items():
             Switch(picks, var, lambda: None, color=GRIP_COLOR if channel == "grip" else TRIGGER_COLOR,
                    bg=BG).pack(side="left")
             self._text(picks, t("{name} ({count}개 주파수)", name=t(self.NAMES[channel]),
-                                count=len(calibrate.FREQS[channel]))).pack(side="left", padx=(8, 22))
-        self._text(body, self._controls_hint(), fg=MUTED).pack(fill="x", pady=(12, 0))
+                                count=len(calibrate.FREQS[channel]))).pack(side="left", padx=(px(8), px(22)))
+        self._text(body, self._controls_hint(), fg=MUTED).pack(fill="x", pady=(px(12), 0))
         buttons = tk.Frame(body, bg=BG)
-        buttons.pack(fill="x", pady=(16, 0))
+        buttons.pack(fill="x", pady=(px(16), 0))
         Button(buttons, t("시작"), self.begin, kind="primary", min_width=96).pack(side="left")
         tip(Button(buttons, t("보정 지우기"), self.reset), t("저장된 보정을 지워 기본값으로 되돌립니다.")).pack(
-            side="left", padx=(8, 0))
+            side="left", padx=(px(8), 0))
         Button(buttons, t("닫기"), self.close).pack(side="right")
 
     def _controls_hint(self) -> str:
@@ -1060,18 +1060,18 @@ class CalibrationDialog:
         self.progress = self._text(body, "", font=font(13, "bold"))
         self.progress.pack(fill="x")
         self.trial = self._text(body, "", fg=MUTED)
-        self.trial.pack(fill="x", pady=(4, 0))
+        self.trial.pack(fill="x", pady=(px(4), 0))
         self.state = self._text(body, "")
-        self.state.pack(fill="x", pady=(10, 0))
+        self.state.pack(fill="x", pady=(px(10), 0))
         self._text(body, t("조금이라도 센 쪽이 있으면 그쪽을, 구분이 안 되면 아무 쪽이나 고르세요. 거의 같아졌다는 뜻이라 "
                            "결과가 틀어지지 않습니다. 재생 중에 눌러도 바로 반영됩니다."), fg=MUTED, font=font(9)).pack(
-            fill="x", pady=(4, 0))
+            fill="x", pady=(px(4), 0))
         row = tk.Frame(body, bg=BG)
-        row.pack(fill="x", pady=(14, 0))
+        row.pack(fill="x", pady=(px(14), 0))
         for text, answer, kind, pad, keys in ((t("◀ 첫 번째"), calibrate.FIRST, "primary", "← / LB", "← / 1"),
                                               (t("두 번째 ▶"), calibrate.SECOND, "primary", "→ / RB", "→ / 2"),
                                               (t("↻ 다시 듣기"), calibrate.REPLAY, "ghost", "X", "R")):
-            self._answer_button(row, text, answer, kind, pad, keys).pack(side="left", padx=(0, 8))
+            self._answer_button(row, text, answer, kind, pad, keys).pack(side="left", padx=(0, px(8)))
         self._answer_button(row, t("그만"), calibrate.CANCEL, "danger", "B", "Esc", min_width=0).pack(side="right")
 
     def _answer_button(self, parent: tk.Misc, text: str, answer: str, kind: str, pad: str, keys: str,
@@ -1079,7 +1079,7 @@ class CalibrationDialog:
         """A button with the pad and keyboard buttons that give the same answer written under it."""
         column = tk.Frame(parent, bg=BG)
         Button(column, text, lambda: self.answer(answer), kind=kind, min_width=min_width).pack()
-        tk.Label(column, text=t("패드 {buttons}", buttons=pad), bg=BG, fg=MUTED, font=font(9, "bold")).pack(pady=(5, 0))
+        tk.Label(column, text=t("패드 {buttons}", buttons=pad), bg=BG, fg=MUTED, font=font(9, "bold")).pack(pady=(px(5), 0))
         tk.Label(column, text=t("키보드 {keys}", keys=keys), bg=BG, fg=FAINT, font=font(8)).pack()
         return column
 
@@ -1097,9 +1097,9 @@ class CalibrationDialog:
         for channel in (session.finished if session else []):  # no-break spaces keep "50 Hz ×1.19" whole
             curve = sorted(session.curves[channel].items(), key=lambda kv: float(kv[0]))
             self._text(body, f"{t(self.NAMES[channel])}: " + "  ".join(f"{f} Hz ×{g:.2f}" for f, g in curve),
-                       fg=MUTED, font=font(9)).pack(fill="x", pady=(6, 0))
+                       fg=MUTED, font=font(9)).pack(fill="x", pady=(px(6), 0))
         buttons = tk.Frame(body, bg=BG)
-        buttons.pack(fill="x", pady=(16, 0))
+        buttons.pack(fill="x", pady=(px(16), 0))
         Button(buttons, t("다시 보정"), self._restart).pack(side="left")
         Button(buttons, t("닫기"), self.close, kind="primary", min_width=96).pack(side="right")
 
@@ -1256,6 +1256,7 @@ def main(argv: list[str] | None = None) -> None:
             _request_launch()
         return
     i18n.set_language(load_app_options().language or i18n.system_language())
+    make_dpi_aware()  # sharp at 125 % and up instead of a stretched 96 DPI bitmap
     root = tk.Tk()
     # windowed build: no console for Tk's own traceback printout
     root.report_callback_exception = lambda _type, exc, _tb: log_exception(exc, "window")

@@ -6,6 +6,7 @@ Examples:
   python tone.py sweep --target grips --from 30 --to 300 --seconds 6
   python tone.py walk                        left grip, right grip, left trigger, right trigger
   python tone.py split                       blind left/right trigger separation check
+  python tone.py trigger-mode                blind check whether the 0x53 trigger byte picks a trigger
   python tone.py calibrate                   match each frequency's strength by feel, for the synth's eq
 """
 
@@ -14,7 +15,7 @@ from __future__ import annotations
 import argparse
 import math
 
-from apex6 import MAX_SAMPLE, SAMPLE_RATE, SUBFRAMES, Apex6, Block, Route
+from apex6 import DEFAULT_TRIGGER_MODE, MAX_SAMPLE, SAMPLE_RATE, SUBFRAMES, Apex6, Block, Route
 
 TARGETS = {
     "left": (False, True, False, Route.MUTE),
@@ -163,6 +164,17 @@ def _firmware_text(info) -> str:
     return ", ".join(f"{names[k]} {v}" for k, v in info.firmware.items()) or "읽지 못함"
 
 
+def _device_lines(info, firmware: str, dongle: str) -> list[str]:
+    """The pad's identity for a saved report: firmware first, then the raw 0x01 reply."""
+    return [
+        f"컨트롤러 펌웨어: {firmware or '-'}",
+        f"구성 요소 펌웨어: {_firmware_text(info)}",
+        f"동글 펌웨어: {dongle or '-'}",
+        f"기기: {info.name}, connection_mode={info.connection_mode}, features=0x{info.features:02X}",
+        f"0x01 응답: {info.raw.hex(' ').upper()}",
+    ]
+
+
 def run_split(pad: Apex6, freq: float, amps: list[float], seconds: float,
               firmware: str | None, dongle: str | None) -> None:
     import random
@@ -204,11 +216,7 @@ def run_split(pad: Apex6, freq: float, amps: list[float], seconds: float,
 
     lines = [
         f"트리거 좌우 분리 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
-        f"컨트롤러 펌웨어: {firmware or '-'}",
-        f"구성 요소 펌웨어: {_firmware_text(info)}",
-        f"동글 펌웨어: {dongle or '-'}",
-        f"기기: {info.name}, connection_mode={info.connection_mode}, features=0x{info.features:02X}",
-        f"0x01 응답: {info.raw.hex(' ').upper()}",
+        *_device_lines(info, firmware, dongle),
         f"톤: {freq:g} Hz, {seconds:g}초, 0x53 mode=0x02",
         "평가: 같은 세기의 기준음(BOTH)과 비교한 시험음 (BOTH 칸은 대조군이라 '비슷'이 정상)",
         "",
@@ -225,6 +233,112 @@ def run_split(pad: Apex6, freq: float, amps: list[float], seconds: float,
     print("\n" + report)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     path = LOG_DIR / f"trigger-split-{datetime.now():%Y%m%d-%H%M%S}.txt"
+    path.write_text(report + "\n", encoding="utf-8")
+    print(f"\n저장: {path}")
+
+
+# Trigger enable byte check. The xHaptics Engine (5.0.2.6) configures the
+# motors from separate left and right trigger switches (motor53Config), and
+# the only per-trigger field in its 0x53 trigger frame (01 12 xx 40 00) is the
+# byte captured as 0x02 and sent as 0x00 when disabling. It may be a route like
+# 0x57's (0 left, 1 right, 2 both) or a mask (1 left, 2 right, 3 both). Each
+# byte plays under one fingertip at a time, shuffled, after a reference at the
+# default byte, with the same 0x57 route throughout, so only the byte changes.
+TRIGGER_MODES = (0x00, 0x01, 0x02, 0x03)
+
+
+def mode_verdict(left: int, right: int) -> str:
+    """Where one byte played, from its ratings (0..3) under the left and the right fingertip."""
+    if not left and not right:
+        return "안 울림"
+    if not right:
+        return "왼쪽만"
+    if not left:
+        return "오른쪽만"
+    if left != right:
+        return "왼쪽이 더 셈" if left > right else "오른쪽이 더 셈"
+    return "양쪽 같음"
+
+
+def modes_verdict(ratings: dict[tuple[str, int], int]) -> str:
+    """Judge one amplitude from {(finger, byte): rating 0..3}."""
+    modes = sorted({mode for _, mode in ratings})
+    control = DEFAULT_TRIGGER_MODE
+    if control in modes and (ratings[("L", control)], ratings[("R", control)]) != (2, 2):
+        return f"다시 측정: 대조군 0x{control:02X}가 양쪽 다 '비슷'이 아님"
+    sides = [mode_verdict(ratings[("L", m)], ratings[("R", m)]) for m in modes]
+    left = [s for s in sides if s.startswith("왼쪽")]
+    right = [s for s in sides if s.startswith("오른쪽")]
+    if left and right:
+        if "왼쪽만" in left and "오른쪽만" in right:
+            return "분리됨: 이 바이트로 트리거를 고를 수 있음"
+        return "부분 분리: 바이트에 따라 한쪽이 더 셈 (반대쪽은 몸체로 전해진 진동일 수 있음)"
+    if left or right:
+        return "한쪽으로만 치우침: 다른 쪽을 고르는 값은 이 중에 없음"
+    return "분리 안 됨: 이 바이트는 좌우를 고르지 않음"
+
+
+def run_modes(pad: Apex6, modes: list[int], route: str, freq: float, amps: list[float],
+              seconds: float) -> None:
+    import random
+    from datetime import datetime
+
+    from blocklog import LOG_DIR
+    from version import __version__
+
+    info = pad.info
+    print(f"펌웨어: {_firmware_text(info)}")
+    print("\n컨트롤러를 책상에 내려놓고 그립은 잡지 마세요.")
+    print("단계마다 안내하는 트리거 하나에만 손가락 끝을 가볍게 올려 두세요.")
+    print(f"단계마다 기준음(0x53 바이트 0x{DEFAULT_TRIGGER_MODE:02X}) 다음에 잠깐 쉬고 시험음이 울립니다.")
+    print("시험음이 기준음보다 어땠는지 답하세요. 바이트는 섞어서 나오고, 끝나면 표에서 공개됩니다.\n")
+
+    steps = []
+    for amp in amps:
+        for finger in SPLIT_FINGERS:
+            order = list(modes)
+            random.shuffle(order)
+            steps += [(amp, finger, mode) for mode in order]
+    ratings: dict[tuple[float, str, int], int] = {}
+    finger_now = None
+    for number, (amp, finger, mode) in enumerate(steps, start=1):
+        if finger != finger_now:
+            finger_now = finger
+            print(f"--- 이제 {SPLIT_FINGERS[finger]}에만 손가락을 올려 두세요 (세기 {amp:g}%) ---")
+        input(f"[{number}/{len(steps)}] Enter를 누르면 울립니다...")
+
+        def play(amp=amp, mode=mode) -> None:
+            pad.reconfigure(DEFAULT_TRIGGER_MODE)
+            pad.stream(split_renderer(route, freq, amp, seconds))
+            pad.stream(lambda first: Block() if first < REFERENCE_GAP else None)
+            pad.reconfigure(mode)
+            pad.stream(split_renderer(route, freq, amp, seconds))
+
+        play()
+        ratings[(amp, finger, mode)] = _ask_rating(play)
+    pad.reconfigure(DEFAULT_TRIGGER_MODE)
+
+    lines = [
+        f"0x53 트리거 바이트 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
+        f"톤: {freq:g} Hz, {seconds:g}초, 0x57 route={route}, 기준 바이트 0x{DEFAULT_TRIGGER_MODE:02X}",
+        "평가: 기본 바이트로 울린 기준음과 비교한 시험음 "
+        f"(0x{DEFAULT_TRIGGER_MODE:02X} 칸은 대조군이라 '비슷'이 정상)",
+        "",
+        "세기   손가락         " + "  ".join(f" 0x{m:02X}" for m in modes),
+    ]
+    for amp in amps:
+        for finger, name in SPLIT_FINGERS.items():
+            cells = "  ".join(f"{RATINGS[str(ratings[(amp, finger, m)])]:>4}" for m in modes)
+            lines.append(f"{amp:>4g}%  {name:<10} {cells}")
+        table = {(f, m): ratings[(amp, f, m)] for f in SPLIT_FINGERS for m in modes}
+        lines.append("       " + ", ".join(f"0x{m:02X} {mode_verdict(table[('L', m)], table[('R', m)])}"
+                                         for m in modes))
+        lines.append(f"       -> {modes_verdict(table)}")
+    report = "\n".join(lines)
+    print("\n" + report)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    path = LOG_DIR / f"trigger-mode-{datetime.now():%Y%m%d-%H%M%S}.txt"
     path.write_text(report + "\n", encoding="utf-8")
     print(f"\n저장: {path}")
 
@@ -336,6 +450,15 @@ def main() -> None:
     split.add_argument("--firmware", help="override the controller firmware read from the pad")
     split.add_argument("--dongle", help="override the dongle firmware read from the pad")
 
+    mode = sub.add_parser("trigger-mode", help="blind check whether the 0x53 trigger byte picks a trigger")
+    mode.add_argument("--modes", type=lambda s: int(s, 0), nargs="+", default=list(TRIGGER_MODES),
+                      help="byte values to try, e.g. 0 1 0x03 (default: 0 1 2 3)")
+    mode.add_argument("--route", choices=("LEFT", "RIGHT", "BOTH"), default="BOTH",
+                      help="0x57 route for every tone, reference included")
+    mode.add_argument("--freq", type=float, default=110.0)
+    mode.add_argument("--amps", type=float, nargs="+", default=[20.0], help="percent of maximum")
+    mode.add_argument("--seconds", type=float, default=2.0)
+
     from calibrate import AMP, SECONDS
     cal = sub.add_parser("calibrate", help="match each frequency's strength by feel, for the synth's eq")
     cal.add_argument("--channel", choices=("grip", "trigger", "both"), default="both")
@@ -361,6 +484,11 @@ def main() -> None:
             return
         if args.command == "split":
             run_split(pad, args.freq, args.amps, args.seconds, args.firmware, args.dongle)
+            return
+        if args.command == "trigger-mode":
+            if any(not 0 <= m <= 0xFF for m in args.modes):
+                parser.error("--modes takes byte values, 0 to 0xFF")
+            run_modes(pad, list(dict.fromkeys(args.modes)), args.route, args.freq, args.amps, args.seconds)
             return
         if args.command == "calibrate":
             channels = ["grip", "trigger"] if args.channel == "both" else [args.channel]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from apex6 import SUBFRAMES, Route, _parse_device_info
-from tone import SPLIT_FINGERS, SPLIT_ROUTES, split_renderer, split_verdict
+from tone import SPLIT_FINGERS, SPLIT_ROUTES, mode_verdict, modes_verdict, split_renderer, split_verdict
 
 # A real 0x01 reply from an APEX 6 Pro (wired, features 0x9F).
 INFO_REPLY = bytes.fromhex("5A A5 01 01 00 96 00 00 00 00 00 2A 45 01 00 90 "
@@ -53,6 +53,39 @@ class SplitVerdictTest(unittest.TestCase):
         table = {("L", "LEFT"): 2, ("L", "RIGHT"): 3, ("L", "BOTH"): 3, ("L", "ALT"): 1,
                  ("R", "LEFT"): 2, ("R", "RIGHT"): 3, ("R", "BOTH"): 3, ("R", "ALT"): 1}
         self.assertTrue(split_verdict(table).startswith("섞임"))
+
+
+def mode_ratings(**heard: tuple[int, int]) -> dict[tuple[str, int], int]:
+    """{(finger, byte): rating} from m0=(left, right), m1=..., unlisted bytes 0..3 rated alike."""
+    table = {(f, m): 2 for f in SPLIT_FINGERS for m in range(4)}
+    for name, (left, right) in heard.items():
+        table[("L", int(name[1:]))], table[("R", int(name[1:]))] = left, right
+    return table
+
+
+class TriggerModeVerdictTest(unittest.TestCase):
+    def test_one_byte(self) -> None:
+        self.assertEqual(mode_verdict(2, 0), "왼쪽만")
+        self.assertEqual(mode_verdict(0, 2), "오른쪽만")
+        self.assertEqual(mode_verdict(0, 0), "안 울림")
+        self.assertEqual(mode_verdict(2, 2), "양쪽 같음")
+        self.assertEqual(mode_verdict(3, 1), "왼쪽이 더 셈")
+        self.assertEqual(mode_verdict(1, 2), "오른쪽이 더 셈")
+
+    def test_route_like_byte_separates(self) -> None:
+        self.assertTrue(modes_verdict(mode_ratings(m0=(2, 0), m1=(0, 2))).startswith("분리됨"))
+
+    def test_weaker_cross_side_is_partial(self) -> None:
+        self.assertTrue(modes_verdict(mode_ratings(m1=(2, 1), m2=(2, 2), m3=(1, 2))).startswith("부분 분리"))
+
+    def test_only_one_side_found(self) -> None:
+        self.assertTrue(modes_verdict(mode_ratings(m0=(0, 0), m1=(2, 0))).startswith("한쪽으로만"))
+
+    def test_every_byte_alike_is_no_separation(self) -> None:
+        self.assertTrue(modes_verdict(mode_ratings(m0=(0, 0))).startswith("분리 안 됨"))
+
+    def test_control_off_reference_asks_for_a_rerun(self) -> None:
+        self.assertTrue(modes_verdict(mode_ratings(m0=(2, 0), m1=(0, 2), m2=(3, 2))).startswith("다시 측정"))
 
 
 class DeviceInfoTest(unittest.TestCase):

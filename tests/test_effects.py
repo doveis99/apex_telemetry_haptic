@@ -61,6 +61,12 @@ class GearTest(unittest.TestCase):
         s.render(frame(gear=8))
         self.assertIn("gear", effects_of(s))
 
+    def test_selector_moved_on_the_hill_hold_clicks(self) -> None:
+        s = synth()  # stopped: the gearbox sits in neutral while the dashboard follows the selector
+        s.render(frame(gear=1, gear_engine=0, speed=0.0, user_throttle=0.0, game_throttle=0.0))
+        s.render(frame(gear=-1, gear_engine=0, speed=0.0, user_throttle=0.0, game_throttle=0.0))
+        self.assertIn("gear", effects_of(s))
+
     def test_lever_comes_out_softly_then_the_gear_clacks_in(self) -> None:
         s, samples = only("gear"), []  # one sample per ms from the change
         s.render(frame(gear=7))

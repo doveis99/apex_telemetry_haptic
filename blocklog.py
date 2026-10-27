@@ -26,7 +26,7 @@ LOG_DIR = CONFIG_PATH.parent / "logs"
 KEEP = 10
 FLUSH_S = 1.0
 COLUMNS = ("time", "gap_ms", "route", "trigger", "left_grip", "right_grip",
-           "speed_kmh", "gear", "throttle", "brake", "surface", "events")
+           "speed_kmh", "gear", "gear_engine", "throttle", "brake", "surface", "events")
 
 
 def _peak(samples: Sequence[float]) -> int:
@@ -52,10 +52,10 @@ class BlockLog:
         self._last = now
         if frame is not None:
             wheel = frame.wheels[0].substance if frame.wheels else ""
-            game = (f"{frame.speed * 3.6:.1f}", frame.gear, f"{frame.user_throttle:.2f}",
+            game = (f"{frame.speed * 3.6:.1f}", frame.gear, frame.gear_engine, f"{frame.user_throttle:.2f}",
                     f"{frame.user_brake:.2f}", wheel)
         else:
-            game = ("", "", "", "", "")
+            game = ("", "", "", "", "", "")
         self._csv.writerow((f"{datetime.now():%H:%M:%S.%f}"[:-3], f"{gap:.1f}", block.route.name,
                             _peak(block.trigger), _peak(block.left_grip), _peak(block.right_grip),
                             *game, "; ".join(events)))

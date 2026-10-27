@@ -33,7 +33,11 @@ _FIELDS = {
     "max_trailers": (92, "I"),
     "wheel_count": (80, "I"),
     "retarder": (108, "I"),
-    "gear": (504, "i"),
+    # The gearbox's gear, and the one on the dashboard. The dashboard follows the
+    # selector at once; standing still on the hill hold, the gearbox can stay
+    # in neutral when D/N/R is picked, so a shift there never showed in it.
+    "gear_engine": (504, "i"),
+    "gear": (508, "i"),
     "rpm_max": (740, "f"),
     "speed": (948, "f"),
     "rpm": (952, "f"),
@@ -101,7 +105,8 @@ class Frame:
     user_brake: float = 0.0
     game_throttle: float = 0.0
     game_brake: float = 0.0
-    gear: int = 0
+    gear: int = 0  # as on the dashboard: what the driver selected
+    gear_engine: int = 0  # what the gearbox has engaged
     retarder: int = 0
     retarder_steps: int = 0
     engine_on: bool = False
@@ -210,7 +215,7 @@ class SharedMemoryTelemetry:
             rpm=values["rpm"], rpm_max=values["rpm_max"] or 2100.0, speed=values["speed"],
             user_throttle=values["user_throttle"], user_brake=values["user_brake"],
             game_throttle=values["game_throttle"], game_brake=values["game_brake"],
-            gear=values["gear"], retarder=values["retarder"], retarder_steps=values["retarder_steps"],
+            gear=values["gear"], gear_engine=values["gear_engine"], retarder=values["retarder"], retarder_steps=values["retarder_steps"],
             engine_on=values["engine_on"], motor_brake=values["motor_brake"], park_brake=values["park_brake"],
             accel=(values["accel_x"], values["accel_y"], values["accel_z"]),
             wheels=wheels,
@@ -310,6 +315,7 @@ class SimulatedTelemetry:
             brake = 0.3
         frame.speed, frame.user_throttle, frame.game_throttle = speed, throttle, throttle
         frame.user_brake, frame.game_brake, frame.gear = brake, brake, gear
+        frame.gear_engine = gear
         frame.retarder_steps = 4
         frame.engine_on = 0.8 <= t < 55.0
         frame.rpm = rpm if frame.engine_on else 0.0

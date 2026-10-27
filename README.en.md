@@ -135,11 +135,22 @@ What the game is sending right now. Use it to check that data arrives when the v
 
 Gear shifts, impacts, floored pedals, trailer, parking brake, turn signals, engine start/stop and game alerts are logged with the time, and so are controller connection problems. The latest 50 entries are shown.
 
+### Presets
+
+The **Presets** row under the output controls switches the whole tuning in one click. Each preset keeps its own levels, thresholds, on/off states, outputs and cylinder count. Use them when you change vehicles, such as your truck and the car of Trip mode.
+
+- **＋ New preset from current**: keeps the current settings (unsaved changes included) under a name and switches to that preset.
+- **A preset button**: switches to it at once, even mid-drive, and the next start opens with it too. The preset in use is lit blue. With unsaved changes you are asked whether to save them first.
+- **Save**: also saves into the preset in use.
+- **Right-click**: rename, delete. Deleting leaves the current settings as they are.
+
+Presets live under `presets` in `config.json`.
+
 ### Save, defaults, debug log and timing
 
 | Item | Description |
 |---|---|
-| **Save** | Saves the sliders, on/off states and outputs (grip/trigger/both) to `%APPDATA%\ATSHaptics\config.json`. While there are unsaved changes the **Save** button turns blue and "Changed · not saved" is shown, and closing the window asks whether to save. |
+| **Save** | Saves the sliders, on/off states and outputs (grip/trigger/both) to `%APPDATA%\ATSHaptics\config.json`. While a preset is in use, it is saved there too. While there are unsaved changes the **Save** button turns blue and "Changed · not saved" is shown, and closing the window asks whether to save. |
 | **Defaults** | Resets every level, threshold and output to its default and turns every effect on. Saving is a separate step. |
 | **Debug log** (switch) | When on, every time the app takes the controller (Start, the game launching, reconnecting after a drop) it writes each 8 ms block sent to the controller as one line in `%APPDATA%\ATSHaptics\logs\blocks-<date>-<time>.csv`. Columns: time (to the ms), gap since the previous block (over 8 ms means output ran late), trigger route, peak trigger / left grip / right grip value (±112 is full scale), speed, gear, throttle, brake, surface, and the events of that block. About 30 MB per hour; only the latest 10 files are kept. The switch is saved at once and takes effect right away, even mid-drive. The event log shows the file name when recording begins. |
 | **Log folder ↗** | Opens the debug log folder in Explorer. |

@@ -249,8 +249,8 @@ MESSAGES = {
          "efectos.\nNo se puede cambiar en marcha."),
     "진동 출력을 시작하거나 멈춥니다. 정지하면 모터를 끄고 컨트롤러를 놓습니다.":
         "Inicia o detiene la vibración. Al detener se apagan los motores y se libera el mando.",
-    "슬라이더, 켜기/끄기, 진동 위치를 %APPDATA%\\ATSHaptics\\config.json에 저장합니다. 저장하지 않은 변경이 있으면 버튼이 파랗게 바뀝니다.":
-        ("Guarda deslizadores, interruptores y salidas en %APPDATA%\\ATSHaptics\\config.json. El botón se pone azul "
+    "슬라이더, 켜기/끄기, 진동 위치를 %APPDATA%\\ATSHaptics\\config.json에 저장합니다. 프리셋을 쓰는 중이면 그 프리셋에도 저장합니다. 저장하지 않은 변경이 있으면 버튼이 파랗게 바뀝니다.":
+        ("Guarda deslizadores, interruptores y salidas en %APPDATA%\\ATSHaptics\\config.json. Si usas un preajuste, también en él. El botón se pone azul "
          "si hay cambios sin guardar."),
     "모든 세기와 기준, 진동 위치를 기본값으로 되돌리고 모든 효과를 켭니다. 저장은 따로 눌러야 합니다.":
         ("Restablece todos los niveles, umbrales y salidas y enciende todos los efectos. Pulsa Guardar para "
@@ -341,4 +341,24 @@ MESSAGES = {
          "suenan los tonos."),
     "패드 {buttons}": "Mando {buttons}",
     "키보드 {keys}": "Teclado {keys}",
+    "프리셋": "Preajustes",
+    "프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수를 통째로 따로 둡니다. 트럭과 트립 모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.":
+        "Cada preajuste guarda sus propias intensidades, umbrales, interruptores, salidas y número de cilindros. Púlsalo al cambiar de vehículo, por ejemplo entre tu camión y el coche del modo Trip. Se aplica al instante, incluso conduciendo, y se mantiene en el siguiente inicio.",
+    "이 프리셋으로 바꿉니다. 오른쪽 클릭: 이름 바꾸기, 삭제": "Cambia a este preajuste. Clic derecho: renombrar, eliminar",
+    "없음": "Ninguno",
+    "＋ 지금 설정으로 새 프리셋": "＋ Nuevo con lo actual",
+    "지금 설정(저장하지 않은 변경 포함)을 새 이름으로 보관하고 그 프리셋으로 바꿉니다.":
+        "Guarda los ajustes actuales (incluidos los cambios sin guardar) con un nombre nuevo y cambia a ese preajuste.",
+    "프리셋 전환": "Cambiar de preajuste",
+    "저장하지 않은 변경이 있습니다. 바꾸기 전에 저장할까요?": "Hay cambios sin guardar. ¿Guardarlos antes de cambiar?",
+    "✓ '{name}'(으)로 바꿈": "✓ Cambiado a «{name}»",
+    "✓ '{name}'에 저장됨": "✓ Guardado en «{name}»",
+    "프리셋 이름": "Nombre del preajuste",
+    "'{name}' 프리셋이 이미 있습니다. 덮어쓸까요?": "Ya existe el preajuste «{name}». ¿Sobrescribirlo?",
+    "새 프리셋": "Nuevo preajuste",
+    "이름 바꾸기…": "Renombrar…",
+    "이름 바꾸기": "Renombrar",
+    "삭제": "Eliminar",
+    "'{name}' 프리셋을 지울까요? 지금 설정은 그대로 남습니다.":
+        "¿Eliminar el preajuste «{name}»? Los ajustes actuales se quedan como están.",
 }

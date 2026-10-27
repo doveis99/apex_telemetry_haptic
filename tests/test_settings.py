@@ -8,7 +8,8 @@ import unittest
 from pathlib import Path
 
 from effects import DEFAULT_ROUTES, Gains
-from settings import AppOptions, load_app_options, load_eq, load_gains, save_app_options, save_eq, save_gains
+from settings import (AppOptions, delete_preset, load_app_options, load_eq, load_gains, load_presets,
+                      save_app_options, save_eq, save_gains, save_preset)
 
 
 class SettingsTest(unittest.TestCase):
@@ -54,6 +55,33 @@ class SettingsTest(unittest.TestCase):
         save_app_options(AppOptions(language="de"), self.path)
         self.assertEqual(load_eq(self.path), {"grip": {"30": 2.0}})
         self.assertEqual(load_gains(self.path).engine, 0.9)
+
+    def test_presets_keep_their_own_gains_beside_the_others(self) -> None:
+        self.assertEqual(load_presets(self.path), {})
+        save_gains(Gains(engine=0.9), self.path)
+        save_preset("Truck", Gains(cylinders=6), self.path)
+        save_preset("Car", Gains(engine=0.3, cylinders=4, disabled=["retarder"]), self.path)
+        save_preset("Car", Gains(engine=0.4, cylinders=4), self.path)  # same name replaces it
+        save_app_options(AppOptions(preset="Car"), self.path)
+        presets = load_presets(self.path)
+        self.assertEqual(sorted(presets), ["Car", "Truck"])
+        self.assertEqual((presets["Car"].engine, presets["Car"].cylinders, presets["Car"].disabled), (0.4, 4, []))
+        self.assertEqual(load_gains(self.path).engine, 0.9)
+        self.assertEqual(load_app_options(self.path).preset, "Car")
+        delete_preset("Truck", self.path)
+        delete_preset("Bus", self.path)  # never there
+        self.assertEqual(list(load_presets(self.path)), ["Car"])
+
+    def test_hand_edited_presets_fall_back_like_the_gains(self) -> None:
+        self.path.write_text(json.dumps({"presets": {"Car": {"engine": "loud", "road": 0.2}, "Bus": [1]}}),
+                             encoding="utf-8")
+        presets = load_presets(self.path)
+        self.assertEqual(list(presets), ["Car"])
+        self.assertEqual((presets["Car"].engine, presets["Car"].road), (Gains().engine, 0.2))
+        self.path.write_text(json.dumps({"presets": "Car"}), encoding="utf-8")
+        self.assertEqual(load_presets(self.path), {})
+        save_preset("Car", Gains(), self.path)
+        self.assertEqual(list(load_presets(self.path)), ["Car"])
 
 
 if __name__ == "__main__":

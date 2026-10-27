@@ -242,8 +242,8 @@ MESSAGES = {
          "trakcie działania."),
     "진동 출력을 시작하거나 멈춥니다. 정지하면 모터를 끄고 컨트롤러를 놓습니다.":
         "Uruchamia lub zatrzymuje wibracje. Zatrzymanie wyłącza silniki i zwalnia kontroler.",
-    "슬라이더, 켜기/끄기, 진동 위치를 %APPDATA%\\ATSHaptics\\config.json에 저장합니다. 저장하지 않은 변경이 있으면 버튼이 파랗게 바뀝니다.":
-        ("Zapisuje suwaki, przełączniki i wyjścia w %APPDATA%\\ATSHaptics\\config.json. Przycisk jest niebieski, "
+    "슬라이더, 켜기/끄기, 진동 위치를 %APPDATA%\\ATSHaptics\\config.json에 저장합니다. 프리셋을 쓰는 중이면 그 프리셋에도 저장합니다. 저장하지 않은 변경이 있으면 버튼이 파랗게 바뀝니다.":
+        ("Zapisuje suwaki, przełączniki i wyjścia w %APPDATA%\\ATSHaptics\\config.json. Gdy używasz presetu, także do niego. Przycisk jest niebieski, "
          "gdy są niezapisane zmiany."),
     "모든 세기와 기준, 진동 위치를 기본값으로 되돌리고 모든 효과를 켭니다. 저장은 따로 눌러야 합니다.":
         "Przywraca domyślne poziomy, progi i wyjścia oraz włącza wszystkie efekty. Naciśnij Zapisz, by zachować.",
@@ -330,4 +330,23 @@ MESSAGES = {
          "że są już prawie równe, więc nie zaburza to wyniku. Odpowiedzi działają także w trakcie odtwarzania."),
     "패드 {buttons}": "Pad {buttons}",
     "키보드 {keys}": "Klawiatura {keys}",
+    "프리셋": "Presety",
+    "프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수를 통째로 따로 둡니다. 트럭과 트립 모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.":
+        "Każdy preset ma własne siły, progi, przełączniki, wyjścia i liczbę cylindrów. Kliknij go przy zmianie pojazdu, np. między ciężarówką a samochodem w trybie Trip. Działa od razu, także w trakcie jazdy, i zostaje przy następnym uruchomieniu.",
+    "이 프리셋으로 바꿉니다. 오른쪽 클릭: 이름 바꾸기, 삭제": "Przełącza na ten preset. Prawy klik: zmień nazwę, usuń",
+    "없음": "Brak",
+    "＋ 지금 설정으로 새 프리셋": "＋ Nowy z obecnych",
+    "지금 설정(저장하지 않은 변경 포함)을 새 이름으로 보관하고 그 프리셋으로 바꿉니다.":
+        "Zapisuje obecne ustawienia (z niezapisanymi zmianami) pod nową nazwą i przełącza na ten preset.",
+    "프리셋 전환": "Zmiana presetu",
+    "저장하지 않은 변경이 있습니다. 바꾸기 전에 저장할까요?": "Są niezapisane zmiany. Zapisać je przed przełączeniem?",
+    "✓ '{name}'(으)로 바꿈": "✓ Przełączono na „{name}”",
+    "✓ '{name}'에 저장됨": "✓ Zapisano w „{name}”",
+    "프리셋 이름": "Nazwa presetu",
+    "'{name}' 프리셋이 이미 있습니다. 덮어쓸까요?": "Preset „{name}” już istnieje. Nadpisać?",
+    "새 프리셋": "Nowy preset",
+    "이름 바꾸기…": "Zmień nazwę…",
+    "이름 바꾸기": "Zmień nazwę",
+    "삭제": "Usuń",
+    "'{name}' 프리셋을 지울까요? 지금 설정은 그대로 남습니다.": "Usunąć preset „{name}”? Obecne ustawienia zostaną bez zmian.",
 }

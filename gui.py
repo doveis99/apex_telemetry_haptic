@@ -12,6 +12,8 @@ if it came from the Steam launch option the open window starts the game
 session instead. At start it looks for a newer GitHub release and offers it
 in the top bar. Unexpected errors land in logs\\error.log (errorlog.py).
 The ▶ beside each effect plays it alone for a few seconds (preview.py).
+The preset bar under it switches between named tunings (a truck, the car of
+Trip mode) with one click; 저장 then writes into the preset in use.
 Every control explains itself in a tooltip. The language menu in the top
 bar rebuilds the window in another language (i18n.py) and remembers it.
 The widgets and dark theme live in widgets.py.
@@ -29,7 +31,7 @@ import tkinter.font as tkfont
 import webbrowser
 from dataclasses import asdict
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import calibrate
 import i18n
@@ -44,7 +46,8 @@ from version import __version__
 from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Equalizer, Gains, route_of
 from gamewatch import GameWatcher
 from preview import Player, Preview
-from settings import load_app_options, load_eq, load_gains, save_app_options, save_eq, save_gains
+from settings import (delete_preset, load_app_options, load_eq, load_gains, load_presets, save_app_options, save_eq,
+                      save_gains, save_preset)
 from widgets import (ACCENT, BG, BOTH_COLOR, CARD, FAINT, FIELD_HI, GO, GRIP_COLOR, MUTED, STOP, TEXT, TILE,
                      TRIGGER_COLOR, WARN, Button, Link, Meter, Segmented, Slider, Switch, apply_theme, card,
                      dark_title_bar, font, tip)
@@ -257,11 +260,17 @@ class App:
         tip(self.status_dot, status_tip).pack(side="right", padx=(0, 8))
         self._show_dot(FAINT)
 
+        # preset bar: one button per preset, the one in use lit
+        self.preset_bar = tk.Frame(root, bg=BG)
+        self.preset_bar.grid(row=2, column=0, columnspan=2, sticky="ew", padx=18, pady=(12, 0))
+        self._build_presets()
+
         # footer first: _changed (run while the sliders are built) styles the save button
         footer = tk.Frame(root, bg=BG)
-        footer.grid(row=3, column=0, columnspan=2, sticky="ew", padx=18, pady=(10, 14))
+        footer.grid(row=4, column=0, columnspan=2, sticky="ew", padx=18, pady=(10, 14))
         self.save_button = Button(footer, t("저장"), self.save, size=10, min_width=84)
         tip(self.save_button, t("슬라이더, 켜기/끄기, 진동 위치를 %APPDATA%\\ATSHaptics\\config.json에 저장합니다. "
+                                "프리셋을 쓰는 중이면 그 프리셋에도 저장합니다. "
                                 "저장하지 않은 변경이 있으면 버튼이 파랗게 바뀝니다.")).pack(side="left")
         tip(Button(footer, t("기본값"), self.reset, size=10, min_width=84),
             t("모든 세기와 기준, 진동 위치를 기본값으로 되돌리고 모든 효과를 켭니다. 저장은 따로 눌러야 합니다.")).pack(
@@ -286,7 +295,7 @@ class App:
         tip(Switch(footer, self.debug_log, self._on_debug_log, color=ACCENT, bg=BG), log_tip).pack(side="right")
 
         left = tk.Frame(root, bg=BG)
-        left.grid(row=2, column=0, sticky="nsew", padx=(18, 6), pady=(12, 0))
+        left.grid(row=3, column=0, sticky="nsew", padx=(18, 6), pady=(12, 0))
         effects = card(left, t("주행 효과"), t("달리는 동안 계속 나는 진동"))
         effects.outer.pack(fill="x")
         self._route_header(effects)
@@ -299,7 +308,7 @@ class App:
             self._slider(events, row, *spec)
 
         right = tk.Frame(root, bg=BG)
-        right.grid(row=2, column=1, sticky="nsew", padx=(6, 18), pady=(12, 0))
+        right.grid(row=3, column=1, sticky="nsew", padx=(6, 18), pady=(12, 0))
 
         output = card(right, t("출력 세기"))
         output.outer.pack(fill="x")
@@ -564,24 +573,137 @@ class App:
 
     def save(self) -> None:
         save_gains(self.gains)
+        preset = self._active_preset()
+        if preset:
+            save_preset(preset, self.gains)
         self.saved = asdict(self.gains)
         self._changed()
-        self.save_state.set(t("✓ 저장됨"))
+        self.save_state.set(t("✓ '{name}'에 저장됨", name=preset) if preset else t("✓ 저장됨"))
         self.save_label.config(fg=GO)
 
     def reset(self) -> None:
-        defaults = Gains()
+        self._apply(Gains())
+
+    def _apply(self, gains: Gains) -> None:
+        """Set every slider, switch, route and the cylinder count to these gains; saving stays separate."""
         for key, (var, _, scale, _) in self.slider_vars.items():
-            var.set(getattr(defaults, key) * scale)
+            var.set(getattr(gains, key) * scale)
             self._on_slider(key)
-        for var in self.enabled_vars.values():
-            var.set(True)
-        self.gains.disabled = []
-        self.gains.routes = dict(DEFAULT_ROUTES)
+        for key, var in self.enabled_vars.items():
+            var.set(key not in gains.disabled)
+        self.gains.disabled = sorted(key for key in gains.disabled if key in self.enabled_vars)
+        self.gains.routes = {**DEFAULT_ROUTES, **gains.routes}
         for key in self.route_pickers:
             self._show_effect(key)
-        self.cylinders.set(defaults.cylinders)  # traced
+        self.cylinders.set(gains.cylinders)  # traced
         self._changed()
+
+    # -- presets ----------------------------------------------------------------
+
+    def _active_preset(self) -> str:
+        """The preset in use, or "" when none is or it was removed from config.json by hand."""
+        name = self.options.preset
+        return name if name and name in load_presets() else ""
+
+    def _build_presets(self) -> None:
+        bar = self.preset_bar
+        for child in bar.winfo_children():
+            child.destroy()
+        bar_tip = t("프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수를 통째로 따로 둡니다. 트럭과 트립 모드의 "
+                    "승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.")
+        tip(tk.Label(bar, text=t("프리셋"), bg=BG, fg=MUTED, font=font(9)), bar_tip).pack(side="left", padx=(0, 8))
+        active = self._active_preset()
+        names = sorted(load_presets(), key=str.casefold)
+        button_tip = t("이 프리셋으로 바꿉니다. 오른쪽 클릭: 이름 바꾸기, 삭제")
+        for name in names:
+            button = Button(bar, name, lambda n=name: self._switch_preset(n),
+                            kind="primary" if name == active else "ghost", size=9, height=30)
+            button.bind("<Button-3>", lambda event, n=name: self._preset_actions(event, n))
+            tip(button, button_tip).pack(side="left", padx=(0, 6))
+        if not names:
+            tip(tk.Label(bar, text=t("없음"), bg=BG, fg=FAINT, font=font(9)), bar_tip).pack(side="left", padx=(0, 6))
+        tip(Button(bar, t("＋ 지금 설정으로 새 프리셋"), self._new_preset, size=9, height=30),
+            t("지금 설정(저장하지 않은 변경 포함)을 새 이름으로 보관하고 그 프리셋으로 바꿉니다.")).pack(
+            side="left", padx=(6, 0))
+
+    def _keep_changes(self) -> bool:
+        """Before leaving a tuning with unsaved changes: save them, drop them, or stay (False)."""
+        if asdict(self.gains) == self.saved:
+            return True
+        answer = messagebox.askyesnocancel(t("프리셋 전환"), t("저장하지 않은 변경이 있습니다. 바꾸기 전에 저장할까요?"))
+        if answer:
+            self.save()
+        return answer is not None
+
+    def _switch_preset(self, name: str) -> None:
+        if name == self._active_preset() and asdict(self.gains) == self.saved:
+            return
+        gains = load_presets().get(name)
+        if gains is None or not self._keep_changes():
+            self._build_presets()
+            return
+        self._apply(gains)
+        self._set_active_preset(name)
+        save_gains(self.gains)  # the next start opens with it
+        self.saved = asdict(self.gains)
+        self._changed()
+        self.save_state.set(t("✓ '{name}'(으)로 바꿈", name=name))
+        self.save_label.config(fg=GO)
+
+    def _set_active_preset(self, name: str) -> None:
+        self.options.preset = name
+        save_app_options(self.options)
+        self._build_presets()
+
+    def _ask_preset_name(self, title: str, initial: str = "") -> str | None:
+        """A new name from the player, or None; taking another preset's name replaces it once confirmed."""
+        name = (simpledialog.askstring(title, t("프리셋 이름"), initialvalue=initial, parent=self.root) or "").strip()
+        if not name or name == initial:
+            return None
+        if name in load_presets() and not messagebox.askyesno(
+                title, t("'{name}' 프리셋이 이미 있습니다. 덮어쓸까요?", name=name)):
+            return None
+        return name
+
+    def _new_preset(self) -> None:
+        name = self._ask_preset_name(t("새 프리셋"))
+        if name:
+            save_preset(name, self.gains)
+            self._set_active_preset(name)
+            self.save()  # the startup tuning follows it
+
+    def _preset_actions(self, event: tk.Event, name: str) -> None:
+        menu = tk.Menu(self.root, tearoff=False, bg=TILE, fg=TEXT, activebackground=FIELD_HI,
+                       activeforeground=TEXT, bd=0)
+        # after the menu has closed: both rebuild the bar the menu came from
+        menu.add_command(label=t("이름 바꾸기…"), command=lambda: self.root.after_idle(self._rename_preset, name))
+        menu.add_command(label=t("삭제"), command=lambda: self.root.after_idle(self._delete_preset, name))
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+        self.root.after_idle(menu.destroy)
+
+    def _rename_preset(self, name: str) -> None:
+        gains = load_presets().get(name)
+        new = self._ask_preset_name(t("이름 바꾸기"), name)
+        if gains is None or not new:
+            return
+        save_preset(new, gains)
+        delete_preset(name)
+        if self.options.preset == name:
+            self._set_active_preset(new)
+        else:
+            self._build_presets()
+
+    def _delete_preset(self, name: str) -> None:
+        if not messagebox.askyesno(t("삭제"), t("'{name}' 프리셋을 지울까요? 지금 설정은 그대로 남습니다.", name=name)):
+            return
+        delete_preset(name)
+        if self.options.preset == name:
+            self._set_active_preset("")
+        else:
+            self._build_presets()
 
     def toggle_run(self) -> None:
         if self.thread and self.thread.is_alive():

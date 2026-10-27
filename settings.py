@@ -1,11 +1,11 @@
 """Persist effect gains and app options in %APPDATA%\\ATSHaptics\\config.json.
 
-Layout: gain fields at the top level plus an "app" object and the motors'
-"eq" calibration (tone.py calibrate). Each save rewrites only its own part so
-they never clobber each other. The
-packaged exe may live in a read-only folder, hence the per-user location;
-a config.json left next to the scripts by earlier versions is moved over
-once.
+Layout: gain fields at the top level plus an "app" object, the motors'
+"eq" calibration (tone.py calibrate) and "presets", named sets of gain
+fields. Each save rewrites only its own part so they never clobber each
+other. The packaged exe may live in a read-only folder, hence the per-user
+location; a config.json left next to the scripts by earlier versions is
+moved over once.
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ class AppOptions:
     auto_start_on_game: bool = False
     language: str = ""  # i18n code; empty follows the Windows display language
     debug_log: bool = False  # write every output block to a CSV (blocklog.py)
+    preset: str = ""  # the preset in use: its button is lit and 저장 writes into it; "" none
 
 
 def _read(path: Path | None) -> dict:
@@ -110,3 +111,29 @@ def save_app_options(options: AppOptions, path: Path | None = None) -> None:
     data = _read(path)
     data["app"] = asdict(options)
     _write(path, data)
+
+
+def load_presets(path: Path | None = None) -> dict[str, Gains]:
+    """The player's named tunings; an entry that is not an object is left out."""
+    stored = _read(path).get("presets", {})
+    presets = {}
+    for name, values in (stored.items() if isinstance(stored, dict) else ()):
+        if isinstance(values, dict):
+            presets[name] = Gains()
+            _set_fields(presets[name], values)
+    return presets
+
+
+def save_preset(name: str, gains: Gains, path: Path | None = None) -> None:
+    """Store these gains under the name, replacing a preset of that name."""
+    data = _read(path)
+    presets = data.get("presets") if isinstance(data.get("presets"), dict) else {}
+    presets[name] = asdict(gains)
+    data["presets"] = presets
+    _write(path, data)
+
+
+def delete_preset(name: str, path: Path | None = None) -> None:
+    data = _read(path)
+    if isinstance(data.get("presets"), dict) and data["presets"].pop(name, None) is not None:
+        _write(path, data)

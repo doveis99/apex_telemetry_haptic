@@ -77,15 +77,22 @@ def build_command(command: int, payload: bytes = b"") -> bytes:
     return bytes(report)
 
 
-DEFAULT_TRIGGER_MODE = 0x02  # third byte of the 0x12 route frame as sent by ASB and xHaptics
+# 0x53 payloads are [area, target, mode, params...] (Space Station 5.0's gpa6
+# core). The realtime stream needs area 1 set up for the grips (target 0x02)
+# and the triggers (target 0x12), as ASB and xHaptics send it. Space Station's
+# own trigger haptics use area 0 with target 0 left, 1 right and 2 both, so
+# 0x12 may read as triggers (0x1_), both (0x_2). Target and mode are the
+# fields varied in experiments and the defaults are the captured values;
+# modes 0-3 felt alike on firmware 9.0.5.5.
+DEFAULT_TRIGGER_TARGET = 0x12
+DEFAULT_TRIGGER_MODE = 0x02
 
 
-def motor_enable_reports(trigger_mode: int = DEFAULT_TRIGGER_MODE) -> tuple[bytes, bytes]:
-    # The second frame's mode byte is the only field varied in experiments;
-    # its meaning is not documented, the default is the captured value.
+def motor_enable_reports(trigger_mode: int = DEFAULT_TRIGGER_MODE,
+                         trigger_target: int = DEFAULT_TRIGGER_TARGET) -> tuple[bytes, bytes]:
     return (
         build_command(CMD_MOTOR_ROUTE, bytes([0x01, 0x02, 0x03, 0x00, 0x40])),
-        build_command(CMD_MOTOR_ROUTE, bytes([0x01, 0x12, trigger_mode, 0x40, 0x00])),
+        build_command(CMD_MOTOR_ROUTE, bytes([0x01, trigger_target, trigger_mode, 0x40, 0x00])),
     )
 
 
@@ -195,6 +202,48 @@ def _parse_device_info(data: Sequence[int]) -> DeviceInfo | None:
     return DeviceInfo(device_type=frame[5], connection_mode=frame[6], features=frame[29], raw=bytes(frame))
 
 
+# Configuration RAM, read in chunks with 0xA3 as Space Station 5.0 does. Block
+# 6 is the motor configuration: on-board trigger haptics per side.
+CMD_RAM_READ = 0xA3
+RAM_READ_CHUNK = 0x00
+RAM_MOTOR = 0x06
+RAM_CHUNK = 16
+
+
+def _inline_command(command: int, payload: bytes) -> bytes:
+    """build_command's frame with the checksum right after the payload, as Space Station 5.0 sends it.
+
+    Every command this module streams carries it in the last byte, as ASB and
+    xHaptics do; the RAM read tries both, since only Space Station's is known to
+    work for it.
+    """
+    report = bytearray(REPORT_SIZE)
+    report[1], report[2] = MAGIC
+    report[3], report[4] = command, len(payload) + 2
+    report[5:5 + len(payload)] = payload
+    report[5 + len(payload)] = sum(report[3:5 + len(payload)]) & 0xFF
+    return bytes(report)
+
+
+def _ram_chunk(data: Sequence[int], ram_id: int, index: int) -> tuple[int, int, int, bytes] | None:
+    """(status, active slot, total length, data) of the 0xA3 reply for that chunk, else None.
+
+    Unlike 0x01's, this reply has no length or package bytes: after the command
+    come the sub-command, status, RAM id, active slot, total length (u16 LE),
+    chunk index, chunk size and the data, and the checksum follows the data.
+    """
+    frame = _protocol_frame(data)
+    if frame is None or frame[2] != CMD_RAM_READ:
+        return None
+    end = next((end for end in range(len(frame), 4, -1) if sum(frame[2:end - 1]) & 0xFF == frame[end - 1]), None)
+    if end is None:
+        return None
+    payload = frame[3:end - 1]
+    if len(payload) < 8 or payload[0] != RAM_READ_CHUNK or payload[2] != ram_id or payload[6] != index:
+        return None
+    return payload[1], payload[3], payload[4] | payload[5] << 8, bytes(payload[8:8 + payload[7]])
+
+
 class DeviceUnavailable(RuntimeError):
     """Controller absent, asleep or disconnected; worth retrying later."""
 
@@ -246,6 +295,7 @@ class Apex6:
         self.info: DeviceInfo | None = None
         self._enabled = False
         self._trigger_mode = DEFAULT_TRIGGER_MODE
+        self._trigger_target = DEFAULT_TRIGGER_TARGET
 
     def __enter__(self) -> "Apex6":
         try:
@@ -296,38 +346,80 @@ class Apex6:
         # The 2.4 GHz dongle stays enumerated while the controller sleeps.
         raise DeviceUnavailable(t("컨트롤러 응답 없음 (절전 중이면 버튼을 눌러 깨우세요)"))
 
-    def enable(self, trigger_mode: int = DEFAULT_TRIGGER_MODE) -> None:
-        self._trigger_mode = trigger_mode
+    def enable(self, trigger_mode: int = DEFAULT_TRIGGER_MODE,
+               trigger_target: int = DEFAULT_TRIGGER_TARGET) -> None:
+        self._trigger_mode, self._trigger_target = trigger_mode, trigger_target
         self.reassert()
         self._enabled = True
         time.sleep(ENABLE_DELAY)
 
     def reassert(self) -> None:
         """Send the motor route again; harmless when it is still in place."""
-        for report in motor_enable_reports(self._trigger_mode):
+        for report in motor_enable_reports(self._trigger_mode, self._trigger_target):
             self._write(report)
 
-    def reconfigure(self, trigger_mode: int) -> None:
+    def reconfigure(self, trigger_mode: int = DEFAULT_TRIGGER_MODE,
+                    trigger_target: int = DEFAULT_TRIGGER_TARGET) -> None:
         if self._enabled:
             self.disable()
-        self.enable(trigger_mode)
+        self.enable(trigger_mode, trigger_target)
 
     def disable(self) -> None:
         for _ in range(3):
             self._write(SILENT_REPORT)
             time.sleep(FRAME_PERIOD)
+        if self._trigger_target != DEFAULT_TRIGGER_TARGET:
+            # an experimental target is released by name too, then the usual frames
+            self._write(build_command(CMD_MOTOR_ROUTE, bytes([0x01, self._trigger_target, 0x00])))
         for report in MOTOR_DISABLE:
             self._write(report)
         self._enabled = False
 
+    def read_ram(self, ram_id: int, timeout: float = 0.6, attempts: int = 4) -> tuple[int, bytes]:
+        """One configuration RAM block, read only: (active slot, data).
+
+        Raises RuntimeError when a chunk goes unanswered or the pad reports a
+        nonzero status; the read is a diagnostic, not part of the stream.
+        """
+        data, total, slot, index = bytearray(), None, 0, 0
+        try:
+            while total is None or len(data) < total:
+                chunk = None
+                request = bytes([RAM_READ_CHUNK, ram_id, index, RAM_CHUNK])
+                for attempt in range(attempts):
+                    build = build_command if attempt % 2 == 0 else _inline_command
+                    self._write(build(CMD_RAM_READ, request))
+                    deadline = time.perf_counter() + timeout
+                    while chunk is None and time.perf_counter() < deadline:
+                        reply = self._dev.read(64, 50)
+                        chunk = _ram_chunk(reply, ram_id, index) if reply else None
+                    if chunk:
+                        break
+                if chunk is None:
+                    raise RuntimeError(f"0xA3 RAM 0x{ram_id:02X} chunk {index}: no reply")
+                status, slot, length, part = chunk
+                if status:
+                    raise RuntimeError(f"0xA3 RAM 0x{ram_id:02X} chunk {index}: status {status}")
+                total = length if total is None else total
+                if not part:
+                    break  # a short block: keep what came
+                data += part
+                index += 1
+        except OSError as exc:
+            raise DeviceUnavailable(t("컨트롤러 연결 끊김 ({error})", error=exc)) from exc
+        return slot, bytes(data[:total])
+
     def write_block(self, block: Block) -> None:
         self._write(build_realtime(block))
 
-    def stream(self, render: Callable[[int], Block | None], max_seconds: float | None = None) -> StreamStats:
-        """Call render(first_sample_index) every 8 ms and send its block.
+    def stream(self, render: Callable[[int], Block | None], max_seconds: float | None = None,
+               period: float = FRAME_PERIOD) -> StreamStats:
+        """Call render(first_sample_index) every period (8 ms) and send its block.
 
         render returns None to stop. Writes are scheduled on absolute
-        deadlines so one late frame does not shift every later one.
+        deadlines so one late frame does not shift every later one. A shorter
+        period is only for tone.py's report-rate check: Flydigi's engine and
+        this app always send 8 ms.
         """
         if not self._enabled:
             self.enable()
@@ -344,7 +436,7 @@ class Apex6:
             now = time.perf_counter()
             lateness = (now - deadline) * 1000.0
             stats.max_lateness_ms = max(stats.max_lateness_ms, lateness)
-            if lateness > FRAME_PERIOD * 1000.0:
+            if lateness > period * 1000.0:
                 stats.late_frames += 1
                 deadline = now  # resync instead of bursting to catch up
             # Every block goes out, silence too. ASB thinned a run of silence to
@@ -362,7 +454,7 @@ class Apex6:
                 self.reassert()
                 last_reassert = now
             sample_index += SUBFRAMES
-            deadline += FRAME_PERIOD
+            deadline += period
             remaining = deadline - time.perf_counter()
             if remaining > 0:
                 time.sleep(remaining)

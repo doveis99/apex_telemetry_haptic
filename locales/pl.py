@@ -190,9 +190,9 @@ MESSAGES = {
         "Cienki pisk w osobnych porcjach przy łagodnym hamowaniu do zatrzymania poniżej ok. 14 km/h.",
     "트레일러를 연결할 때 커플러가 0.6초쯤 '덜커덕덜컥' 맞물리고, 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
         "Przy podpinaniu naczepy siodło grzechocze przez około 0,6 s; przy odpinaniu bum, a po nim syk powietrza.",
-    "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
+    "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 '턱'에 이어 짧은 '푸쉭'.":
         ("Przy zaciąganiu hamulca ręcznego „klak”, a potem prawie sekundę uchodzącego powietrza; przy zwalnianiu "
-         "niskie „tok”, a potem krótki syk."),
+         "„tok”, a potem krótki syk."),
     "브레이크 페달을 떼면 브레이크 챔버의 공기가 빠지며 '툭' 하고 짧게 '푸쉬익'. 세게 밟았을수록 크고, 잠깐 톡 친 정도로는 나지 않습니다. 브레이크를 뗄 때마다 나므로 '주행 진동 양보'로 주행 진동을 줄이지 않습니다.":
         ("Po puszczeniu pedału hamulca komory hamulcowe wypuszczają powietrze: „tup” i krótkie „pssst”. Tym "
          "głośniej, im mocniej hamowano; krótkie muśnięcie go nie wywołuje. Pojawia się przy każdym puszczeniu, więc "

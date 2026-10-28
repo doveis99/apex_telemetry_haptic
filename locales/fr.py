@@ -197,9 +197,9 @@ MESSAGES = {
         "Un léger crissement par à-coups en freinant doucement jusqu'à l'arrêt sous 14 km/h environ.",
     "트레일러를 연결할 때 커플러가 0.6초쯤 '덜커덕덜컥' 맞물리고, 분리할 때 '쿵'에 이어 에어 빠지는 느낌.":
         "La sellette claque pendant environ 0,6 s à l'attelage ; au dételage, un boum suivi d'un échappement d'air.",
-    "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 낮은 '턱'에 이어 짧은 '푸쉭'.":
+    "파킹 브레이크를 체결하면 '철컥'에 이어 1초 가까이 에어가 빠지는 '쉬이익', 해제하면 '턱'에 이어 짧은 '푸쉭'.":
         ("En serrant le frein à main, un « clac » puis près d'une seconde d'air qui s'échappe ; en le desserrant, un "
-         "« toc » sourd puis un bref souffle."),
+         "« toc » puis un bref souffle."),
     "브레이크 페달을 떼면 브레이크 챔버의 공기가 빠지며 '툭' 하고 짧게 '푸쉬익'. 세게 밟았을수록 크고, 잠깐 톡 친 정도로는 나지 않습니다. 브레이크를 뗄 때마다 나므로 '주행 진동 양보'로 주행 진동을 줄이지 않습니다.":
         ("Quand vous relâchez la pédale de frein, les cylindres de frein se vident : un « poc » et un bref « pschitt "
          "». Plus fort si vous avez freiné fort ; une petite touche ne le déclenche pas. Il vient à chaque "

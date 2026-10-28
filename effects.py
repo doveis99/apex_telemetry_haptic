@@ -905,8 +905,11 @@ class Synth:
                 self._both("park_brake", Burst(110.0, 1.0 * s, 0.02, phase=0.25))
                 self._both("park_brake", NoiseBurst(250.0, 0.5 * s, 0.35, delay_s=0.03, attack_s=0.15))
             else:
-                # Released: a lower thunk, and a short pop of air about 0.3 s later.
-                self._both("park_brake", Burst(70.0, 1.0 * s, 0.025, phase=0.25))
+                # Released: the knob thunks, and a short pop of air about 0.3 s later. The
+                # knob's release clips (Zeemods Western Star and Freightliner) centre on
+                # 105-170 Hz within 30-250 Hz and fall 10 dB in 40-50 ms; at 130 Hz, 0.83
+                # keeps the felt peak of the 70 Hz thunk it replaces.
+                self._both("park_brake", Burst(130.0, 0.83 * s, 0.035, phase=0.25))
                 self._both("park_brake", NoiseBurst(250.0, 0.45 * s, 0.05, delay_s=0.28))
             log.append(t("파킹 브레이크 체결") if frame.park_brake else t("파킹 브레이크 해제"))
 

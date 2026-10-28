@@ -577,6 +577,10 @@ class EventShapeTest(unittest.TestCase):
         samples = self.park_brake(False)
         self.assertGreater(rms(samples[280:340]), 2 * rms(samples[180:260]))
 
+    def test_releasing_the_park_brake_thunks_where_the_knob_clips_do(self) -> None:
+        thunk = self.park_brake(False)[:100]
+        self.assertGreater(tone_level(thunk, 130.0), 2 * tone_level(thunk, 70.0))
+
     @staticmethod
     def release(blocks: int, pedal: float, s: Synth | None = None) -> list:
         """Hold the brake pedal for some 8 ms blocks, let go, and return the air brake's bursts."""

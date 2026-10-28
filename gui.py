@@ -638,10 +638,14 @@ class App:
     def _switch_preset(self, name: str) -> None:
         if name == self._active_preset() and asdict(self.gains) == self.saved:
             return
-        gains = load_presets().get(name)
-        if gains is None or not self._keep_changes():
+        if name not in load_presets() or not self._keep_changes():
             self._build_presets()
             return
+        # read after _keep_changes: saving there writes into the preset in use, which may be this one
+        self._use_preset(name, load_presets()[name])
+
+    def _use_preset(self, name: str, gains: Gains) -> None:
+        """Make this preset the tuning in use, and the one the next start opens with."""
         self._apply(gains)
         self._set_active_preset(name)
         save_gains(self.gains)  # the next start opens with it
@@ -693,6 +697,8 @@ class App:
         delete_preset(name)
         if self.options.preset == name:
             self._set_active_preset(new)
+        elif self.options.preset == new:  # it replaced the preset in use: the window takes what that holds now
+            self._use_preset(new, gains)
         else:
             self._build_presets()
 

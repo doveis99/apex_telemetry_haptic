@@ -97,7 +97,7 @@ MESSAGES = {
     "시동 켜기/끄기": "Motor an/aus",
     "레인지/스플리터": "Gruppe/Splitter",
     "게임 알림": "Spielhinweise",
-    "└ 주행 진동 양보": "└ Platz für Ereignisse",
+    "주행 진동 양보": "Platz für Ereignisse",
     "텔레메트리": "Telemetrie",
     "게임에서 받고 있는 값": "was das Spiel gerade sendet",
     "속도": "Tempo",
@@ -186,10 +186,12 @@ MESSAGES = {
         ("Wie stark der Gas-Trigger im Zündtakt des Motors pulsiert. Er folgt denselben Zündungen wie die "
          "Motorvibration, sodass auch der unrunde Leerlauf und die Stärke jeder Zündung spürbar sind. 0 % hält ihn "
          "gleichmäßig. Die Bremse bleibt unberührt."),
-    "rpm, 엑셀 부하, 페달이 그대로 유지되면 엔진과 엑셀/브레이크 진동을 몇 초에 걸쳐 이 비율만큼 줄여 장거리 피로를 덜어 줍니다. 가속, 변속, 페달 조작 순간에는 바로 돌아옵니다.":
-        ("Bleiben Drehzahl, Last und Pedale gleich, werden Motor- und Gas/Brems-Vibration über einige Sekunden um "
-         "diesen Anteil abgesenkt, das schont auf langen Strecken. Beim Beschleunigen, Schalten oder Pedalwechsel "
-         "sofort zurück."),
+    "엔진(rpm·부하), 노면(재질·속도), 엑셀/브레이크(페달)가 그대로 유지되면 그 진동을 수십 초에 걸쳐 이 비율만큼 줄입니다. 변함없는 진동은 손이 곧 느끼지 못하고 피로만 쌓이기 때문입니다. 가속·감속, 변속, 노면이 바뀌거나 페달을 움직이면 바로 돌아오고, 크루즈 중 작은 속도 변화나 손가락 떨림은 무시합니다.":
+        ("Bleibt gleich, was sie antreibt (Motor: Drehzahl und Last; Straße: Belag und Tempo; Gas/Bremse: das "
+         "Pedal), werden diese Vibrationen über einige zehn Sekunden um diesen Anteil abgesenkt: Eine Vibration, "
+         "die sich nie ändert, spürt die Hand bald nicht mehr, sie ermüdet nur. Beim Beschleunigen oder Bremsen, "
+         "Schalten, neuem Belag oder Pedalbewegung sofort zurück; kleine Schwankungen im Tempomat und ein ruhender"
+         " Finger zählen nicht."),
     "엑셀이나 브레이크를 끝까지(97% 이상) 밟는 순간 짧은 '툭'.":
         "Ein kurzes „Tock“, sobald Gas oder Bremse am Anschlag ist (97 % oder mehr).",
     "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다.":
@@ -214,9 +216,9 @@ MESSAGES = {
     "톨게이트, 벌금, 주유, 배송 완료, 페리, 기차 이벤트 때 '톡톡' 두 번.":
         ("Ein doppeltes „Tipp-tipp“ bei Mautstellen, Bußgeldern, Tanken, abgeschlossenen Lieferungen, Fähren und "
          "Zügen."),
-    "이벤트가 울리는 순간 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":
-        ("Wie stark die Fahrvibration auf demselben Motor kurz absinkt, während ein Ereignis spielt, damit es nicht "
-         "untergeht. 0 % lässt sie unverändert."),
+    "변속과 충돌을 포함한 모든 이벤트 효과가 울리는 순간, 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":
+        ("Gilt für alle Ereignis-Effekte, auch Schalten und Aufprall: wie stark die Fahrvibration auf demselben "
+         "Motor kurz absinkt, während eines spielt, damit es nicht untergeht. 0 % lässt sie unverändert."),
     "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다.":
         ("Ein Unebenheitsimpuls kommt, wenn sich die Federung plötzlich schneller bewegt. Niedriger für kleine "
          "Unebenheiten, höher nur für harte Stöße."),

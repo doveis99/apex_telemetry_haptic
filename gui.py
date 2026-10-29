@@ -81,13 +81,16 @@ EVENT_SLIDERS = (
     ("squeal", N_("브레이크 스퀼"), 0, 200, 100, "%"),
     ("trailer", N_("트레일러 연결"), 0, 200, 100, "%"),
     ("park_brake", N_("파킹 브레이크"), 0, 200, 100, "%"),
-    ("air_brake", N_("에어 브레이크"), 0, 200, 100, "%"),
-    ("blinker", N_("방향지시등"), 0, 200, 100, "%"),
     ("engine_start", N_("시동 켜기/끄기"), 0, 200, 100, "%"),
     ("shifter", N_("레인지/스플리터"), 0, 200, 100, "%"),
+    # what a driver only hears, last and softer
+    ("air_brake", N_("에어 브레이크"), 0, 200, 100, "%"),
+    ("blinker", N_("방향지시등"), 0, 200, 100, "%"),
     ("game_events", N_("게임 알림"), 0, 200, 100, "%"),
-    ("ducking", N_("└ 주행 진동 양보"), 0, 100, 100, "%"),
+    ("ducking", N_("주행 진동 양보"), 0, 100, 100, "%"),
 )
+# settings for every effect of their card, set off below a line: not one effect's sub-setting
+CARD_WIDE = ("steady_fade", "ducking")
 EFFECT_NAMES = {key: label for key, label, *_ in EFFECT_SLIDERS + EVENT_SLIDERS}
 THRESHOLD_SLIDERS = (
     ("bump_threshold", N_("요철 감지 기준"), 5, 100, 100, "cm/s"),
@@ -123,8 +126,10 @@ SLIDER_TIPS = {
     "throttle_pulse": N_("엑셀 트리거 진동을 엔진 점화 박자에 맞춰 출렁이게 하는 정도입니다. "
                          "엔진 진동과 같은 폭발을 따라가서 공회전의 울렁임과 폭발마다 다른 세기도 느껴집니다. "
                          "0%면 일정하게 울립니다. 브레이크 쪽에는 영향이 없습니다."),
-    "steady_fade": N_("rpm, 엑셀 부하, 페달이 그대로 유지되면 엔진과 엑셀/브레이크 진동을 몇 초에 걸쳐 이 비율만큼 "
-                      "줄여 장거리 피로를 덜어 줍니다. 가속, 변속, 페달 조작 순간에는 바로 돌아옵니다."),
+    "steady_fade": N_("엔진(rpm·부하), 노면(재질·속도), 엑셀/브레이크(페달)가 그대로 유지되면 그 진동을 수십 초에 걸쳐 "
+                      "이 비율만큼 줄입니다. 변함없는 진동은 손이 곧 느끼지 못하고 피로만 쌓이기 때문입니다. "
+                      "가속·감속, 변속, 노면이 바뀌거나 페달을 움직이면 바로 돌아오고, 크루즈 중 작은 속도 변화나 "
+                      "손가락 떨림은 무시합니다."),
     "pedal": N_("엑셀이나 브레이크를 끝까지(97% 이상) 밟는 순간 짧은 '툭'."),
     "squeal": N_("약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다."),
     "trailer": N_("트레일러를 연결할 때 커플러가 0.6초쯤 '덜커덕덜컥' 맞물리고, 분리할 때 '쿵'에 이어 에어 빠지는 느낌."),
@@ -137,8 +142,8 @@ SLIDER_TIPS = {
     "shifter": N_("H-시프터의 레인지 셀렉터나 스플리터를 조작할 때 '딸깍'에 이어 변속기가 '철컥' 넘어갑니다(스플리터는 약하게). "
                   "자동/순차 변속에서는 울리지 않습니다."),
     "game_events": N_("톨게이트, 벌금, 주유, 배송 완료, 페리, 기차 이벤트 때 '톡톡' 두 번."),
-    "ducking": N_("이벤트가 울리는 순간 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. "
-                  "0%면 줄이지 않습니다."),
+    "ducking": N_("변속과 충돌을 포함한 모든 이벤트 효과가 울리는 순간, 같은 위치의 주행 진동을 잠깐 줄여 "
+                  "이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다."),
     "bump_threshold": N_("서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. "
                          "낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다."),
     "impact_threshold": N_("게임 화면 한 프레임 사이의 가속도 변화가 이 값을 넘으면 충돌 펄스를 냅니다. "
@@ -299,13 +304,11 @@ class App:
         effects = card(left, t("주행 효과"), t("달리는 동안 계속 나는 진동"))
         effects.outer.pack(fill="x")
         self._route_header(effects)
-        for row, spec in enumerate(EFFECT_SLIDERS, start=1):
-            self._slider(effects, row, *spec)
+        self._sliders(effects, EFFECT_SLIDERS)
         events = card(left, t("이벤트 효과"), t("순간적으로 한 번 나는 진동"))
         events.outer.pack(fill="x", pady=(px(12), 0))
         self._route_header(events)
-        for row, spec in enumerate(EVENT_SLIDERS, start=1):
-            self._slider(events, row, *spec)
+        self._sliders(events, EVENT_SLIDERS)
 
         right = tk.Frame(root, bg=BG)
         right.grid(row=3, column=1, sticky="nsew", padx=(px(6), px(18)), pady=(px(12), 0))
@@ -387,6 +390,17 @@ class App:
         tip(self.events, t("변속, 충돌, 페달, 트레일러, 파킹 브레이크, 방향지시등, 시동, 게임 알림과 "
                            "컨트롤러 연결 문제가 시간과 함께 기록됩니다. 최근 50개까지 보입니다.")).pack(
             fill="both", expand=True)
+
+    def _sliders(self, parent: tk.Frame, specs: tuple) -> None:
+        """One row per slider under the route header, a line above each CARD_WIDE one."""
+        row = 1
+        for spec in specs:
+            if spec[0] in CARD_WIDE:
+                tk.Frame(parent, bg="#252a34", height=1).grid(row=row, column=0, columnspan=6, sticky="ew",
+                                                             pady=px(6))
+                row += 1
+            self._slider(parent, row, *spec)
+            row += 1
 
     def _slider(self, parent: tk.Frame, row: int, key: str, label: str,
                 low: int, high: int, scale: int, unit: str) -> None:

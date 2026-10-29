@@ -99,7 +99,7 @@ MESSAGES = {
     "시동 켜기/끄기": "Démarrage/arrêt",
     "레인지/스플리터": "Gamme/demi-rapport",
     "게임 알림": "Alertes du jeu",
-    "└ 주행 진동 양보": "└ Céder aux événements",
+    "주행 진동 양보": "Céder aux événements",
     "텔레메트리": "Télémétrie",
     "게임에서 받고 있는 값": "ce que le jeu envoie",
     "속도": "Vitesse",
@@ -187,10 +187,12 @@ MESSAGES = {
         ("Intensité avec laquelle la gâchette d'accélérateur bat au rythme de l'allumage. Elle suit les mêmes "
          "explosions que la vibration du moteur : le galop du ralenti et la force de chaque explosion s'y sentent "
          "aussi. 0 % la garde constante. Le frein n'est pas concerné."),
-    "rpm, 엑셀 부하, 페달이 그대로 유지되면 엔진과 엑셀/브레이크 진동을 몇 초에 걸쳐 이 비율만큼 줄여 장거리 피로를 덜어 줍니다. 가속, 변속, 페달 조작 순간에는 바로 돌아옵니다.":
-        ("Quand le régime, la charge et les pédales restent stables, les vibrations moteur et accél./frein baissent "
-         "de cette part en quelques secondes pour soulager les longs trajets. Elles reviennent dès que vous "
-         "accélérez, passez un rapport ou bougez une pédale."),
+    "엔진(rpm·부하), 노면(재질·속도), 엑셀/브레이크(페달)가 그대로 유지되면 그 진동을 수십 초에 걸쳐 이 비율만큼 줄입니다. 변함없는 진동은 손이 곧 느끼지 못하고 피로만 쌓이기 때문입니다. 가속·감속, 변속, 노면이 바뀌거나 페달을 움직이면 바로 돌아오고, 크루즈 중 작은 속도 변화나 손가락 떨림은 무시합니다.":
+        ("Quand ce qui les anime reste stable (moteur : régime et charge ; route : revêtement et vitesse ; "
+         "accél./frein : la pédale), ces vibrations baissent de cette part en quelques dizaines de secondes : une "
+         "vibration qui ne change jamais n'est bientôt plus sentie et ne fait que fatiguer. Elles reviennent dès "
+         "que vous accélérez ou ralentissez, passez un rapport, changez de revêtement ou bougez une pédale ; les "
+         "petites variations du régulateur et un doigt posé ne comptent pas."),
     "엑셀이나 브레이크를 끝까지(97% 이상) 밟는 순간 짧은 '툭'.":
         "Un bref « toc » dès que l'accélérateur ou le frein est à fond (97 % ou plus).",
     "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다.":
@@ -214,9 +216,10 @@ MESSAGES = {
          "séquentielle."),
     "톨게이트, 벌금, 주유, 배송 완료, 페리, 기차 이벤트 때 '톡톡' 두 번.":
         "Un double « tac-tac » aux péages, amendes, pleins, livraisons terminées, ferrys et trains.",
-    "이벤트가 울리는 순간 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":
-        ("Combien la vibration de conduite du même moteur baisse brièvement pendant un événement pour qu'il ne soit "
-         "pas noyé. 0 % n'y touche pas."),
+    "변속과 충돌을 포함한 모든 이벤트 효과가 울리는 순간, 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":
+        ("S'applique à tous les effets d'événement, passages de rapport et chocs compris : combien la vibration de"
+         " conduite du même moteur baisse brièvement pendant l'un d'eux pour qu'il ne soit pas noyé. 0 % n'y "
+         "touche pas."),
     "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다.":
         ("Une impulsion de bosse se déclenche quand la suspension bouge soudain plus vite que cela. Baissez pour "
          "sentir les petites bosses, montez pour ne sentir que les gros chocs."),

@@ -224,6 +224,60 @@ class PedalTriggerTest(unittest.TestCase):
         self.assertGreaterEqual(max(map(abs, locked)), max(map(abs, full)))
 
 
+class SteadyFadeTest(unittest.TestCase):
+    @staticmethod
+    def drive(s: Synth, seconds: float, substance: str = "road", **values) -> None:
+        """Values may be functions of the time in s."""
+        for n in range(round(seconds / DT)):
+            f = frame(**{key: value(n * DT) if callable(value) else value for key, value in values.items()})
+            for wheel in f.wheels:
+                wheel.substance = substance
+            s.render(f)
+
+    @staticmethod
+    def road_gain(s: Synth, substance: str = "road", speed: float = 22.0) -> float:
+        """The road's level against its unfaded level."""
+        texture = min(1.0, surface_of(substance).level * min(1.0, speed / 25.0) ** 0.7)
+        return s.levels.road_left / (s.g.road * texture)
+
+    def test_a_steady_road_settles_to_the_floor(self) -> None:
+        s = only("road")
+        self.drive(s, 1.0)
+        self.assertGreater(self.road_gain(s), 0.9)
+        self.drive(s, 30.0)
+        self.assertAlmostEqual(self.road_gain(s), 1.0 - s.g.steady_fade, delta=0.03)
+
+    def test_a_new_surface_or_pace_brings_it_back(self) -> None:
+        s = only("road")
+        self.drive(s, 30.0)
+        self.drive(s, 0.2, substance="gravel")
+        self.assertGreater(self.road_gain(s, "gravel"), 0.95)
+        self.drive(s, 30.0, "gravel")
+        self.drive(s, 3.0, "gravel", speed=lambda t: 22.0 - 2.0 * t)  # braking from 79 to 58 km/h
+        self.assertGreater(self.road_gain(s, "gravel", speed=16.0), 0.95)
+
+    def test_cruise_drift_and_a_resting_finger_do_not_count(self) -> None:
+        s = Synth(effective_gains(Gains(disabled=[n for n in TOGGLEABLE if n not in ("road", "trigger")])))
+        self.drive(s, 30.0, speed=lambda t: 22.0 + 0.5 * math.sin(t),  # +-1.8 km/h
+                   user_throttle=lambda t: 0.4 + 0.02 * math.sin(7 * t))
+        self.assertLess(s.fresh["road"], 0.05)
+        self.assertLess(s.fresh["trigger"], 0.05)
+
+    def test_engine_returns_on_a_shift(self) -> None:
+        s = only("engine")
+        self.drive(s, 30.0)
+        settled = s.levels.engine
+        self.drive(s, 0.2, gear=11, rpm=1050.0)
+        self.assertGreater(s.levels.engine, 1.8 * settled)
+
+    def test_coming_back_from_a_pause_starts_in_full(self) -> None:
+        s = only("road")
+        self.drive(s, 30.0)
+        s.render(None)
+        self.drive(s, 0.1)
+        self.assertGreater(self.road_gain(s), 0.95)
+
+
 def only(effect: str) -> Synth:
     return Synth(effective_gains(Gains(disabled=[name for name in TOGGLEABLE if name != effect])))
 

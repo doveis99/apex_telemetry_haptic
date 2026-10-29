@@ -97,7 +97,7 @@ MESSAGES = {
     "시동 켜기/끄기": "Engine start/stop",
     "레인지/스플리터": "Range/splitter",
     "게임 알림": "Game alerts",
-    "└ 주행 진동 양보": "└ Duck for events",
+    "주행 진동 양보": "Duck for events",
     "텔레메트리": "Telemetry",
     "게임에서 받고 있는 값": "what the game is sending",
     "속도": "Speed",
@@ -183,9 +183,11 @@ MESSAGES = {
         ("How much the throttle trigger throbs with the engine's firing beat. It follows the same firings as the "
          "engine vibration, so the idle's lope and each firing's own strength come through too. 0% keeps it steady. "
          "The brake is not affected."),
-    "rpm, 엑셀 부하, 페달이 그대로 유지되면 엔진과 엑셀/브레이크 진동을 몇 초에 걸쳐 이 비율만큼 줄여 장거리 피로를 덜어 줍니다. 가속, 변속, 페달 조작 순간에는 바로 돌아옵니다.":
-        ("While rpm, load and pedals hold steady, engine and throttle/brake vibration fade by this much over a few "
-         "seconds to ease long hauls. They return at once when you accelerate, shift or move a pedal."),
+    "엔진(rpm·부하), 노면(재질·속도), 엑셀/브레이크(페달)가 그대로 유지되면 그 진동을 수십 초에 걸쳐 이 비율만큼 줄입니다. 변함없는 진동은 손이 곧 느끼지 못하고 피로만 쌓이기 때문입니다. 가속·감속, 변속, 노면이 바뀌거나 페달을 움직이면 바로 돌아오고, 크루즈 중 작은 속도 변화나 손가락 떨림은 무시합니다.":
+        ("While what drives them holds steady (engine: rpm and load; road: surface and speed; throttle/brake: the "
+         "pedal), these vibrations fade by this much over tens of seconds: a vibration that never changes soon "
+         "goes unnoticed and only tires the hands. They return at once when you speed up or slow down, shift, "
+         "change surface or move a pedal; small drifts on cruise control and a resting finger do not count."),
     "엑셀이나 브레이크를 끝까지(97% 이상) 밟는 순간 짧은 '툭'.":
         "A short 'thud' the moment throttle or brake reaches the floor (97% or more).",
     "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다.":
@@ -209,9 +211,9 @@ MESSAGES = {
          "a 'clack' (faintly for the splitter). Silent with automatic or sequential shifting."),
     "톨게이트, 벌금, 주유, 배송 완료, 페리, 기차 이벤트 때 '톡톡' 두 번.":
         "A double 'tap-tap' on toll gates, fines, refuelling, finished deliveries, ferries and trains.",
-    "이벤트가 울리는 순간 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":
-        ("How much the driving vibration on the same motor dips while an event plays, so the event is not buried. "
-         "0% leaves it alone."),
+    "변속과 충돌을 포함한 모든 이벤트 효과가 울리는 순간, 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":
+        ("Applies to every event effect, gear shifts and impacts included: how much the driving vibration on the "
+         "same motor dips while one plays, so it is not buried. 0% leaves it alone."),
     "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다.":
         ("A bump pulse fires when the suspension suddenly moves faster than this. Lower it to feel small bumps, "
          "raise it to feel only big hits."),

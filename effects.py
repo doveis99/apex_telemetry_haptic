@@ -25,10 +25,20 @@ from telemetry import Frame, Wheel
 
 DT = SUBFRAMES / SAMPLE_RATE  # 8 ms per telemetry update
 TAU = 2.0 * math.pi
-# Steady fade: engine and trigger settle toward a floor while their inputs
-# hold still (long cruises tire the hands) and come back when they move.
-STEADY_TAU = 3.0  # s for the reference to catch up with an input that stopped moving
-STEADY_K = 1.0 - math.exp(-DT / STEADY_TAU)
+# Steady fade: a vibration that holds still soon goes unnoticed and only tires
+# the hand, so what the continuous effects tell lies in how they change. Engine,
+# road and trigger come back in full the moment what drives them moves, then
+# settle over tens of seconds toward a floor (Gains.steady_fade) while it holds.
+# Moves inside a dead band do not count: cruise control holding its speed, a
+# finger resting on the trigger. The fade used to follow every such wobble back
+# within a few seconds, which on the game's scaled-down roads left the engine
+# and trigger near 90%, and it left out the road, nearly all of the grips' bed
+# at speed (80 km/h on asphalt: road 12.9 RMS, engine 1.0).
+CHANGE_TAU = 2.0  # s for the reference to catch up with an input that stopped moving
+CHANGE_K = 1.0 - math.exp(-DT / CHANGE_TAU)
+FADE_TAU = 8.0  # s; two thirds of the way to the floor 8 s after the last change, nearly there by 25
+FADE_K = math.exp(-DT / FADE_TAU)
+STEADY_BEDS = ("engine", "road", "trigger")
 # The plugin rewrites shared memory once per rendered game frame, so at 60 fps
 # about every other block reads the frame it read before. Suspension rates are
 # taken over the game time between new frames (Frame.render_time), not over a
@@ -242,10 +252,8 @@ class Gains:
     master: float = 1.0
     grip_level: float = 1.0  # final output strength per channel, after all effects
     trigger_level: float = 1.0
-    # The player sits in the cab holding the wheel, often for hours. The game's scaled-down
-    # roads change speed every few seconds, so the steady fade rarely gets to work (on such a
-    # drive the engine and trigger keep about 90%): the continuous effects have to be gentle
-    # on their own. The engine is a hum under the road, and the cab's clicks stand out.
+    # The player sits in the cab holding the wheel, often for hours. The engine is a hum under
+    # the road, and the cab's clicks stand out.
     engine: float = 0.1
     road: float = 0.5
     bumps: float = 1.0
@@ -261,8 +269,9 @@ class Gains:
     # how deep the throttle trigger pulses at the engine firing rate; 0 keeps
     # it steady, 0.8 is also the fixed pulse of earlier versions
     throttle_pulse: float = 0.8
-    # how far engine and throttle/brake fade while rpm, load and pedals hold
-    # steady; 0 keeps them constant
+    # how far engine, road and throttle/brake fade while what drives them holds steady; 0 keeps
+    # them constant. On the developer's 220 mile haul 0.6 takes the road 6.6 dB down overall
+    # (under 60% of itself for 86% of the drive) and the trigger 2.5 dB; 0.4 takes them 3.9 and 1.6.
     steady_fade: float = 0.6
     cylinders: int = 6
     # m/s of sudden suspension travel; 0.2 brings a 60 fps game's short joints, which a
@@ -274,10 +283,13 @@ class Gains:
     squeal: float = 0.4
     trailer: float = 0.9
     park_brake: float = 0.7
-    air_brake: float = 0.5
-    blinker: float = 0.7
     engine_start: float = 0.8
     shifter: float = 0.7
+    # What the driver only hears, never feels: the flasher relay, the brakes venting on every
+    # release, the game's alerts. Softer than the cab's knocks; with the road fading on steady
+    # stretches they still come through.
+    air_brake: float = 0.3
+    blinker: float = 0.5
     game_events: float = 0.5
     # how far the continuous effects dip while an event plays; 0 never
     ducking: float = 0.7
@@ -744,6 +756,7 @@ class Synth:
         self.lock_phase = 0.0  # of the ABS-like chop, per sample
         self.was_locked = False
         self.steady_ref: dict[str, float] = {}
+        self.fresh = dict.fromkeys(STEADY_BEDS, 1.0)  # 1 just after a bed's input moved, falling while it holds
         self.duck = [0.0, 0.0, 0.0]  # left grip, right grip, trigger; 0 = no ducking
         self.levels = Levels()
 
@@ -764,6 +777,9 @@ class Synth:
         self.prev_accel = None
         self.prev_gear = None
         self.prev_state = {key: value for key, value in self.prev_state.items() if key == "game_events"}
+        # coming back is a change too: the beds start in full and settle again
+        self.steady_ref = {}
+        self.fresh = dict.fromkeys(STEADY_BEDS, 1.0)
 
     def _frame_dt(self, frame: Frame) -> float | None:
         """Game time in s since the last new frame; None when this frame was read before.
@@ -994,15 +1010,17 @@ class Synth:
             self._both("engine_start", Burst(ENGINE_FIRING_HZ, peak * 10 ** (db / 20), ENGINE_FIRING_DECAY,
                                              delay_s=start + at, phase=0.25))
 
-    def _novelty(self, key: str, value: float, scale: float) -> float:
-        """1 just after value moved by scale or more, falling to 0 as it holds steady."""
+    def _novelty(self, key: str, value: float, scale: float, dead: float) -> float:
+        """1 while value moves by dead + scale or more within about CHANGE_TAU; 0 for moves inside dead."""
         ref = self.steady_ref.setdefault(key, value)
-        self.steady_ref[key] = ref + (value - ref) * STEADY_K
-        return min(1.0, abs(value - ref) / scale)
+        self.steady_ref[key] = ref + (value - ref) * CHANGE_K
+        return min(1.0, max(0.0, abs(value - ref) - dead) / scale)
 
-    def _steady_gain(self, novelty: float) -> float:
+    def _steady_gain(self, bed: str, novelty: float) -> float:
+        """Full as the bed's input moves (novelty 1), settling toward the floor over FADE_TAU while it holds."""
+        held = self.fresh[bed] = max(novelty, self.fresh[bed] * FADE_K)
         floor = 1.0 - min(1.0, max(0.0, self.g.steady_fade))
-        return floor + (1.0 - floor) * novelty
+        return floor + (1.0 - floor) * held
 
     def _wheel_spin(self, frame: Frame) -> float:
         """Share of grounded wheels turning clearly faster than the truck moves."""
@@ -1064,24 +1082,32 @@ class Synth:
 
             load = max(frame.game_throttle, 0.0)
             rpm_frac = min(1.0, frame.rpm / frame.rpm_max)
-            engine_moved = max(self._novelty("load", load, 0.15), self._novelty("rpm", rpm_frac, 0.06))
+            # cruise control trims the load by a few percent all the time
+            engine_moved = max(self._novelty("load", load, 0.15, 0.05), self._novelty("rpm", rpm_frac, 0.06, 0.02))
             if frame.engine_on and frame.rpm > 100:
                 # Firing frequency of a 4-stroke engine: rpm/60 * cylinders/2.
                 engine_freq = max(25.0, min(140.0, frame.rpm / 60.0 * g.cylinders / 2.0))
-                engine_amp = g.engine * (0.25 + 0.55 * load + 0.2 * rpm_frac) * self._steady_gain(engine_moved)
+                engine_amp = (g.engine * (0.25 + 0.55 * load + 0.2 * rpm_frac)
+                              * self._steady_gain("engine", engine_moved))
                 engine_harsh = ENGINE_HARSH * load
                 engine_uneven = max(ENGINE_UNEVEN_FLOOR, 1.0 - 2.0 * load - rpm_frac)
 
             speed_factor = min(1.0, abs(frame.speed) / 25.0) ** 0.7
             sides = ([w for w in frame.wheels if w.pos_x < 0 and w.on_ground],
                      [w for w in frame.wheels if w.pos_x >= 0 and w.on_ground])
-            road = []
+            # A new surface, rougher ground or a change of pace brings the road back. Off the
+            # pedals at speed the truck drifts up to 3.6 km/h from where it was 2 s before
+            # (90th percentile of the developer's 220 mile haul); that is not a new pace.
+            road_moved = self._novelty("speed", speed, 2.0, 1.0)
+            textures = []
             for side, wheels in enumerate(sides):
                 surface = side_surface(wheels)
                 self.texture[side].tune(surface, speed, self.roughness[side])
-                texture = surface.level * speed_factor + min(1.0, self.roughness[side] * 1.5)
-                road.append(g.road * min(1.0, texture))
-            road_l, road_r = road
+                texture = min(1.0, surface.level * speed_factor + min(1.0, self.roughness[side] * 1.5))
+                road_moved = max(road_moved, self._novelty(f"road_{side}", texture, 0.15, 0.05))
+                textures.append(texture)
+            road_gain = g.road * self._steady_gain("road", road_moved)
+            road_l, road_r = (road_gain * texture for texture in textures)
             rumble_freq = max(25.0, min(120.0, abs(frame.speed) / RUMBLE_SPACING))
             trailer_sides = ([w for w in frame.trailer_wheels if w.pos_x < 0 and w.on_ground],
                              [w for w in frame.trailer_wheels if w.pos_x >= 0 and w.on_ground])
@@ -1118,8 +1144,9 @@ class Synth:
             # One trigger channel: follow whichever pedal the player is pressing.
             # A wheel lock is a warning and never fades.
             lock = self._wheel_lock(frame) if frame.user_brake > 0.05 else 0.0
-            throttle_moved = self._novelty("throttle", frame.user_throttle, 0.1)
-            brake_moved = self._novelty("brake", frame.user_brake, 0.1)
+            # the finger on the trigger is never quite still
+            throttle_moved = self._novelty("throttle", frame.user_throttle, 0.1, 0.03)
+            brake_moved = self._novelty("brake", frame.user_brake, 0.1, 0.03)
             if frame.user_brake > 0.05 and frame.user_brake >= frame.user_throttle:
                 trigger_mode = "brake"
                 if lock > 0:
@@ -1129,10 +1156,11 @@ class Synth:
                     # at about 0.6 of the steady throttle on the same pedal (as strong as a pulsed
                     # one), and flat out it reaches the lock warning's floor.
                     trigger_amp = (g.trigger * (0.1 + 0.5 * frame.user_brake) * speed_factor
-                                   * self._steady_gain(brake_moved))
+                                   * self._steady_gain("trigger", brake_moved))
             elif frame.user_throttle > 0.05 and frame.engine_on:
                 trigger_mode = "throttle"
-                trigger_amp = g.trigger * (0.2 + 0.6 * frame.user_throttle) * self._steady_gain(throttle_moved)
+                trigger_amp = (g.trigger * (0.2 + 0.6 * frame.user_throttle)
+                               * self._steady_gain("trigger", throttle_moved))
 
         if lock > 0 and not self.was_locked:
             self.lock_phase = 0.0  # the warning starts with a pulse, not up to half a cycle late

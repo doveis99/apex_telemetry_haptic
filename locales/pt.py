@@ -98,7 +98,7 @@ MESSAGES = {
     "시동 켜기/끄기": "Ligar/desligar motor",
     "레인지/스플리터": "Faixa/splitter",
     "게임 알림": "Avisos do jogo",
-    "└ 주행 진동 양보": "└ Ceder a eventos",
+    "주행 진동 양보": "Ceder a eventos",
     "텔레메트리": "Telemetria",
     "게임에서 받고 있는 값": "o que o jogo está enviando",
     "속도": "Velocidade",
@@ -185,9 +185,11 @@ MESSAGES = {
         ("Quanto o gatilho do acelerador pulsa no ritmo da ignição do motor. Segue as mesmas explosões da vibração "
          "do motor, então o balanço da marcha lenta e a força de cada explosão também aparecem. 0% deixa constante. "
          "O freio não é afetado."),
-    "rpm, 엑셀 부하, 페달이 그대로 유지되면 엔진과 엑셀/브레이크 진동을 몇 초에 걸쳐 이 비율만큼 줄여 장거리 피로를 덜어 줍니다. 가속, 변속, 페달 조작 순간에는 바로 돌아옵니다.":
-        ("Com rpm, carga e pedais estáveis, a vibração do motor e do acelerador/freio cai nessa proporção em alguns "
-         "segundos para aliviar viagens longas. Volta na hora ao acelerar, trocar de marcha ou mexer num pedal."),
+    "엔진(rpm·부하), 노면(재질·속도), 엑셀/브레이크(페달)가 그대로 유지되면 그 진동을 수십 초에 걸쳐 이 비율만큼 줄입니다. 변함없는 진동은 손이 곧 느끼지 못하고 피로만 쌓이기 때문입니다. 가속·감속, 변속, 노면이 바뀌거나 페달을 움직이면 바로 돌아오고, 크루즈 중 작은 속도 변화나 손가락 떨림은 무시합니다.":
+        ("Quando o que as move fica estável (motor: rpm e carga; estrada: piso e velocidade; acelerador/freio: o "
+         "pedal), essas vibrações caem nessa proporção em algumas dezenas de segundos: uma vibração que nunca muda"
+         " logo deixa de ser sentida e só cansa. Voltam na hora ao acelerar ou desacelerar, trocar de marcha, "
+         "mudar de piso ou mexer num pedal; pequenas variações do piloto automático e um dedo parado não contam."),
     "엑셀이나 브레이크를 끝까지(97% 이상) 밟는 순간 짧은 '툭'.":
         "Um \"toc\" curto quando o acelerador ou o freio chega ao fundo (97% ou mais).",
     "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다.":
@@ -211,9 +213,10 @@ MESSAGES = {
          " \"clac\" (fraco no splitter). Não toca no automático ou sequencial."),
     "톨게이트, 벌금, 주유, 배송 완료, 페리, 기차 이벤트 때 '톡톡' 두 번.":
         "Um duplo \"toc-toc\" em pedágios, multas, abastecimentos, entregas concluídas, balsas e trens.",
-    "이벤트가 울리는 순간 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":
-        ("Quanto a vibração de rodagem no mesmo motor cai por um instante durante um evento, para que ele não fique "
-         "encoberto. 0% não mexe nela."),
+    "변속과 충돌을 포함한 모든 이벤트 효과가 울리는 순간, 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":
+        ("Vale para todos os efeitos de evento, incluindo trocas de marcha e impactos: quanto a vibração de "
+         "rodagem no mesmo motor cai por um instante durante um evento, para que ele não fique encoberto. 0% não "
+         "mexe nela."),
     "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다.":
         ("Um pulso de buraco dispara quando a suspensão se move de repente mais rápido que isso. Diminua para "
          "sentir buracos pequenos; aumente para sentir só impactos fortes."),

@@ -277,6 +277,20 @@ MESSAGES = {
         "A saída está esperando o jogo e não está usando o controle agora. Pare-a e depois teste.",
     "효과 테스트": "Teste de efeito",
     "효과 테스트: {name}": "Teste de efeito: {name}",
+    "얼음": "Gelo",
+    "아스팔트": "Asfalto",
+    "콘크리트": "Concreto",
+    "눈": "Neve",
+    "나무": "Madeira",
+    "금속": "Metal",
+    "잔디": "Grama",
+    "흙": "Terra",
+    "자갈": "Cascalho",
+    "아스팔트 → 자갈": "Asfalto → cascalho",
+    "노면은 재질을 골라 80 km/h로 그 위만 달려 보거나, 모든 재질을 차례로 달려 볼 수 있습니다.":
+        ("Na pista você pode escolher uma superfície e rodar só nela a 80 km/h, ou passar por todas as "
+         "superfícies em sequência."),
+    "전부 차례로 (얼음 → 자갈, 각 {seconds}초)": "Todas em sequência (gelo → cascalho, {seconds} s cada)",
     "동봉한 RenCloud scs-telemetry.dll을 이 게임의 plugins 폴더에 복사합니다. 다른 플러그인은 건드리지 않습니다.":
         ("Copia o RenCloud scs-telemetry.dll incluído para a pasta plugins deste jogo. Outros plugins não são "
          "alterados."),

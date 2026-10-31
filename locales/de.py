@@ -284,6 +284,20 @@ MESSAGES = {
          "dann."),
     "효과 테스트": "Effekttest",
     "효과 테스트: {name}": "Effekttest: {name}",
+    "얼음": "Eis",
+    "아스팔트": "Asphalt",
+    "콘크리트": "Beton",
+    "눈": "Schnee",
+    "나무": "Holz",
+    "금속": "Metall",
+    "잔디": "Gras",
+    "흙": "Erde",
+    "자갈": "Schotter",
+    "아스팔트 → 자갈": "Asphalt → Schotter",
+    "노면은 재질을 골라 80 km/h로 그 위만 달려 보거나, 모든 재질을 차례로 달려 볼 수 있습니다.":
+        ("Für die Fahrbahn kannst du einen Belag wählen und nur darauf mit 80 km/h fahren oder alle Beläge "
+         "nacheinander."),
+    "전부 차례로 (얼음 → 자갈, 각 {seconds}초)": "Alle nacheinander (Eis → Schotter, je {seconds} s)",
     "동봉한 RenCloud scs-telemetry.dll을 이 게임의 plugins 폴더에 복사합니다. 다른 플러그인은 건드리지 않습니다.":
         ("Kopiert das mitgelieferte RenCloud scs-telemetry.dll in den plugins-Ordner dieses Spiels. Andere Plugins "
          "bleiben unberührt."),

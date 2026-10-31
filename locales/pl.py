@@ -272,6 +272,20 @@ MESSAGES = {
         "Wyjście czeka na grę i nie używa teraz kontrolera. Zatrzymaj je, a potem testuj.",
     "효과 테스트": "Test efektu",
     "효과 테스트: {name}": "Test efektu: {name}",
+    "얼음": "Lód",
+    "아스팔트": "Asfalt",
+    "콘크리트": "Beton",
+    "눈": "Śnieg",
+    "나무": "Drewno",
+    "금속": "Metal",
+    "잔디": "Trawa",
+    "흙": "Ziemia",
+    "자갈": "Żwir",
+    "아스팔트 → 자갈": "Asfalt → żwir",
+    "노면은 재질을 골라 80 km/h로 그 위만 달려 보거나, 모든 재질을 차례로 달려 볼 수 있습니다.":
+        ("Dla nawierzchni możesz wybrać rodzaj i jechać tylko po nim z prędkością 80 km/h albo przejechać po "
+         "wszystkich po kolei."),
+    "전부 차례로 (얼음 → 자갈, 각 {seconds}초)": "Wszystkie po kolei (lód → żwir, po {seconds} s)",
     "동봉한 RenCloud scs-telemetry.dll을 이 게임의 plugins 폴더에 복사합니다. 다른 플러그인은 건드리지 않습니다.":
         "Kopiuje dołączony RenCloud scs-telemetry.dll do folderu plugins tej gry. Innych wtyczek nie rusza.",
     "Steam 밖에 설치했거나 찾지 못한 경우, bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 게임 폴더를 지정합니다.":

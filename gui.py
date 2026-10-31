@@ -45,7 +45,7 @@ from i18n import N_, t
 from version import __version__
 from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Equalizer, Gains, route_of
 from gamewatch import GameWatcher
-from preview import Player, Preview
+from preview import ROAD_SURFACES, SURFACE_STEP_S, Player, Preview
 from settings import (delete_preset, load_app_options, load_eq, load_gains, load_presets, save_app_options, save_eq,
                       save_gains, save_preset)
 from widgets import (ACCENT, BG, BOTH_COLOR, CARD, FAINT, FIELD_HI, GO, GRIP_COLOR, MUTED, STOP, TEXT, TILE,
@@ -92,6 +92,9 @@ EVENT_SLIDERS = (
 # settings for every effect of their card, set off below a line: not one effect's sub-setting
 CARD_WIDE = ("steady_fade", "ducking")
 EFFECT_NAMES = {key: label for key, label, *_ in EFFECT_SLIDERS + EVENT_SLIDERS}
+# the road test's surfaces (preview.ROAD_SURFACES) by name
+SURFACE_NAMES = {"ice": N_("얼음"), "road": N_("아스팔트"), "concrete": N_("콘크리트"), "snow": N_("눈"),
+                 "wood": N_("나무"), "metal": N_("금속"), "grass": N_("잔디"), "dirt": N_("흙"), "gravel": N_("자갈")}
 THRESHOLD_SLIDERS = (
     ("bump_threshold", N_("요철 감지 기준"), 5, 100, 100, "cm/s"),
     ("impact_threshold", N_("충돌 감지 기준"), 4, 40, 1, "m/s²"),
@@ -428,10 +431,14 @@ class App:
                                lambda route, k=key: self._on_route(k, route))
             tip(picker, self._route_tip()).grid(row=row, column=4, padx=(px(10), 0), pady=px(3))
             self.route_pickers[key] = picker
-            tip(Button(parent, "▶", lambda k=key: self.test_effect(k), size=8, height=26, bg=CARD),
-                t("이 효과만 몇 초 동안 울려 봅니다. 지금 세기, 진동 위치, 모터 보정 그대로이고, 꺼 둔 효과도 울립니다. "
-                  "요철, 차선 요철, 방향지시등은 왼쪽 다음 오른쪽 순서입니다. 출력 중에는 그동안 주행 진동 대신 "
-                  "울립니다.")).grid(row=row, column=5, padx=(px(8), 0))
+            text = t("이 효과만 몇 초 동안 울려 봅니다. 지금 세기, 진동 위치, 모터 보정 그대로이고, 꺼 둔 효과도 울립니다. "
+                     "요철, 차선 요철, 방향지시등은 왼쪽 다음 오른쪽 순서입니다. 출력 중에는 그동안 주행 진동 대신 "
+                     "울립니다.")
+            test = Button(parent, "▶", lambda k=key: self.test_effect(k), size=8, height=26, bg=CARD)
+            if key == "road":  # a menu of surfaces first
+                text += " " + t("노면은 재질을 골라 80 km/h로 그 위만 달려 보거나, 모든 재질을 차례로 달려 볼 수 있습니다.")
+                test.command = lambda: self._surface_menu(test)
+            tip(test, text).grid(row=row, column=5, padx=(px(8), 0))
             self._show_effect(key)
         self._on_slider(key)
 
@@ -525,11 +532,31 @@ class App:
     def _on_source(self, source: str) -> None:
         self.source.set(source)
 
-    def test_effect(self, key: str) -> None:
-        """Play this effect alone for a few seconds (preview.py), in place of the drive while it runs."""
+    def _surface_menu(self, button: Button) -> None:
+        """The road's ▶: asphalt then gravel as before, every surface in turn, or one alone."""
+        menu = tk.Menu(self.root, tearoff=False, bg=TILE, fg=TEXT, activebackground=FIELD_HI,
+                       activeforeground=TEXT, bd=0)
+        menu.add_command(label=t("아스팔트 → 자갈"), command=lambda: self.test_effect("road"))
+        menu.add_command(label=t("전부 차례로 (얼음 → 자갈, 각 {seconds}초)", seconds=f"{SURFACE_STEP_S:g}"),
+                         command=lambda: self.test_effect("road", ROAD_SURFACES))
+        menu.add_separator()
+        for surface in ROAD_SURFACES:
+            menu.add_command(label=t(SURFACE_NAMES[surface]),
+                             command=lambda s=surface: self.test_effect("road", (s,)))
+        try:
+            menu.tk_popup(button.winfo_rootx(), button.winfo_rooty() + button.winfo_height())
+        finally:
+            menu.grab_release()
+        self.root.after_idle(menu.destroy)
+
+    def test_effect(self, key: str, surfaces: tuple[str, ...] = ()) -> None:
+        """Play this effect alone for a few seconds (preview.py), in place of the drive while it runs.
+
+        The road can play on chosen surfaces, one after another.
+        """
         if self.thread and self.thread.is_alive():
             if self.runner and (self.connected or self.dry_run):
-                self.runner.preview = Preview(key, self.gains, self.runner.eq)
+                self.runner.preview = Preview(key, self.gains, self.runner.eq, surfaces)
             else:
                 messagebox.showinfo(t("효과 테스트"), t("출력이 게임을 기다리는 중이라 지금은 컨트롤러를 쓰지 않습니다. "
                                                      "정지한 다음 테스트하세요."))
@@ -537,7 +564,7 @@ class App:
         if self.dry_run or (self.calibration and self.calibration.busy):  # no controller, or it holds it
             return
         self.error = None
-        self.player.play(Preview(key, self.gains, Equalizer.for_player(load_eq())))
+        self.player.play(Preview(key, self.gains, Equalizer.for_player(load_eq()), surfaces))
 
     def open_calibration(self) -> None:
         if self.calibration and self.calibration.top.winfo_exists():
@@ -886,7 +913,10 @@ class App:
                 self.error, self.player.error = self.player.error, None
             testing = self.player.busy
             if testing:
-                self.status.set(t("효과 테스트: {name}", name=t(EFFECT_NAMES[self.player.name])))
+                name = t(EFFECT_NAMES[self.player.name])
+                if surface := self.player.surface:
+                    name += f" · {t(SURFACE_NAMES[surface])}"
+                self.status.set(t("효과 테스트: {name}", name=name))
                 self._show_dot(GO)
                 self.tested = True
             elif self.error:

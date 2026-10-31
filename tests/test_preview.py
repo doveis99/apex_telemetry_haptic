@@ -9,12 +9,13 @@ import ats_haptics
 import preview
 from apex6 import MAX_SAMPLE, SUBFRAMES
 from effects import TOGGLEABLE, Equalizer, Gains
-from preview import SCRIPTS, Player, Preview
+from preview import ROAD_SURFACES, SCRIPTS, Player, Preview
 
 
-def play(name: str, gains: Gains | None = None) -> tuple[list[float], list[float], list[float]]:
+def play(name: str, gains: Gains | None = None,
+         surfaces: tuple[str, ...] = ()) -> tuple[list[float], list[float], list[float]]:
     """(left grip, right grip, trigger) of one whole preview."""
-    p = Preview(name, gains or Gains(), Equalizer.for_player({}))
+    p = Preview(name, gains or Gains(), Equalizer.for_player({}), surfaces)
     left, right, trigger = [], [], []
     while (block := p.render()) is not None:
         left += block.left_grip
@@ -57,6 +58,32 @@ class PreviewTest(unittest.TestCase):
         self.assertEqual(play("gear", Gains(disabled=["gear"])), alone)
         self.assertEqual(peak(play("gear", Gains(gear=0.0))[0]), 0.0)  # at its own strength
         self.assertEqual(peak(alone[2]), 0.0)  # the throttle held in the script plays no trigger
+
+    def test_road_plays_each_surface_alone(self) -> None:
+        strength = {}
+        for surface in ROAD_SURFACES:
+            with self.subTest(surface):
+                left, right, _ = play("road", surfaces=(surface,))
+                self.assertGreater(min(peak(left), peak(right)), 0.02)  # both sides' wheels are on it
+                self.assertLess(max(peak(left[-1:]), peak(right[-1:])), 1e-3)
+                strength[surface] = peak(left)
+        self.assertGreater(strength["gravel"], strength["road"])
+        self.assertGreater(strength["road"], strength["ice"])
+
+    def test_road_plays_every_surface_in_turn(self) -> None:
+        p = Preview("road", Gains(), Equalizer.for_player({}), ROAD_SURFACES)
+        heard, left = [], []
+        while True:
+            surface = p.surface
+            if (block := p.render()) is None:
+                break
+            if not heard or heard[-1] != surface:
+                heard.append(surface)
+            left += block.left_grip
+        self.assertEqual(tuple(heard), ROAD_SURFACES)
+        step = len(left) // len(ROAD_SURFACES)
+        self.assertGreater(peak(left[-step:]), peak(left[:step]))  # gravel after ice
+        self.assertLess(peak(left[-1:]), 1e-3)
 
     def test_follows_the_route(self) -> None:
         left, right, trigger = play("blinker", Gains(routes={"blinker": "trigger"}))

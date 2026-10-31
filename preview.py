@@ -4,7 +4,8 @@ Each effect gets a short scripted moment that sets it off, rendered by the
 same synth as driving, so it plays at its current strength and route and
 with the motors' calibration. An effect that is switched off plays too.
 Effects with a side go left first, then right. The steady fade is left out:
-a few seconds are too short to judge it.
+a few seconds are too short to judge it. The road can also play one surface
+alone, to feel each texture on its own, or every surface in turn.
 
 While the output runs, Runner plays a preview in place of the drive. While
 it is stopped, Player takes the controller only for as long as one plays.
@@ -18,7 +19,7 @@ from dataclasses import replace
 from typing import Callable
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE, SUBFRAMES, Apex6, Block, DeviceUnavailable
-from effects import DT, TOGGLEABLE, Equalizer, Gains, Synth, effective_gains
+from effects import DT, TOGGLEABLE, Equalizer, Gains, Synth, effective_gains, surface_of
 from errorlog import log_exception
 from telemetry import Frame, Wheel
 
@@ -26,6 +27,10 @@ FADE_S = 0.1
 CRUISE = 22.0  # m/s, 80 km/h
 TRUCK_WHEELS = (-1.0, 1.0, -0.9, 0.9, -0.9, 0.9)  # pos_x: the steer axle, then the two drive axles
 ROUGH = 0.003  # m of fine suspension movement at 6 Hz, as in the scripted drive
+# the road test's surfaces, smooth to rough as the road slider's tip lists them; each is a substance the game reports
+ROAD_SURFACES = ("ice", "road", "concrete", "snow", "wood", "metal", "grass", "dirt", "gravel")
+SURFACE_S = 3.0  # one surface alone
+SURFACE_STEP_S = 5.0  # each surface when they play in turn
 # (s, side, depth m, width s): a joint under the left front wheel, one under the right, then a pothole each
 HITS = ((0.3, -1, 0.012, 0.02), (0.9, 1, 0.012, 0.02), (1.6, -1, 0.06, 0.04), (2.4, 1, 0.06, 0.04))
 
@@ -59,6 +64,15 @@ def _road(t: float, _: Gains) -> Frame:
     frame = _frame(t, rough=2 * ROUGH if gravel else ROUGH)
     for wheel in frame.wheels:
         wheel.substance = "gravel" if gravel else "road"
+    return frame
+
+
+def _on_surface(t: float, substance: str) -> Frame:
+    """Cruising on one surface; loose ground (stones underfoot) moves the suspension more, as gravel does above."""
+    surface = surface_of(substance)
+    frame = _frame(t, rough=2 * ROUGH if surface and surface.stones >= 1.0 else ROUGH)
+    for wheel in frame.wheels:
+        wheel.substance = substance
     return frame
 
 
@@ -155,13 +169,28 @@ SCRIPTS: dict[str, tuple[Script, float]] = {
 class Preview:
     """One effect alone through its scripted moment, a block at a time."""
 
-    def __init__(self, name: str, gains: Gains, eq: Equalizer) -> None:
+    def __init__(self, name: str, gains: Gains, eq: Equalizer, surfaces: tuple[str, ...] = ()) -> None:
         self.name = name
-        self.script, self.seconds = SCRIPTS[name]
+        # the road on these substances, one after another, in place of the effect's own moment
+        self.surfaces = surfaces
+        self.step = SURFACE_S if len(surfaces) == 1 else SURFACE_STEP_S
+        if surfaces:
+            self.script = lambda t, _: _on_surface(t, self._surface_at(t))
+            self.seconds = self.step * len(surfaces)
+        else:
+            self.script, self.seconds = SCRIPTS[name]
         self.gains = replace(gains, disabled=[other for other in TOGGLEABLE if other != name],
                              routes=dict(gains.routes), steady_fade=0.0)
         self.synth = Synth(effective_gains(self.gains), eq)
         self.blocks = 0
+
+    @property
+    def surface(self) -> str:
+        """The substance under the wheels now; "" when not driving over chosen surfaces."""
+        return self._surface_at(self.blocks * DT) if self.surfaces else ""
+
+    def _surface_at(self, t: float) -> str:
+        return self.surfaces[min(int(t / self.step), len(self.surfaces) - 1)]
 
     def render(self, _first_sample: int = 0) -> Block | None:
         t = self.blocks * DT
@@ -196,6 +225,12 @@ class Player:
     @property
     def busy(self) -> bool:
         return self.running
+
+    @property
+    def surface(self) -> str:
+        """The substance the playing road test is on now, if it plays chosen surfaces."""
+        preview = self.current or self.pending
+        return preview.surface if preview else ""
 
     def play(self, preview: Preview) -> None:
         with self.lock:

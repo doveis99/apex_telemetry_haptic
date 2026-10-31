@@ -276,6 +276,19 @@ MESSAGES = {
         "The output is waiting for the game, so the controller is not in use. Stop it, then test.",
     "효과 테스트": "Effect test",
     "효과 테스트: {name}": "Effect test: {name}",
+    "얼음": "Ice",
+    "아스팔트": "Asphalt",
+    "콘크리트": "Concrete",
+    "눈": "Snow",
+    "나무": "Wood",
+    "금속": "Metal",
+    "잔디": "Grass",
+    "흙": "Dirt",
+    "자갈": "Gravel",
+    "아스팔트 → 자갈": "Asphalt → gravel",
+    "노면은 재질을 골라 80 km/h로 그 위만 달려 보거나, 모든 재질을 차례로 달려 볼 수 있습니다.":
+        "For the road you can pick a surface and drive on just that at 80 km/h, or drive over every surface in turn.",
+    "전부 차례로 (얼음 → 자갈, 각 {seconds}초)": "All in turn (ice → gravel, {seconds} s each)",
     "동봉한 RenCloud scs-telemetry.dll을 이 게임의 plugins 폴더에 복사합니다. 다른 플러그인은 건드리지 않습니다.":
         ("Copies the bundled RenCloud scs-telemetry.dll into this game's plugins folder. Other plugins are left "
          "alone."),

@@ -10,6 +10,7 @@ Examples:
   python tone.py trigger-target              the same for its target byte, after showing the on-board trigger setup
   python tone.py trigger-ram                 motor RAM after enabling each trigger target, no vibration
   python tone.py report-rate                 blind check whether reports sent faster than 8 ms raise the 1 kHz rate
+  python tone.py report-model                blind X/Y check: are those reports played faster, or cut off at 1 kHz
   python tone.py calibrate                  match each frequency's strength by feel, for the synth's eq
 """
 
@@ -618,6 +619,147 @@ def run_rate_check(pad: Apex6, periods_ms: list[float], taps: int, amp: float) -
     _save_report("report-rate", lines)
 
 
+# Report-model check. The tap count above found every report played (8/8 at
+# 4 and 2 ms, wired and through the dongle, firmware 9.0.6.8), yet the first
+# run's tone, synthesized at 8/P kHz for a period of P ms, came out rough. Two
+# models fit both: the pad plays each report's eight samples at 8/P kHz
+# ("all"), or it plays at 1 kHz from the moment a report arrives until the
+# next one cuts it off, so only the first P samples sound ("preempt"). Each
+# trial plays the 8 ms reference, then the same pulsed tone at a shorter
+# period in two shapes, in random order: X puts the 1 kHz signal in each
+# report's first P samples and silence after, smooth only under preempt; Y
+# puts P ms of signal in all eight samples, smooth only under all. Whichever
+# matches the reference names the model.
+MODEL_PERIODS_MS = (4.0, 2.0)
+MODEL_FREQ = 160.0
+MODEL_AMP = 40.0
+MODEL_SECONDS = 2.0
+MODEL_PULSE_HZ = 4.0  # gaps a second, so a pad that buffers would drift
+MODEL_TRIALS = 2  # per period, each in its own random order
+MODEL_SHAPES = {"X": "선점", "Y": "다 재생"}
+
+
+def pulsed_tone(t: float, freq: float, peak: float, seconds: float) -> float:
+    """The test tone at t seconds: a sine on for 70% of each pulse, with soft edges."""
+    if not 0.0 <= t < seconds:
+        return 0.0
+    on = 0.7 / MODEL_PULSE_HZ
+    at = t % (1.0 / MODEL_PULSE_HZ)
+    envelope = max(0.0, min(1.0, at / FADE_SECONDS, (on - at) / FADE_SECONDS))
+    return math.sin(2 * math.pi * freq * t) * peak * envelope
+
+
+def model_renderer(shape: str, period_ms: float, freq: float, amp_percent: float, seconds: float):
+    """Both grips: the pulsed tone shaped for one playback model, one report every period_ms.
+
+    X: each report's first P samples carry its P ms at 1 kHz, the rest silent.
+    Y: its eight samples carry those P ms at 8/P kHz.
+    At 8 ms both are the plain 1 kHz tone, the reference.
+    """
+    peak = MAX_SAMPLE * max(0.0, min(100.0, amp_percent)) / 100.0
+    reports = math.ceil(seconds * 1000.0 / period_ms)
+    step_ms = period_ms / SUBFRAMES if shape == "Y" else 1.0
+
+    def render(first: int) -> Block | None:
+        index = first // SUBFRAMES
+        if index >= reports:
+            return None
+        start_ms = index * period_ms
+        samples = [0.0 if shape == "X" and n >= period_ms
+                   else pulsed_tone((start_ms + n * step_ms) / 1000.0, freq, peak, seconds)
+                   for n in range(SUBFRAMES)]
+        return Block(left_grip=samples, right_grip=samples)
+
+    return render
+
+
+def model_verdict(period_ms: float, picks: list[str]) -> str:
+    """Judge one period from the shapes picked as the reference's match ("X", "Y", or "" for neither)."""
+    x, y = picks.count("X"), picks.count("Y")
+    if x and y:
+        return "애매: X와 Y를 번갈아 고름, 다시 측정"
+    if 2 * (x + y) <= len(picks):  # one pick against as many shrugs names nothing
+        return "판정 불가: 대부분 구분이 안 됨 (둘 다 기준음과 다르면 어느 모델도 아님)"
+    weak = "" if x + y == len(picks) else " (구분 안 된 답 있음)"
+    if x:
+        return f"선점: 1 kHz로 재생, 새 리포트가 오면 끊음{weak}"
+    return f"다 재생: {SUBFRAMES / period_ms:g} kHz{weak}"
+
+
+def model_summary(verdicts: dict[float, str]) -> str:
+    """Judge the whole check from {period ms: model_verdict}."""
+    found = {verdict.split(":")[0] for verdict in verdicts.values()}
+    if found == {"선점"}:
+        return ("패드는 1 kHz로 재생함: 리포트를 빨리 보내도 샘플레이트는 그대로이고, "
+                "도착하는 대로 재생하니 보내는 타이밍 흔들림이 출력에 실림")
+    if found == {"다 재생"}:
+        return "패드가 리포트 간격만큼 빠르게 재생함: 2 ms 간격이면 4 kHz를 쓸 수 있음"
+    return "섞인 결과: 간격별 판정을 보고 판단"
+
+
+def _ask_pick(replay) -> str:
+    while True:
+        answer = input("  기준음과 더 같은 쪽은? 1 첫째 / 2 둘째 / 0 구분 안 됨 / r 다시: ").strip().lower()
+        if answer in ("0", "1", "2"):
+            return answer
+        if answer == "r":
+            replay()
+
+
+def run_model_check(pad: Apex6, periods_ms: list[float], trials: int, freq: float, amp: float,
+                    seconds: float) -> None:
+    import random
+    from datetime import datetime
+
+    from version import __version__
+
+    info = pad.info
+    print(f"펌웨어: {_firmware_text(info)}")
+    print("\n컨트롤러를 평소처럼 잡으세요. 단계마다 기준음, 첫째, 둘째가 0.5초씩 쉬고 차례로 울립니다.")
+    print("첫째와 둘째 중 하나는 기준음과 같고 다른 하나는 거칠게 느껴질 거예요. 기준음과 같은 쪽을 고르세요. "
+          "간격과 순서는 섞어서 나오고, 끝나면 표에서 공개됩니다.\n")
+    steps = [(period, random.sample(list(MODEL_SHAPES), 2)) for period in periods_ms for _ in range(trials)]
+    random.shuffle(steps)
+    rows = []
+    picks: dict[float, list[str]] = {period: [] for period in periods_ms}
+    late: dict[float, int] = {period: 0 for period in periods_ms}
+    for number, (period_ms, order) in enumerate(steps, start=1):
+        input(f"[{number}/{len(steps)}] Enter를 누르면 울립니다...")
+
+        def play(period_ms=period_ms, order=order) -> None:
+            pad.stream(model_renderer("X", BASE_PERIOD_MS, freq, amp, seconds))
+            for shape in order:
+                pad.stream(lambda first: Block() if first < REFERENCE_GAP else None)
+                stats = pad.stream(model_renderer(shape, period_ms, freq, amp, seconds),
+                                   period=period_ms / 1000.0)
+                late[period_ms] += stats.late_frames
+
+        play()
+        answer = _ask_pick(play)
+        picked = order[int(answer) - 1] if answer != "0" else ""
+        picks[period_ms].append(picked)
+        rows.append(f"{number:>3}   {period_ms:>4g} ms   첫째 {order[0]}, 둘째 {order[1]}   "
+                    f"{picked or '구분 안 됨':<6} {MODEL_SHAPES.get(picked, '')}")
+
+    verdicts = {period: model_verdict(period, picks[period]) for period in periods_ms}
+    lines = [
+        f"리포트 재생 모델 진단 (X/Y) {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
+        f"톤: 양쪽 그립 {freq:g} Hz, {amp:g}%, {seconds:g}초, 1초에 {MODEL_PULSE_HZ:g}번 끊김. "
+        "기준음은 8 ms 간격 1 kHz",
+        "X: 리포트마다 앞 P샘플에 1 kHz 신호, 나머지 무음 (선점 모델이면 기준음과 같음)",
+        "Y: 리포트 8샘플에 P ms 신호를 8/P kHz로 (다 재생 모델이면 기준음과 같음)",
+        "",
+        "단계  간격     순서                 고른 쪽",
+        *rows,
+        "",
+        *(f"{period:>4g} ms: {verdicts[period]} (늦은 리포트 {late[period]})" for period in periods_ms),
+        "",
+        f"-> {model_summary(verdicts)}",
+    ]
+    _save_report("report-model", lines)
+
+
 def _save_report(name: str, lines: list[str]) -> None:
     from datetime import datetime
 
@@ -762,6 +904,15 @@ def main() -> None:
     report_rate.add_argument("--taps", type=int, default=RATE_TAPS, help="taps per period, at least 4")
     report_rate.add_argument("--amp", type=float, default=70.0)
 
+    report_model = sub.add_parser("report-model",
+                                  help="blind X/Y check of how the pad plays reports sent faster than 8 ms")
+    report_model.add_argument("--periods", type=float, nargs="+", default=list(MODEL_PERIODS_MS),
+                              help="report periods in ms below 8 (default: 4 2)")
+    report_model.add_argument("--trials", type=int, default=MODEL_TRIALS, help="trials per period")
+    report_model.add_argument("--freq", type=float, default=MODEL_FREQ)
+    report_model.add_argument("--amp", type=float, default=MODEL_AMP)
+    report_model.add_argument("--seconds", type=float, default=MODEL_SECONDS)
+
     from calibrate import AMP, SECONDS
     cal = sub.add_parser("calibrate", help="match each frequency's strength by feel, for the synth's eq")
     cal.add_argument("--channel", choices=("grip", "trigger", "both"), default="both")
@@ -811,6 +962,14 @@ def main() -> None:
             if args.taps < 4:
                 parser.error("--taps needs at least 4 to tell one tap in four from none")
             run_rate_check(pad, periods, args.taps, args.amp)
+            return
+        if args.command == "report-model":
+            periods = list(dict.fromkeys(args.periods))
+            if any(not 0 < p < BASE_PERIOD_MS for p in periods):
+                parser.error(f"periods go from above 0 to below {BASE_PERIOD_MS:g} ms")
+            if args.trials < 1:
+                parser.error("--trials needs at least 1")
+            run_model_check(pad, periods, args.trials, args.freq, args.amp, args.seconds)
             return
         if args.command == "calibrate":
             channels = ["grip", "trigger"] if args.channel == "both" else [args.channel]

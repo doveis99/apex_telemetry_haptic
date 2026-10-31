@@ -5,9 +5,10 @@ from __future__ import annotations
 import unittest
 
 from apex6 import SUBFRAMES, Route, _parse_device_info
-from tone import (SPLIT_FINGERS, SPLIT_ROUTES, mode_verdict, modes_verdict, motor_ram_lines, ram_changes,
-                  ram_record_name, ram_state, ram_target_verdict, rate_summary, rate_verdict, split_renderer,
-                  split_verdict, tap_renderer, tap_spacing)
+from tone import (MAX_SAMPLE, SPLIT_FINGERS, SPLIT_ROUTES, mode_verdict, model_renderer, model_summary,
+                  model_verdict, modes_verdict, motor_ram_lines, pulsed_tone, ram_changes, ram_record_name,
+                  ram_state, ram_target_verdict, rate_summary, rate_verdict, split_renderer, split_verdict,
+                  tap_renderer, tap_spacing)
 
 # Motor RAM from the first trigger-target run (fw 9.0.5.5): Space Station's
 # trigger vibration on for both triggers, before and after our default enable.
@@ -199,6 +200,78 @@ class ReportRateTest(unittest.TestCase):
         self.assertTrue(rate_summary({**control, 4.0: (8, 4), 2.0: (8, 0)}).startswith("다시 측정: 탭이"))
         self.assertTrue(rate_summary({8.0: (8, 5), 4.0: (8, 4)}).startswith("다시 측정: 대조군"))
         self.assertTrue(rate_summary(control).startswith("8 ms보다 짧은"))
+
+
+SECONDS = 0.48  # a whole number of 8 ms reports
+
+
+def model_blocks(shape: str, period_ms: float) -> list:
+    render, out = model_renderer(shape, period_ms, 160.0, 40.0, SECONDS), []
+    while (block := render(len(out) * SUBFRAMES)) is not None:
+        out.append(block)
+    return out
+
+
+def preempt(blocks: list, period_ms: int) -> list[float]:
+    """What a pad plays at 1 kHz if each report sounds until the next cuts it off."""
+    return [s for b in blocks for s in b.left_grip[:period_ms]]
+
+
+def play_all(blocks: list) -> list[float]:
+    """What a pad plays if every sample of every report sounds, at 8/P kHz."""
+    return [s for b in blocks for s in b.left_grip]
+
+
+class ReportModelTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.reference = play_all(model_blocks("X", 8.0))
+
+    def test_reference_is_the_pulsed_tone_at_1_khz(self) -> None:
+        self.assertEqual(model_blocks("Y", 8.0)[3].left_grip, model_blocks("X", 8.0)[3].left_grip)
+        self.assertEqual(len(self.reference), 480)
+        peak = MAX_SAMPLE * 0.4
+        expected = [pulsed_tone(n / 1000.0, 160.0, peak, SECONDS) for n in range(480)]
+        self.assertLess(max(abs(a - b) for a, b in zip(self.reference, expected)), 1e-9)
+        self.assertEqual(self.reference[200:250], [0.0] * 50)  # the gap after 175 ms on
+
+    def test_x_matches_the_reference_only_under_preempt(self) -> None:
+        for period in (4, 2):
+            blocks = model_blocks("X", float(period))
+            self.assertEqual(preempt(blocks, period), self.reference)
+            self.assertEqual(blocks[5].left_grip[period:], [0.0] * (SUBFRAMES - period))
+            self.assertNotEqual(play_all(blocks)[:480], self.reference)
+
+    def test_y_matches_the_reference_only_when_all_play(self) -> None:
+        peak = MAX_SAMPLE * 0.4
+        for period in (4, 2):
+            blocks = model_blocks("Y", float(period))
+            rate = SUBFRAMES / period * 1000.0
+            played = play_all(blocks)
+            expected = [pulsed_tone(n / rate, 160.0, peak, SECONDS) for n in range(len(played))]
+            self.assertEqual(len(played), len(expected))
+            self.assertLess(max(abs(a - b) for a, b in zip(played, expected)), 1e-9)
+            self.assertNotEqual(preempt(blocks, period), self.reference)
+
+    def test_both_cover_the_same_time(self) -> None:
+        self.assertEqual(len(model_blocks("X", 4.0)), 120)
+        self.assertEqual(len(model_blocks("Y", 4.0)), 120)
+        self.assertEqual(len(model_blocks("Y", 2.0)), 240)
+
+    def test_verdicts(self) -> None:
+        self.assertTrue(model_verdict(4.0, ["X", "X"]).startswith("선점"))
+        self.assertEqual(model_verdict(2.0, ["Y", "Y"]), "다 재생: 4 kHz")
+        self.assertEqual(model_verdict(4.0, ["Y", "Y", ""]), "다 재생: 2 kHz (구분 안 된 답 있음)")
+        # second run (wired, 2026-10-31): one X and one shrug at 4 ms is no verdict
+        self.assertTrue(model_verdict(4.0, ["X", ""]).startswith("판정 불가"))
+        self.assertTrue(model_verdict(4.0, ["X", "Y"]).startswith("애매"))
+        self.assertTrue(model_verdict(4.0, ["", ""]).startswith("판정 불가"))
+
+    def test_summary(self) -> None:
+        preempted = model_verdict(4.0, ["X", "X"])
+        all_played = model_verdict(2.0, ["Y", "Y"])
+        self.assertTrue(model_summary({4.0: preempted, 2.0: preempted}).startswith("패드는 1 kHz로"))
+        self.assertTrue(model_summary({4.0: all_played, 2.0: all_played}).startswith("패드가 리포트 간격만큼"))
+        self.assertTrue(model_summary({4.0: preempted, 2.0: all_played}).startswith("섞인 결과"))
 
 
 class DeviceInfoTest(unittest.TestCase):

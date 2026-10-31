@@ -104,6 +104,7 @@ class ResumeTest(unittest.TestCase):
         self.gap(s)
         s.render(frame(deflection=0.025))
         s.render(frame(deflection=0.035))  # a real 10 mm step on the next block
+        s.render(frame(deflection=0.035))  # that stays: the frame after shows it was no spike
         self.assertIn("bumps", effects_of(s))
 
     def test_game_event_on_resume_still_fires(self) -> None:
@@ -125,7 +126,7 @@ class BumpTest(unittest.TestCase):
 
     def test_pulse_rises_to_the_stronger_hit(self) -> None:
         s = synth()
-        for depth in (0.02, 0.0225, 0.0325):  # a pothole: a slight dip first, then the hard edge
+        for depth in (0.02, 0.0225, 0.0325, 0.0325):  # a pothole: a slight dip first, then the hard edge
             s.render(frame(deflection=depth, truck_wheels=1))
         pulses = [entry[1] for entry in s.bump_bursts if entry]
         self.assertEqual(len(pulses), 1)
@@ -134,9 +135,9 @@ class BumpTest(unittest.TestCase):
 
     @staticmethod
     def hit(step: float, trailer: bool = False) -> Synth:
-        """One wheel dropping by step metres within a block."""
+        """One wheel dropping by step metres within a block, and staying there."""
         s = synth()
-        for depth in (0.02, 0.02 + step):
+        for depth in (0.02, 0.02 + step, 0.02 + step):
             f = frame(deflection=depth, truck_wheels=0 if trailer else 1, trailer_wheels=1 if trailer else 0)
             if trailer:
                 f.trailer_wheels[0].deflection = depth
@@ -152,6 +153,23 @@ class BumpTest(unittest.TestCase):
         truck, trailer = self.hit(0.012).bump_bursts[0][1], self.hit(0.012, trailer=True).bump_bursts[0][1]
         self.assertGreater(trailer.freq, truck.freq)
         self.assertLess(trailer.amplitude, truck.amplitude)
+
+    def test_a_one_frame_leap_is_no_bump(self) -> None:
+        # as the game reports it now and then: one wheel 50 mm up for a frame and straight back
+        s, depths = synth(), [0.02] * 6
+        for n in range(60):
+            depths[1] = 0.07 if n == 30 else 0.02
+            s.render(frame(deflection=list(depths)))
+            self.assertNotIn("bumps", effects_of(s))
+        self.assertLess(max(s.roughness), 0.01)
+
+    def test_a_step_knocks_one_frame_late(self) -> None:
+        s = synth()
+        s.render(frame(deflection=0.02, truck_wheels=1))
+        s.render(frame(deflection=0.032, truck_wheels=1))
+        self.assertNotIn("bumps", effects_of(s))  # it could still be a spike
+        s.render(frame(deflection=0.031, truck_wheels=1))
+        self.assertIn("bumps", effects_of(s))
 
     def test_a_pothole_leaves_the_cab_rattling(self) -> None:
         pothole, joint = self.hit(0.012), self.hit(0.0035)
@@ -844,6 +862,7 @@ class FrameRateTest(unittest.TestCase):
         s.render(frame(deflection=0.03, accel=(3.0, 0.0, -20.0), render_time=0))
         self.assertEqual(effects_of(s), [])
         s.render(frame(deflection=0.04, accel=(3.0, 0.0, -20.0), render_time=int(1e6 / 60)))  # and they work again
+        s.render(frame(deflection=0.04, accel=(3.0, 0.0, -20.0), render_time=int(2e6 / 60)))
         self.assertIn("bumps", effects_of(s))
 
 

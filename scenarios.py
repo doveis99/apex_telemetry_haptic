@@ -277,7 +277,9 @@ CITY = Scenario(
     blinker_right=((40.0, 49.0), (138.0, 147.0)),
     spin=((95.2, 95.9),),
     hits=(Hit(34.0, -1, -0.015, 0.7), Hit(37.0, 1, -0.015, 0.7),  # manholes
-          Hit(62.0, 0, 0.02, 0.15), Hit(62.135, 0, 0.02, 0.15),  # the rails
+          # the rails, as wide as a tyre rides them: 0.15 m was over within one frame, and a
+          # wheel up for one frame and straight back is the game's glitch (effects.SPIKE_MIN)
+          Hit(62.0, 0, 0.02, 0.3), Hit(62.135, 0, 0.02, 0.3),
           Hit(110.0, 0, 0.06, 1.5)),  # a speed bump
     split_into=(3, 5),
 )

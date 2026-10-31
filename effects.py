@@ -155,6 +155,16 @@ BUMP_RATTLE_S = 0.3
 BUMP_RATTLE_MAX = 16  # knocks alive at once, all wheels together
 BUMP_RESTRIKE_S = 0.02  # s: a stronger reading this soon is the same step peaking (the next frame from 50 fps)
 BUMP_GAP_S = 0.06  # s before a wheel knocks again: a step's rebound and the next frames of rough ground wait
+# The game's wheel deflection now and then leaps 25-100 mm for a single frame
+# and is back on the next one, on one wheel, at any speed: in a 49 min drive
+# (2026-10-31) four in five bump knocks came from such a frame, and nearly
+# every time the road bed came back in full after its steady fade. A real step
+# stays, and a real joint or pothole passes from axle to axle; these did not.
+# So the suspension is read one game frame late (about 17 ms at 60 fps): a
+# jump the next frame takes back is not one, and that wheel reads as moving
+# straight from the frame before to the frame after.
+SPIKE_MIN = 0.004  # m in one frame, about the bump threshold at 50 fps: smaller moves are left as they are
+SPIKE_BACK = 0.3  # the next frame within this share of the jump from where it started: it came back
 # Gear shifts, after the 12 Eaton Fuller shifts (Zeemods) the game plays at each
 # gear change: the lever comes out of gear in a soft knock and slides across
 # the gate, and about 90 ms later the next gear goes in with a clack that rings
@@ -841,6 +851,7 @@ class Synth:
         self.prev_render_time: int | None = None
         self.prev_deflection: list[float] = []
         self.deflection_rate_avg: list[float] = []
+        self.held_frame: tuple[Frame, list[float], float] | None = None  # the frame read next, its deflections, dt
         self.bump_bursts: list[tuple[str, Burst] | None] = []  # each wheel's pulse and its side while it rings
         self.bump_rattles: list[Burst] = []  # the cab's knocks after big hits, all wheels together
         self.rng = random.Random(7)
@@ -873,6 +884,7 @@ class Synth:
         self.prev_render_time = None
         self.brake_held = self.brake_peak = 0.0
         self.prev_deflection = []
+        self.held_frame = None
         self.prev_accel = None
         self.prev_gear = None
         self.prev_state = {key: value for key, value in self.prev_state.items() if key == "game_events"}
@@ -894,21 +906,35 @@ class Synth:
         return dt if 0.0 < dt <= MAX_FRAME_GAP else 0.0
 
     def _wheel_events(self, frame: Frame, dt: float) -> None:
+        """Bumps and roughness of the frame before this one, once this one shows its spikes (SPIKE_MIN)."""
+        held, self.held_frame = self.held_frame, (frame, [w.deflection for w in frame.wheels + frame.trailer_wheels], dt)
+        if held is None:
+            return
+        frame, deflections, dt = held
+        _, after, after_dt = self.held_frame
+        if dt and after_dt and len(after) == len(deflections) == len(self.prev_deflection):
+            for i, (before, now, then) in enumerate(zip(self.prev_deflection, deflections, after)):
+                jump = now - before
+                if abs(jump) >= SPIKE_MIN and abs(then - before) < SPIKE_BACK * abs(jump):
+                    deflections[i] = before + (then - before) * dt / (dt + after_dt)
+        self._suspension(frame, deflections, dt)
+
+    def _suspension(self, frame: Frame, deflections: list[float], dt: float) -> None:
         wheels = frame.wheels + frame.trailer_wheels
         if len(self.prev_deflection) != len(wheels):
-            self.prev_deflection = [w.deflection for w in wheels]
+            self.prev_deflection = deflections
             self.deflection_rate_avg = [0.0] * len(wheels)
             self.bump_bursts = [None] * len(wheels)
             return
         if not dt:  # no rate across a gap: the travel since then is not one movement
-            self.prev_deflection = [w.deflection for w in wheels]
+            self.prev_deflection = deflections
             return
         avg_k = 1.0 - math.exp(-dt / RATE_AVG_TAU)
         rough = [0.0, 0.0]
         counts = [0, 0]
         for i, wheel in enumerate(wheels):
-            rate = (wheel.deflection - self.prev_deflection[i]) / dt  # m/s
-            self.prev_deflection[i] = wheel.deflection
+            rate = (deflections[i] - self.prev_deflection[i]) / dt  # m/s
+            self.prev_deflection[i] = deflections[i]
             avg = self.deflection_rate_avg[i]
             avg = self.deflection_rate_avg[i] = avg + (rate - avg) * avg_k
             high = abs(rate - avg)

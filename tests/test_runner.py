@@ -13,7 +13,7 @@ from effects import Gains
 class FakeLog:
     opened = 0
 
-    def __init__(self) -> None:
+    def __init__(self, **_info) -> None:
         FakeLog.opened += 1
         self.path = mock.Mock()
         self.path.name = f"blocks-{FakeLog.opened}.csv"

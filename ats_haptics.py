@@ -3,6 +3,7 @@
   python ats_haptics.py                 run with the game (waits for it)
   python ats_haptics.py --simulate      scripted 60 s test drive, no game needed
   python ats_haptics.py --simulate --sim-fps 30   the same drive as a 30 fps game (0: new data every block)
+  python ats_haptics.py --scenario city   a few minutes of real driving: highway, city or mountain (scenarios.py)
   python ats_haptics.py --dry-run       no controller; print levels only
   python ats_haptics.py --gain 0.8 --road 0.4 --trigger 0.3 --monitor
   python ats_haptics.py --exit-with-game
@@ -19,7 +20,7 @@ import argparse
 import sys
 import time
 from collections import deque
-from dataclasses import fields
+from dataclasses import asdict, fields
 from typing import Callable
 
 from apex6 import FRAME_PERIOD, MAX_SAMPLE, Apex6, Block, DeviceUnavailable, StreamStats
@@ -28,8 +29,10 @@ from effects import Equalizer, Gains, Synth, effective_gains
 from gamewatch import GameWatcher
 from i18n import set_language, system_language, t
 from preview import Preview
+from scenarios import SCENARIOS, ScenarioTelemetry
 from settings import load_app_options, load_eq, load_gains
 from telemetry import SIMULATED_FPS, Frame, SharedMemoryTelemetry, SimulatedTelemetry
+from version import __version__
 
 STALE_AFTER_S = 0.3  # game minimized, loading or closed: render_time stops moving
 RETRY_S = 2.0  # wait between attempts to reach an absent or sleeping controller
@@ -45,12 +48,16 @@ class Runner:
     def __init__(self, gains: Gains, simulate: bool = False,
                  on_state: Callable[[str], None] | None = None, seconds: float | None = None,
                  log_blocks: bool = False, sim_fps: float | None = SIMULATED_FPS,
-                 eq: Equalizer | None = None) -> None:
+                 eq: Equalizer | None = None, scenario: str | None = None) -> None:
         self.gains = effective_gains(gains)
         self.eq = eq or Equalizer()
         self.synth = Synth(self.gains, self.eq)
+        simulate = simulate or scenario is not None
         self.simulated = simulate
-        self.source = SimulatedTelemetry(sim_fps) if simulate else SharedMemoryTelemetry()
+        if scenario is not None:
+            self.source = ScenarioTelemetry(SCENARIOS[scenario], sim_fps)
+        else:
+            self.source = SimulatedTelemetry(sim_fps) if simulate else SharedMemoryTelemetry()
         self.watcher = None if simulate else GameWatcher()
         self.on_state = on_state
         self.deadline = time.perf_counter() + seconds if seconds else None
@@ -67,6 +74,7 @@ class Runner:
         self.log_blocks = log_blocks  # may be flipped from any thread; the output thread follows it
         self.block_log: BlockLog | None = None
         self._log_here = False  # the controller is held, so a log may be open
+        self._log_notes: list[str] = []  # state changes and edited settings, for the log's next row
         self.preview: Preview | None = None  # an effect test playing in place of the drive (preview.py)
 
     def _read_frame(self) -> Frame | None:
@@ -92,14 +100,21 @@ class Runner:
     def _set_state(self, state: str) -> None:
         if state != self.state:
             self.state = state
+            self._log_notes.append(state)
             if self.on_state:
                 self.on_state(state)
 
     def apply(self, gains: Gains) -> None:
         """Copy edited gains into the running synth (disabled effects at zero)."""
         effective = effective_gains(gains)
+        changed = []
         for f in fields(Gains):
-            setattr(self.gains, f.name, getattr(effective, f.name))
+            old, new = getattr(self.gains, f.name), getattr(effective, f.name)
+            if old != new:
+                changed.append(f"{f.name} {old}->{new}")
+            setattr(self.gains, f.name, new)
+        if changed:
+            self._log_notes.append("settings: " + ", ".join(changed))
 
     @property
     def finished(self) -> bool:
@@ -144,7 +159,8 @@ class Runner:
             self.events.append(f"{stamp} {t('디버그 기록 종료')}")
             return
         try:
-            self.block_log = BlockLog()
+            self.block_log = BlockLog(info={"version": __version__, "source": self.source.name,
+                                            "gains": asdict(self.gains), "eq": self.eq.points})
             self.events.append(f"{stamp} {t('디버그 기록: {name}', name=self.block_log.path.name)}")
         except OSError as exc:
             self._log_here = False  # not again every 8 ms; the next connection tries afresh
@@ -166,6 +182,7 @@ class Runner:
         stamp = time.strftime("%H:%M:%S")
         self.events.extend(f"{stamp} {event}" for event in levels.events)
         preview = self.preview
+        playing = preview.name if preview is not None else ""
         if preview is not None:  # the drive renders on underneath, so it carries on where it was
             solo = preview.render()
             if solo is None:
@@ -175,8 +192,9 @@ class Runner:
         for i, channel in enumerate((block.left_grip, block.right_grip, block.trigger)):
             self.peaks[i] = max(self.peaks[i], max(abs(x) for x in channel) / MAX_SAMPLE)
         self._follow_log_switch()
+        notes, self._log_notes = self._log_notes, []
         if self.block_log is not None:
-            self.block_log.add(block, frame, levels.events)
+            self.block_log.add(block, frame, levels.events + notes, self.synth, playing)
         return block
 
     def take_peaks(self) -> list[float]:
@@ -254,6 +272,8 @@ def parse_args(defaults: Gains) -> argparse.Namespace:
     parser.add_argument("--simulate", action="store_true", help="use the scripted drive instead of the game")
     parser.add_argument("--sim-fps", type=float, default=SIMULATED_FPS,
                         help="game frame rate the scripted drive updates at; 0 updates every 8 ms block")
+    parser.add_argument("--scenario", choices=sorted(SCENARIOS),
+                        help="play a few minutes of real driving instead of the game (implies --simulate)")
     parser.add_argument("--dry-run", action="store_true", help="do not open the controller")
     parser.add_argument("--monitor", action="store_true", help="print a status line twice a second")
     parser.add_argument("--seconds", type=float, help="stop after this many seconds")
@@ -282,7 +302,7 @@ def main() -> None:
                  "impact", "trigger", "throttle_pulse", "cylinders"):
         setattr(gains, name, getattr(args, name))
     runner = Runner(gains, simulate=args.simulate, seconds=args.seconds, log_blocks=args.log_blocks,
-                    sim_fps=args.sim_fps or None, eq=Equalizer.for_player(load_eq()),
+                    sim_fps=args.sim_fps or None, eq=Equalizer.for_player(load_eq()), scenario=args.scenario,
                     on_state=lambda s: print(f"\n[{time.strftime('%H:%M:%S')}] {s}", flush=True))
     monitor = args.monitor or args.dry_run
     if monitor:

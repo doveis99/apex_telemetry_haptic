@@ -152,7 +152,7 @@ Presets live under `presets` in `config.json`.
 |---|---|
 | **Save** | Saves the sliders, on/off states and outputs (grip/trigger/both) to `%APPDATA%\ATSHaptics\config.json`. While a preset is in use, it is saved there too. While there are unsaved changes the **Save** button turns blue and "Changed · not saved" is shown, and closing the window asks whether to save. |
 | **Defaults** | Resets every level, threshold and output to its default and turns every effect on. Saving is a separate step. |
-| **Debug log** (switch) | When on, every time the app takes the controller (Start, the game launching, reconnecting after a drop) it writes each 8 ms block sent to the controller as one line in `%APPDATA%\ATSHaptics\logs\blocks-<date>-<time>.csv`. Columns: time (to the ms), gap since the previous block (over 8 ms means output ran late), trigger route, peak trigger / left grip / right grip value (±112 is full scale), speed, gear, throttle, brake, surface, and the events of that block. About 30 MB per hour; only the latest 10 files are kept. The switch is saved at once and takes effect right away, even mid-drive. The event log shows the file name when recording begins. |
+| **Debug log** (switch) | When on, every time the app takes the controller (Start, the game launching, reconnecting after a drop) it writes each 8 ms block sent to the controller as one line in `%APPDATA%\ATSHaptics\logs\blocks-<date>-<time>.csv`. Columns: time (to the ms), gap since the previous block (over 8 ms means output ran late), trigger route, peak trigger / left grip / right grip value (±112 is full scale), what the game reported (speed, rpm, gear, throttle, brake, retarder, engine brake, park brake, blinkers, range/splitter, the surface under each side, and every wheel's suspension on a new frame), the app's own state (engine, road and trigger levels, the steady fade, ducking, the effects still ringing), and the events of that block (including settings changes and pauses). A `.json` of the same name keeps the version, settings and motor curves the log started with. About 80 MB per hour; only the latest 10 logs are kept. The switch is saved at once and takes effect right away, even mid-drive. The event log shows the file name when recording begins. |
 | **Log folder ↗** | Opens the debug log folder in Explorer. |
 | **Last session: late frames / max ms** (right) | How often the previous session missed the 8 ms output period, and the worst delay. Close to 0 is normal. |
 
@@ -269,7 +269,7 @@ When the window opens it checks GitHub for the latest release. If there is a new
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # window (or start_gui.cmd)
-.\.venv\Scripts\python.exe ats_haptics.py --monitor   # command line: --simulate, --exit-with-game, per-effect levels
+.\.venv\Scripts\python.exe ats_haptics.py --monitor   # command line: --simulate, --scenario highway|city|mountain, --exit-with-game, per-effect levels
 .\.venv\Scripts\python.exe tone.py probe              # diagnostics: probe | tone | sweep | walk | route-test | diag | split | calibrate
 .\.venv\Scripts\python.exe tone.py split              # blind left/right trigger check, results in logs\trigger-split-*.txt
 .\.venv\Scripts\python.exe tone.py calibrate          # the window's motor calibration in a console, --reset clears it

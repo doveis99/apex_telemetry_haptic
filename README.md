@@ -150,7 +150,7 @@ American Truck Simulator / Euro Truck Simulator 2의 텔레메트리로 Flydigi 
 |---|---|
 | **저장** | 슬라이더, 켜기/끄기 상태, 진동 위치(그립/트리거/둘 다)를 `%APPDATA%\ATSHaptics\config.json`에 저장합니다. 프리셋을 쓰는 중이면 그 프리셋에도 저장합니다. 저장하지 않으면 **저장** 버튼이 파랗게 바뀌고 "변경됨 · 저장 안 됨"이 표시되며, 창을 닫을 때 저장할지 묻습니다. |
 | **기본값** | 모든 세기와 기준, 진동 위치를 기본값으로 되돌리고 모든 효과를 켭니다. 저장은 따로 눌러야 합니다. |
-| **디버그 기록** (스위치) | 켜 두면 컨트롤러를 잡을 때마다(시작, 게임 실행, 연결이 끊겼다 다시 이어질 때) 컨트롤러로 보낸 8ms 블록을 한 줄씩 `%APPDATA%\ATSHaptics\logs\blocks-<날짜>-<시각>.csv`에 남깁니다. 열은 시각(ms까지), 직전 블록과의 간격(8ms보다 크면 출력이 늦은 것), 트리거 경로, 트리거·왼쪽 그립·오른쪽 그립 최대값(±112가 최대), 속도·기어·엑셀·브레이크·노면, 그 블록의 이벤트입니다. 1시간에 약 30MB이고 최근 10개 파일만 남깁니다. 스위치는 바로 저장되고 주행 중에도 즉시 적용됩니다. 기록이 시작되면 이벤트 로그에 파일 이름이 나옵니다. |
+| **디버그 기록** (스위치) | 켜 두면 컨트롤러를 잡을 때마다(시작, 게임 실행, 연결이 끊겼다 다시 이어질 때) 컨트롤러로 보낸 8ms 블록을 한 줄씩 `%APPDATA%\ATSHaptics\logs\blocks-<날짜>-<시각>.csv`에 남깁니다. 열은 시각(ms까지), 직전 블록과의 간격(8ms보다 크면 출력이 늦은 것), 트리거 경로, 트리거·왼쪽 그립·오른쪽 그립 최대값(±112가 최대), 게임이 보낸 값(속도·rpm·기어·엑셀·브레이크·리타더·엔진브레이크·주차브레이크·방향지시등·레인지/스플리터·좌우 노면, 새 프레임일 때 바퀴별 서스펜션), 프로그램 안쪽 상태(엔진·노면·트리거 세기, 정속 시 줄임, 덕킹, 울리고 있는 효과), 그 블록의 이벤트(설정 변경, 일시정지 등 포함)입니다. 같은 이름의 `.json`에 기록을 시작할 때의 버전·설정·모터 곡선이 함께 남습니다. 1시간에 약 80MB이고 최근 10개 기록만 남깁니다. 스위치는 바로 저장되고 주행 중에도 즉시 적용됩니다. 기록이 시작되면 이벤트 로그에 파일 이름이 나옵니다. |
 | **기록 폴더 ↗** | 디버그 기록 폴더를 탐색기로 엽니다. |
 | **지난 세션: 지연 프레임 / 최대 ms** (오른쪽) | 직전 세션에서 8ms 출력 주기를 놓친 횟수와 가장 늦었던 시간입니다. 0에 가까우면 정상입니다. |
 
@@ -267,7 +267,7 @@ Steam 라이브러리에서 게임 **속성 → 일반 → 실행 옵션**에 �
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # 창 (또는 start_gui.cmd)
-.\.venv\Scripts\python.exe ats_haptics.py --monitor   # 명령줄: --simulate, --exit-with-game, 효과별 세기 옵션
+.\.venv\Scripts\python.exe ats_haptics.py --monitor   # 명령줄: --simulate, --scenario highway|city|mountain, --exit-with-game, 효과별 세기 옵션
 .\.venv\Scripts\python.exe tone.py probe              # 진단: probe | tone | sweep | walk | route-test | diag | split | calibrate
 .\.venv\Scripts\python.exe tone.py split              # 트리거 좌우 분리 블라인드 점검, 결과는 logs\trigger-split-*.txt
 .\.venv\Scripts\python.exe tone.py calibrate          # 창의 모터 보정과 같은 측정(콘솔), --reset으로 지움

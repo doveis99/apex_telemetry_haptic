@@ -152,7 +152,7 @@
 |---|---|
 | **保存** | 将滑块、开关状态和振动位置（握把/扳机/两者）保存到 `%APPDATA%\ATSHaptics\config.json`。正在使用预设时也会保存到该预设。有未保存的更改时 **保存** 按钮变蓝并显示"已更改 · 未保存"，关闭窗口时会询问是否保存。 |
 | **恢复默认** | 把所有强度、阈值和振动位置恢复为默认值，并打开所有效果。保存需要另外点击。 |
-| **调试记录**（开关） | 打开后，每次占用手柄时（开始、游戏启动、断线后重新连接）把发送给手柄的每个 8 ms 数据块逐行写入 `%APPDATA%\ATSHaptics\logs\blocks-<日期>-<时间>.csv`。列依次为时间（精确到 ms）、与上一块的间隔（大于 8 ms 表示输出延迟）、扳机路由、扳机/左握把/右握把的最大值（±112 为满幅）、速度/挡位/油门/刹车/路面，以及该块的事件。每小时约 30 MB，只保留最近 10 个文件。开关立即保存，行驶中也会立即生效。开始记录时事件日志中会显示文件名。 |
+| **调试记录**（开关） | 打开后，每次占用手柄时（开始、游戏启动、断线后重新连接）把发送给手柄的每个 8 ms 数据块逐行写入 `%APPDATA%\ATSHaptics\logs\blocks-<日期>-<时间>.csv`。列依次为时间（精确到 ms）、与上一块的间隔（大于 8 ms 表示输出延迟）、扳机路由、扳机/左握把/右握把的最大值（±112 为满幅）、游戏报告的值（速度、转速、挡位、油门、刹车、缓速器、发动机制动、驻车制动、转向灯、高低挡/半挡开关、左右路面，新帧时还有每个车轮的悬挂）、程序内部状态（发动机/路面/扳机强度、定速衰减、闪避、仍在响的效果），以及该块的事件（包括设置更改和暂停）。同名的 `.json` 保存开始记录时的版本、设置和马达曲线。每小时约 80 MB，只保留最近 10 份记录。开关立即保存，行驶中也会立即生效。开始记录时事件日志中会显示文件名。 |
 | **记录文件夹 ↗** | 在资源管理器中打开调试记录文件夹。 |
 | **上次会话：延迟帧 / 最大 ms**（右侧） | 上一次会话中错过 8 ms 输出周期的次数，以及最长的延迟。接近 0 即为正常。 |
 
@@ -269,7 +269,7 @@
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # 窗口（或 start_gui.cmd）
-.\.venv\Scripts\python.exe ats_haptics.py --monitor   # 命令行：--simulate, --exit-with-game, 各效果强度选项
+.\.venv\Scripts\python.exe ats_haptics.py --monitor   # 命令行：--simulate, --scenario highway|city|mountain, --exit-with-game, 各效果强度选项
 .\.venv\Scripts\python.exe tone.py probe              # 诊断：probe | tone | sweep | walk | route-test | diag | split | calibrate
 .\.venv\Scripts\python.exe tone.py split              # 扳机左右分离盲测，结果保存在 logs\trigger-split-*.txt
 .\.venv\Scripts\python.exe tone.py calibrate          # 与窗口的电机校准相同（控制台），--reset 清除

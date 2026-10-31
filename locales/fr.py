@@ -156,12 +156,12 @@ MESSAGES = {
         ("Fréquence d'allumage du moteur (tr/min ÷ 60 × cylindres ÷ 2) plus sa deuxième harmonique. Plus forte avec "
          "l'accélérateur et le régime. Au ralenti les cylindres allument inégalement et le moteur galope ; en charge "
          "il devient rugueux. Rien moteur coupé."),
-    "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 얼음·금속·잔디는 높고 곱게, 나무·눈은 낮고 묵직하게 떨리고, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 실제 노면처럼 1초에 몇 번씩 출렁이고, 험한 길에서는 캡이 덜컹거립니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
-        ("La force et le grain suivent le revêtement (glace < asphalte < béton < neige < bois < métal < herbe < "
-         "terre < gravier) et la vitesse. La glace, le métal et l'herbe vibrent fin et aigu, le bois et la neige "
-         "grave et lourd ; gravier, terre et neige ajoutent le claquement des cailloux. Comme une vraie route, cela "
-         "enfle et retombe plusieurs fois par seconde, et sur sol rugueux la cabine claque. Plus vite, plus dense. "
-         "Roues gauche et droite séparées."),
+    "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 아스팔트는 고르게 '쉬익', 콘크리트는 이음매마다 '툭·툭', 나무는 판자가 '두두두', 금속은 '웅' 하고 울리고, 잔디·흙은 천천히 출렁이며, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 험한 길에서는 캡이 덜컹거립니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
+        ("La force et la texture suivent le revêtement (glace < asphalte < béton < neige < bois < métal < herbe "
+         "< terre < gravier) et la vitesse. L'asphalte souffle de façon régulière, le béton cogne à chaque "
+         "joint, les planches de bois tambourinent, le métal bourdonne, l'herbe et la terre ondulent lentement, "
+         "et le gravier, la terre et la neige ajoutent le claquement des cailloux. Sur route dégradée, la cabine "
+         "brinquebale. Plus on va vite, plus c'est serré, et les roues gauches et droites jouent séparément."),
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다.":
         ("Un choc dans la poignée du côté de la roue quand la suspension bouge brusquement (nids-de-poule, bordures, "
          "joints) : un petit joint est un tapotement bref et aigu, un gros nid-de-poule un coup sourd et lourd, et "

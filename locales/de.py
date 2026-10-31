@@ -154,12 +154,12 @@ MESSAGES = {
         ("Zündfrequenz des Motors (rpm ÷ 60 × Zylinder ÷ 2) plus zweite Harmonische. Stärker mit mehr Gas und "
          "höherer Drehzahl. Im Leerlauf zünden die Zylinder ungleichmäßig und er läuft unrund; unter Last wird er "
          "rau. Bei ausgeschaltetem Motor still."),
-    "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 얼음·금속·잔디는 높고 곱게, 나무·눈은 낮고 묵직하게 떨리고, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 실제 노면처럼 1초에 몇 번씩 출렁이고, 험한 길에서는 캡이 덜컹거립니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
-        ("Stärke und Charakter folgen dem Belag (Eis < Asphalt < Beton < Schnee < Holz < Metall < Gras < Erde < "
-         "Schotter) und dem Tempo. Eis, Metall und Gras zittern fein und hoch, Holz und Schnee tief und schwer; "
-         "Schotter, Erde und Schnee mischen das Klicken loser Steine bei. Wie eine echte Straße schwillt es mehrmals "
-         "pro Sekunde an und ab, und auf rauem Grund klappert das Fahrerhaus. Je schneller, desto dichter. Linke und "
-         "rechte Räder getrennt."),
+    "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 아스팔트는 고르게 '쉬익', 콘크리트는 이음매마다 '툭·툭', 나무는 판자가 '두두두', 금속은 '웅' 하고 울리고, 잔디·흙은 천천히 출렁이며, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 험한 길에서는 캡이 덜컹거립니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
+        ("Stärke und Gefühl folgen dem Belag (Eis < Asphalt < Beton < Schnee < Holz < Metall < Gras < Erde < "
+         "Schotter) und der Geschwindigkeit. Asphalt rauscht gleichmäßig, Beton klopft an jeder Fuge, Holzbohlen "
+         "trommeln, Metall brummt, Gras und Erde wogen langsam, und Schotter, Erde und Schnee mischen das "
+         "Klicken loser Steine bei. Auf holprigen Straßen klappert die Kabine. Je schneller, desto dichter, und "
+         "linke und rechte Räder laufen getrennt."),
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다.":
         ("Ein Schlag am Griff auf der Seite des Rades, wenn die Federung plötzlich arbeitet (Schlaglöcher, "
          "Bordsteine, Fugen): eine kleine Fuge ist ein kurzes, hohes Tippen, ein großes Schlagloch ein tiefer, "

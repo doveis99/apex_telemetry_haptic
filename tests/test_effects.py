@@ -3,6 +3,7 @@ bumps do not depend on the game's frame rate."""
 
 from __future__ import annotations
 
+import cmath
 import itertools
 import math
 import random
@@ -10,8 +11,8 @@ import unittest
 from unittest import mock
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE
-from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, RUMBLE_SPACING, TOGGLEABLE, Burst, Equalizer, Gains,
-                     NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, surface_of)
+from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
+                     Gains, NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
 _render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise
@@ -599,6 +600,45 @@ class SurfaceTest(unittest.TestCase):
     def test_static_ground_is_still_paved(self) -> None:
         # yards, bridges and ramps; it used to drop the road out for seconds at speed
         self.assertGreater(rms(self.road("static")), 0.8 * rms(self.road("road")))
+
+    @staticmethod
+    def envelope(samples: list[float], width: int) -> list[float]:
+        return [rms(samples[i:i + width]) for i in range(0, len(samples) - width, width)]
+
+    def test_concrete_knocks_at_each_slab_joint(self) -> None:
+        envelope = self.envelope(self.road("concrete"), 10)  # 10 ms steps
+
+        def correlation(lag: int) -> float:
+            mean = sum(envelope) / len(envelope)
+            d = [e - mean for e in envelope]
+            return sum(a * b for a, b in zip(d, d[lag:])) / sum(a * a for a in d)
+        slab = round(4.6 / 22.0 * 100)  # a joint every 4.6 m at 22 m/s
+        self.assertGreater(correlation(slab), 0.3)
+        self.assertGreater(correlation(slab), 3 * correlation(slab // 2))
+
+    def test_planks_drum_at_the_speed(self) -> None:
+        def strongest(samples: list[float]) -> int:
+            def power(hz: int) -> float:
+                w = TAU * hz / SAMPLE_RATE
+                return abs(sum(x * cmath.exp(-1j * w * n) for n, x in enumerate(samples))) ** 2
+            return max(range(30, 251), key=power)
+        # the hiss moves with the speed only by PITCH_STANDING; the planks, 20 cm apart, all the way
+        for speed in (11.0, 22.0):
+            with self.subTest(speed):
+                self.assertAlmostEqual(strongest(self.road("wood", speed)) / (speed / 0.2), 1.0, delta=0.1)
+
+    def test_asphalt_is_even_and_dirt_heaves(self) -> None:
+        def unevenness(samples: list[float]) -> float:
+            windows = self.envelope(samples, 100)
+            mean = sum(windows) / len(windows)
+            return math.sqrt(sum((w - mean) ** 2 for w in windows) / len(windows)) / mean
+        self.assertLess(unevenness(self.road("road")), 0.6 * unevenness(self.road("road_dirt")))
+
+    def test_seams_survive_a_mixed_side(self) -> None:
+        wheels = [Wheel(substance="wood"), Wheel(substance="road")]
+        mixed = side_surface(wheels)
+        self.assertEqual(mixed.seams, surface_of("wood").seams)
+        self.assertLess(mixed.seam_share, surface_of("wood").seam_share)
 
     def test_strength_does_not_follow_the_pitch(self) -> None:
         # neither has stones: ice hisses at 140 Hz, wood at 65 Hz; a plain band-pass made ice 1.5x stronger

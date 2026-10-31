@@ -153,11 +153,12 @@ MESSAGES = {
         ("Engine firing frequency (rpm ÷ 60 × cylinders ÷ 2) plus its second harmonic. Stronger with more throttle "
          "and higher rpm. At idle the cylinders fire unevenly and it lopes; under load it turns harsh. Silent with "
          "the engine off."),
-    "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 얼음·금속·잔디는 높고 곱게, 나무·눈은 낮고 묵직하게 떨리고, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 실제 노면처럼 1초에 몇 번씩 출렁이고, 험한 길에서는 캡이 덜컹거립니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
+    "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 아스팔트는 고르게 '쉬익', 콘크리트는 이음매마다 '툭·툭', 나무는 판자가 '두두두', 금속은 '웅' 하고 울리고, 잔디·흙은 천천히 출렁이며, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 험한 길에서는 캡이 덜컹거립니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
         ("Strength and feel follow the surface (ice < asphalt < concrete < snow < wood < metal < grass < dirt < "
-         "gravel) and the speed. Ice, metal and grass shiver fine and high, wood and snow low and heavy, and gravel, "
-         "dirt and snow add the click of loose stones. Like a real road it swells a few times a second, and rough "
-         "ground rattles the cab. Faster is denser. Left and right wheels are felt separately."),
+         "gravel) and the speed. Asphalt is an even hiss, concrete knocks at every joint, wood planks drum, "
+         "metal hums, grass and dirt heave slowly, and gravel, dirt and snow add the click of loose stones. On "
+         "rough roads the cab rattles. The faster you go, the denser it gets, and the left and right wheels play "
+         "separately."),
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다.":
         ("A hit on that wheel's grip when the suspension moves suddenly (potholes, kerbs, joints): a small joint is "
          "a short, high tap, a big pothole a low, heavy thud, and after a big hit the cab rattles for a moment. Set "

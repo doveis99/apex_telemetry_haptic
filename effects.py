@@ -76,31 +76,56 @@ class Surface:
     pitch: float  # Hz, centre of the texture at speed; it drops towards PITCH_STANDING of this when slow
     stones: float = 0.0  # loose stones per metre that click under a tyre
     crunch: float = 0.0  # share of the texture that is those clicks
+    q: float = 1.2  # of the hiss's band: under 1 a broad, even hiss, over 2 nearly a hum
+    swell: float = 0.25  # standard deviation of the slow swell, as a share of the texture
+    swell_hz: float = 4.0  # how fast it swells: low is the ground heaving, high a jostle
+    seams: float = 0.0  # m between seams the tyre rolls over evenly (slab joints, planks, grating); 0 for none
+    seam_hz: float = 90.0  # what each seam knocks at
+    seam_q: float = 1.5  # low a dull thud, high a ringing bar
+    seam_share: float = 0.0  # of the texture's strength that is the seams
 
 
+# The hand barely tells 100 Hz noise from 130 Hz noise, so surfaces that differed
+# only in pitch and strength all felt like one hiss, louder or softer. What it does
+# tell apart is how the texture moves: a smooth or a heaving swell, a broad hiss or
+# a hum, stones, and seams coming at a steady beat that follows the speed.
+#
 # Matched by substring, first match wins, so the specific road_* variants come
-# before plain "road". Shaped after tyre recordings of each surface (the part
-# below 500 Hz that a 1 kHz stream can carry): asphalt is a smooth, even hiss;
-# gravel a body around 85 Hz with a stone standing out every metre or so; snow
-# a softer body around 70 Hz that crunches; grass a high, soft swish.
+# before plain "road". Pitch, band and swell after Sound Fixes Pack's tyre loops,
+# 20-250 Hz (what the grips play): asphalt a broad, even hiss (middle half of its
+# energy 50-190 Hz, 100 ms strength varies 0.12-0.18); gravel a narrow body at
+# 75-105 Hz that swells more (0.22-0.34); snow 90-200 Hz and the most impulsive
+# (kurtosis 3.5-6, against 3 for asphalt); grass high and narrow, 190-230 Hz. The
+# rest, which the pack has no loop for, after the ground itself: concrete has
+# joints every 4.6 m (15 ft, US practice), a 5 Hz beat at 80 km/h; wood planks
+# drum, 20 cm apart; a steel grating sings; dirt and grass heave slowly.
 SURFACES = (
-    ("road_smooth", Surface(0.2, 120.0)), ("road_coarse", Surface(0.45, 95.0, 0.5, 0.15)),
-    ("road_dirt", Surface(0.55, 75.0, 1.5, 0.35)),
-    ("ice", Surface(0.15, 140.0)), ("snow", Surface(0.45, 70.0, 2.0, 0.4)),
-    ("rumble", Surface(0.3, 100.0)),  # the strip itself is the rumble effect; the texture stays that of asphalt
-    ("road", Surface(0.3, 100.0)), ("asphalt", Surface(0.3, 100.0)), ("concrete", Surface(0.35, 90.0)),
+    ("road_smooth", Surface(0.2, 120.0, q=0.8, swell=0.1)),
+    # chip seal: grit, many small stones
+    ("road_coarse", Surface(0.45, 95.0, 6.0, 0.3, q=0.8, swell=0.15, swell_hz=6.0)),
+    ("road_dirt", Surface(0.55, 70.0, 1.5, 0.35, q=1.5, swell=0.45, swell_hz=1.5)),
+    ("ice", Surface(0.15, 160.0, q=0.8, swell=0.05)),
+    ("snow", Surface(0.45, 110.0, 2.0, 0.3, q=1.0, swell=0.35, swell_hz=2.5)),
+    ("rumble", Surface(0.3, 100.0, q=0.8, swell=0.12)),  # the strip itself is the rumble effect; the texture stays that of asphalt
+    ("road", Surface(0.3, 100.0, q=0.8, swell=0.12)), ("asphalt", Surface(0.3, 100.0, q=0.8, swell=0.12)),
+    ("concrete", Surface(0.35, 90.0, q=0.8, swell=0.12, seams=4.6, seam_hz=85.0, seam_share=0.4)),
     # Anything modelled rather than painted on the terrain: company yards, and bridges and
-    # ramps taken at speed. It is still paved ground, not air.
-    ("static", Surface(0.35, 90.0)),
-    ("wood", Surface(0.55, 65.0)), ("metal", Surface(0.6, 130.0)), ("dirt", Surface(0.75, 60.0, 1.5, 0.4)),
-    ("grass", Surface(0.7, 130.0)), ("gravel", Surface(1.0, 85.0, 3.0, 0.6)), ("rough", Surface(0.9, 70.0, 2.0, 0.4)),
+    # ramps taken at speed. It is still paved ground, not air; no joints, which a bridge would not have every 4.6 m.
+    ("static", Surface(0.35, 90.0, q=0.8, swell=0.12)),
+    ("wood", Surface(0.55, 75.0, q=1.0, swell=0.2, seams=0.2, seam_hz=80.0, seam_q=1.0, seam_share=0.6)),
+    ("metal", Surface(0.6, 130.0, q=1.2, swell=0.08, seams=0.15, seam_hz=150.0, seam_q=6.0, seam_share=0.7)),
+    ("dirt", Surface(0.75, 60.0, 1.5, 0.4, q=1.5, swell=0.45, swell_hz=1.5)),
+    ("grass", Surface(0.7, 200.0, q=3.0, swell=0.45, swell_hz=1.5)),
+    ("gravel", Surface(1.0, 85.0, 3.0, 0.6, q=2.5, swell=0.3, swell_hz=5.0)),
+    ("rough", Surface(0.9, 70.0, 2.0, 0.4, q=1.5, swell=0.45, swell_hz=2.0)),
 )
 DEFAULT_SURFACE = Surface(0.4, 90.0, 0.5, 0.1)
 PITCH_STANDING = 0.6  # share of a surface's pitch at walking pace; all of it from 90 km/h
 # Recorded road noise swells and fades a few times a second (undulations, the
-# tyres' own unevenness); a steady texture feels machine-made.
-SWELL_HZ = 4.0
-SWELL_DEPTH = 0.4  # standard deviation of the swell, as a share of the texture
+# tyres' own unevenness); a steady texture feels machine-made. How deep and how
+# fast is each surface's own (Surface.swell, swell_hz).
+SEAM_SPEED = 22.0  # m/s (80 km/h) where seams are as strong as Surface.seam_share says; faster they come denser
+SEAM_JITTER = 0.05  # seams are never quite evenly laid
 # On rough ground the cab rattles: short low knocks, many a second.
 RATTLE_HZ = 55.0
 RATTLE_RATE = 40.0  # knocks per second per side at full roughness
@@ -176,14 +201,19 @@ def surface_of(name: str) -> Surface | None:
     return DEFAULT_SURFACE
 
 
+_BLENDED = ("pitch", "stones", "crunch", "q", "swell", "swell_hz", "seam_share")
+
+
 def side_surface(wheels: list[Wheel]) -> Surface:
-    """One side's mix of surfaces: mean strength, pitch and stones weighted by strength."""
+    """One side's mix of surfaces: mean strength, the rest weighted by strength. Seams are not
+    averaged: a wheel on planks beside one on asphalt drums at the planks' spacing, softer."""
     found = [s for s in (surface_of(w.substance) for w in wheels) if s is not None]
     total = sum(s.level for s in found)
     if not total:
         return Surface(0.0, DEFAULT_SURFACE.pitch)
-    return Surface(total / len(wheels), *(sum(s.level * getattr(s, name) for s in found) / total
-                                          for name in ("pitch", "stones", "crunch")))
+    seamed = max(found, key=lambda s: s.level * s.seam_share)
+    return Surface(total / len(wheels), seams=seamed.seams, seam_hz=seamed.seam_hz, seam_q=seamed.seam_q,
+                   **{name: sum(s.level * getattr(s, name) for s in found) / total for name in _BLENDED})
 
 
 TOGGLEABLE = ("engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarder", "impact", "trigger",
@@ -552,16 +582,75 @@ class Grains:
         return self.filter.next(click)
 
 
+class Seams:
+    """Seams a set distance apart under a rolling tyre, each a knock ringing the band-pass: slab
+    joints a few times a second, or planks and grating bars so close they drum or sing at
+    speed / spacing. At SEAM_SPEED they come out at unit RMS."""
+
+    def __init__(self, seed: int) -> None:
+        self.filter = Resonator(90.0, 1.5)
+        self.rng = random.Random(seed)
+        self.spacing = self.step = self.travel = 0.0
+        self.next_at = 1.0
+        self.gain = 0.0
+
+    def tune(self, spacing: float, center: float, q: float, speed: float) -> None:
+        if (center, q) != (self.filter.center, self.filter.q) or spacing != self.spacing:
+            self.filter.tune(center, q)
+            self.gain = 1.0 / math.sqrt(self._power(spacing)) if spacing else 0.0
+            if spacing != self.spacing:
+                self.travel, self.next_at = 0.0, spacing
+        self.spacing = spacing
+        self.step = speed / SAMPLE_RATE
+
+    def _power(self, spacing: float) -> float:
+        """Mean square of unit knocks spacing apart at SEAM_SPEED. Joints ring out between
+        knocks, but grating bars come at the bars' own ringing and pile up, so it is played
+        through rather than worked out from one knock's ring."""
+        ring = Resonator(self.filter.center, self.filter.q)
+        period = spacing * SAMPLE_RATE / SEAM_SPEED
+        total, count, until = 0.0, 0, period
+        settle, end = SAMPLE_RATE // 2, SAMPLE_RATE // 2 + max(SAMPLE_RATE, round(4 * period))
+        for n in range(end):
+            knock = 0.0
+            if n >= until:
+                until += period
+                knock = 1.0
+            y = ring.next(knock)
+            if n >= settle:
+                total += y * y
+                count += 1
+        return total / count
+
+    def next(self) -> float:
+        knock = 0.0
+        if self.spacing:
+            self.travel += self.step
+            if self.travel >= self.next_at:
+                self.travel -= self.next_at
+                self.next_at = self.spacing * (1.0 + SEAM_JITTER * self.rng.uniform(-1.0, 1.0))
+                knock = self.gain * (0.85 + 0.3 * self.rng.random())
+        return self.filter.next(knock)
+
+
 class Swell:
-    """Slow random gain around 1: white noise through two one-pole low-passes, SWELL_DEPTH deviation."""
+    """Slow random gain around 1: white noise through two one-pole low-passes."""
 
     def __init__(self, seed: int) -> None:
         self.rng = random.Random(seed)
-        self.a = math.exp(-TAU * SWELL_HZ / SAMPLE_RATE)
-        a = self.a
-        # deviation of uniform noise (variance 1/3) after the two poles
-        self.scale = SWELL_DEPTH / math.sqrt((1 - a) ** 4 * (1 + a * a) / (1 - a * a) ** 3 / 3)
         self.y1 = self.y2 = 0.0
+        self.depth = self.hz = 0.0
+        self.tune(0.25, 4.0)
+
+    def tune(self, depth: float, hz: float) -> None:
+        """depth: standard deviation around 1; hz: corner of the low-passes."""
+        if (depth, hz) == (self.depth, self.hz):
+            return
+        self.depth, self.hz = depth, hz
+        self.a = a = math.exp(-TAU * hz / SAMPLE_RATE)
+        # deviation of uniform noise (variance 1/3) after the two poles
+        self.scale = depth / math.sqrt((1 - a) ** 4 * (1 + a * a) / (1 - a * a) ** 3 / 3)
+        self.rms = math.sqrt(1.0 + depth ** 2)  # what the swell adds to the strength, for the texture to take back out
 
     def next(self) -> float:
         self.y1 = self.a * self.y1 + (1 - self.a) * self.rng.uniform(-1.0, 1.0)
@@ -570,40 +659,50 @@ class Swell:
 
 
 class Texture:
-    """One side's road texture: noise around the surface's pitch, stones clicking, the cab
-    rattling on rough ground, all swelling and fading a few times a second."""
+    """One side's road texture: noise around the surface's pitch, stones clicking, seams at a
+    steady beat, the cab rattling on rough ground, all swelling and fading as the surface does."""
 
     STONE_GAIN = 5.0  # few and mostly small; a big one knocks through the noise at full strength
     RATTLE_GAIN = 3.0  # at full roughness about a third more strength, in knocks
-    SWELL_RMS = math.sqrt(1.0 + SWELL_DEPTH ** 2)  # what the swell adds to the strength, taken back out
+    NOISE_RMS = 0.6  # of the hiss at its reference band (BandNoise at 80 Hz, Q 1.2); the seams match it
 
     def __init__(self, seed: int) -> None:
         self.noise = BandNoise(DEFAULT_SURFACE.pitch, 1.2, seed)
         self.stones = Grains(seed + 100)
         self.rattle = Grains(seed + 200, RATTLE_HZ)
+        self.seams = Seams(seed + 400)
         self.swell = Swell(seed + 300)
         self.crunch = 0.0
         self.noise_gain = 1.0
+        self.hiss = 1.0  # share of the hiss's strength left beside the seams
+        self.seam_gain = 0.0
         self.pitch = DEFAULT_SURFACE.pitch
 
     def tune(self, surface: Surface, speed: float, roughness: float) -> None:
         pace = min(1.0, speed / 25.0)
         self.pitch = pitch = surface.pitch * (PITCH_STANDING + (1.0 - PITCH_STANDING) * pace)
-        self.noise.filter.tune(pitch, 1.2)
-        # A band-pass of fixed Q lets through noise in proportion to its centre:
-        # keep the strength of the 80 Hz band every surface used to share.
-        self.noise_gain = math.sqrt(80.0 / pitch)
+        self.noise.filter.tune(pitch, surface.q)
+        # A band-pass lets through noise in proportion to its width, centre over Q:
+        # keep the strength of the 80 Hz, Q 1.2 band every surface used to share.
+        self.noise_gain = math.sqrt(80.0 / pitch * surface.q / 1.2)
         self.stones.tune(pitch * 1.25, surface.stones * speed)
         self.crunch = surface.crunch
+        # seams and hiss are independent: their powers add up to the hiss's alone
+        self.hiss = math.sqrt(1.0 - surface.seam_share)
+        self.seam_gain = self.NOISE_RMS * math.sqrt(surface.seam_share)
+        self.seams.tune(surface.seams, surface.seam_hz, surface.seam_q, speed)
+        self.swell.tune(surface.swell, surface.swell_hz)
         low, full = RATTLE_ROUGH
         self.rattle.rate = RATTLE_RATE * min(1.0, max(0.0, (roughness - low) / (full - low)))
 
     def next(self) -> float:
-        value = (1.0 - self.crunch) * self.noise_gain * self.noise.next()
+        value = (1.0 - self.crunch) * self.hiss * self.noise_gain * self.noise.next()
         if self.crunch:
             value += self.crunch * self.STONE_GAIN * self.stones.next()
+        if self.seam_gain:
+            value += self.seam_gain * self.seams.next()
         value += self.RATTLE_GAIN * self.rattle.next()  # also while the last knock rings out
-        return value * self.swell.next() / self.SWELL_RMS
+        return value * self.swell.next() / self.swell.rms
 
 
 class Burst:

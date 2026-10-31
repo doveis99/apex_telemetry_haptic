@@ -154,12 +154,13 @@ MESSAGES = {
         ("Frecuencia de encendido del motor (rpm ÷ 60 × cilindros ÷ 2) más su segundo armónico. Más fuerte con más "
          "acelerador y más rpm. Al ralentí los cilindros encienden de forma desigual y el motor cabecea; con carga "
          "se vuelve áspero. Nada con el motor apagado."),
-    "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 얼음·금속·잔디는 높고 곱게, 나무·눈은 낮고 묵직하게 떨리고, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 실제 노면처럼 1초에 몇 번씩 출렁이고, 험한 길에서는 캡이 덜컹거립니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
-        ("La fuerza y el tacto dependen del firme (hielo < asfalto < hormigón < nieve < madera < metal < hierba < "
-         "tierra < grava) y de la velocidad. El hielo, el metal y la hierba vibran fino y agudo, la madera y la "
-         "nieve grave y pesado, y la grava, la tierra y la nieve añaden el chasquido de piedras sueltas. Como una "
-         "carretera real, sube y baja varias veces por segundo, y en terreno áspero la cabina traquetea. Más rápido, "
-         "más denso. Ruedas izquierda y derecha por separado."),
+    "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 아스팔트는 고르게 '쉬익', 콘크리트는 이음매마다 '툭·툭', 나무는 판자가 '두두두', 금속은 '웅' 하고 울리고, 잔디·흙은 천천히 출렁이며, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 험한 길에서는 캡이 덜컹거립니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
+        ("La fuerza y la textura dependen de la superficie (hielo < asfalto < hormigón < nieve < madera < metal "
+         "< hierba < tierra < grava) y de la velocidad. El asfalto sisea de forma uniforme, el hormigón golpea "
+         "en cada junta, los tablones de madera retumban, el metal zumba, la hierba y la tierra ondulan "
+         "despacio, y la grava, la tierra y la nieve añaden el chasquido de piedras sueltas. En caminos "
+         "bacheados la cabina traquetea. Cuanto más rápido, más denso, y las ruedas izquierdas y derechas van "
+         "por separado."),
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다.":
         ("Un golpe en el agarre del lado de esa rueda cuando la suspensión se mueve de repente (baches, bordillos, "
          "juntas): una junta pequeña es un toque corto y agudo, un bache grande un golpe grave y pesado, y tras un "

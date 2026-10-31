@@ -336,10 +336,11 @@ class EngineTest(unittest.TestCase):
                 current = max(current, b)
         return peaks
 
-    def firings(self, **values) -> tuple[float, float]:
+    def firings(self, cylinders: int = 6, **values) -> tuple[float, float]:
         """Spread of the firings' crests over 16 s: the pattern each cycle of the cylinders
         repeats, and what is left from firing to firing."""
-        gains = Gains(steady_fade=0.0, disabled=[name for name in TOGGLEABLE if name != "engine"])
+        gains = Gains(steady_fade=0.0, cylinders=cylinders,
+                      disabled=[name for name in TOGGLEABLE if name != "engine"])
         s, samples = Synth(effective_gains(gains)), []
         for _ in range(2000):
             samples.extend(s.render(frame(**values)).left_grip)
@@ -361,6 +362,15 @@ class EngineTest(unittest.TestCase):
         self.assertGreater(pulling[0], 0.03)  # the recorded engines never fire quite alike
         for imbalance, jitter in (idle, pulling):
             self.assertGreater(jitter, 0.07)  # and every firing differs from the last
+
+    def test_a_v8_stays_lumpy_under_load(self) -> None:
+        # 1000 rpm: eight cylinders fire at 66.7 Hz, the crest on the same sample every firing
+        six = self.firings(rpm=1300.0, game_throttle=0.8, user_throttle=0.8)
+        idle = self.firings(8, rpm=650.0, game_throttle=0.0, user_throttle=0.0)
+        pulling = self.firings(8, rpm=1000.0, game_throttle=0.8, user_throttle=0.8)
+        self.assertGreater(pulling[0], 3.0 * six[0])  # the recorded V8 against the sixes
+        self.assertLess(idle[0], 1.3 * pulling[0])  # and no lope of its own at idle
+        self.assertGreater(pulling[1], 0.07)
 
     def test_load_turns_it_harsh(self) -> None:
         def harshness(load: float) -> float:

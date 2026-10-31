@@ -67,6 +67,16 @@ _JAKE_MEAN = JAKE_PEAK * math.e * (1.0 - (1.0 + 1.0 / JAKE_PEAK) * math.exp(-1.0
 ENGINE_JITTER = 0.18  # spread of each firing's strength around its cylinder's
 ENGINE_IMBALANCE = 0.3  # spread between cylinders at idle
 ENGINE_UNEVEN_FLOOR = 0.4  # share of it that stays at any load and revs
+# A V8 is lumpy where the sixes run smooth. In the Zeemods CAT 3408 V8's exhaust loops
+# at 1000-1800 rpm only 9% of 20-250 Hz is on the firing rate (91-94% for the DD60 and
+# X15), the half orders below it sit 3 dB under it (32-36 dB for the sixes), and the
+# cylinder pattern is 0.32 (median of 9 loops, 0.14-0.38) against 0.05-0.08. Its idle is
+# the even one: 0.21, with the half orders 11-26 dB down. So with eight cylinders the
+# pattern holds at any load and revs instead of growing towards idle. Measured the same
+# way (strength in windows one firing long, which blur neighbours together), a spread of
+# 0.5 between the cylinders comes out at 0.32 at 1100-1700 rpm, and the six's at 0.08,
+# as for the sixes' recordings.
+ENGINE_V8_PATTERN = 0.5  # spread between cylinders (std/mean) of an eight
 ENGINE_HARSH = 0.25  # third harmonic at full load
 
 
@@ -1415,13 +1425,20 @@ class Synth:
 
     def _next_firing(self, uneven: float) -> None:
         """Strength of the next cylinder's firing: its own share of the unevenness, which grows
-        towards idle, and a little difference from one cycle to the next."""
+        towards idle (a V8's stays put), and a little difference from one cycle to the next."""
         cylinders = max(1, min(len(self.cylinder_offsets), self.g.cylinders))
         self.cylinder = (self.cylinder + 1) % cylinders
         used = self.cylinder_offsets[:cylinders]
-        offset = used[self.cylinder] - sum(used) / cylinders
-        self.firing_gain = ((1.0 + ENGINE_IMBALANCE * uneven * offset)
-                            * (1.0 + ENGINE_JITTER * self.rng.uniform(-1.0, 1.0)))
+        mean = sum(used) / cylinders
+        offset = used[self.cylinder] - mean
+        if cylinders == 8:
+            spread = math.sqrt(sum((o - mean) ** 2 for o in used) / cylinders)
+            # as strong overall as an even engine, so the engine level stays where it was
+            imbalance = ((1.0 + ENGINE_V8_PATTERN * offset / spread) / math.sqrt(1.0 + ENGINE_V8_PATTERN ** 2)
+                         - 1.0)
+        else:
+            imbalance = ENGINE_IMBALANCE * uneven * offset
+        self.firing_gain = (1.0 + imbalance) * (1.0 + ENGINE_JITTER * self.rng.uniform(-1.0, 1.0))
 
     def _out(self, x: float, channel_level: float) -> float:
         # Soft limit so stacked effects saturate smoothly instead of clipping;

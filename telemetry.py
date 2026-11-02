@@ -52,7 +52,10 @@ _FIELDS = {
     "blinker_left": (1580, "?"),  # lamp state, toggles with each flash
     "blinker_right": (1581, "?"),
     # The truck's linear velocity in its own space, m/s, just ahead of the angular one: x is
-    # sideways (a slide), z back. Placed by the layout, not yet seen in a game drive.
+    # sideways, z back. In a 2 min drive (2026-11-02) z was minus the speed within 0.002 m/s
+    # (median) and x stayed under 0.05 going straight. Turning, x reached about 1 m/s with no
+    # slide, about 12-14 m times the yaw rate: the truck's origin swinging round, which a
+    # slide would have to be told apart from.
     "velocity_x": (1868, "f"),
     "velocity_y": (1872, "f"),
     "velocity_z": (1876, "f"),

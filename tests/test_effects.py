@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE
-from effects import (BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RATTLE_S, CEILING, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
+from effects import (BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RIDE_MAX, BUMP_RATTLE_S, CEILING, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
                      Gains, NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
@@ -228,6 +228,13 @@ class BumpTest(unittest.TestCase):
         self.ride(rough, 0.08)
         self.assertFalse(self.step(rough, 0.4))  # is part of the rough one's ride
         self.assertTrue(self.step(rough, 1.5))  # a pothole still knocks
+
+    def test_a_dirt_road_does_not_lift_the_threshold_past_its_cap(self) -> None:
+        s = synth()
+        self.ride(s, 0.3)  # as much as a dirt road moves the wheels, all the time
+        self.assertGreater(BUMP_OVER_RIDE * s.ride[0], 2.0 * BUMP_RIDE_MAX)
+        self.assertFalse(self.step(s, 0.6))  # the dirt's own bumps
+        self.assertTrue(self.step(s, 1.5))  # a rut or a pothole in it
 
     def test_the_ride_is_kept_while_parked_and_starts_over_in_another_truck(self) -> None:
         s = synth()

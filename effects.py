@@ -195,6 +195,11 @@ BUMP_GAP_S = 0.06  # s before a wheel knocks again: a step's rebound and the nex
 BUMP_RIDE_TAU = 20.0  # s of driving the average spans
 BUMP_RIDE_SPEED = 3.0  # m/s; slower (and parked) the ride is not learnt, and what was learnt stays
 BUMP_OVER_RIDE = 12.0  # threshold as a multiple of that average: 35 knocks a minute became 9, the other 4.6 stayed 4.4
+# A dirt road is no ride to learn: the wheels move 5-10 times as much there, all the time
+# (99th percentile 0.4-1.1 m/s in a 2.5 min drive, 2026-11-02). Learning it put the threshold
+# past 2 m/s and the road went quiet for over a minute; without it, it knocked over 20 times a
+# second. Held at BUMP_RIDE_MAX, the road knocks 2.6 times a second, a hard one every 2 s.
+BUMP_RIDE_MAX = 0.8  # m/s, as high as it goes
 # The game's wheel deflection now and then leaps 25-100 mm for a single frame
 # and is back on the next one, on one wheel, at any speed: in a 49 min drive
 # (2026-10-31) four in five bump knocks came from such a frame, and nearly
@@ -1036,7 +1041,7 @@ class Synth:
         avg_k = 1.0 - math.exp(-dt / RATE_AVG_TAU)
         rough = [0.0, 0.0]
         counts = [0, 0]
-        thresholds = [max(self.g.bump_threshold, BUMP_OVER_RIDE * ride) for ride in self.ride]
+        thresholds = [max(self.g.bump_threshold, min(BUMP_RIDE_MAX, BUMP_OVER_RIDE * ride)) for ride in self.ride]
         ride, ride_counts = [0.0, 0.0], [0, 0]
         for i, wheel in enumerate(wheels):
             rate = (deflections[i] - self.prev_deflection[i]) / dt  # m/s

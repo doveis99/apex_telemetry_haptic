@@ -162,11 +162,12 @@ MESSAGES = {
          "trommeln, Metall brummt, Gras und Erde wogen langsam, und Schotter, Erde und Schnee mischen das "
          "Klicken loser Steine bei. Auf holprigen Straßen klappert die Kabine. Je schneller, desto dichter, und "
          "linke und rechte Räder laufen getrennt."),
-    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다.":
+    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다. 흙길처럼 캐빈이 크게 출렁이면 양쪽 그립에 낮은 '쿵'이 더해집니다.":
         ("Ein Schlag am Griff auf der Seite des Rades, wenn die Federung plötzlich arbeitet (Schlaglöcher, "
          "Bordsteine, Fugen): eine kleine Fuge ist ein kurzes, hohes Tippen, ein großes Schlagloch ein tiefer, "
          "schwerer Stoß, und nach einem harten Schlag klappert kurz das Fahrerhaus. Die Empfindlichkeit stellen Sie "
-         "unter 'Schwelle Unebenheit' ein."),
+         "unter 'Schwelle Unebenheit' ein. "
+         "Schwankt das Fahrerhaus stark, etwa auf Schotterpisten, kommt ein tiefer Schlag auf beiden Griffen dazu."),
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("Ein Brrrr im Griff der Seite, die auf einen Rüttelstreifen an Mittellinie oder "
          "Seitenstreifen fährt. Erkannt am Fahrbahnbelag aus dem Spiel; je schneller, desto feiner."),

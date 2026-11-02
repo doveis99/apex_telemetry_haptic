@@ -244,6 +244,25 @@ class BumpTest(unittest.TestCase):
         self.assertTrue(self.step(rough, 0.9))
         self.assertAlmostEqual(rough.bump_bursts[0][1].amplitude, calm.bump_bursts[0][1].amplitude, places=2)
 
+    @staticmethod
+    def lurches(accels: list[float]) -> list[Burst]:
+        """The cab's knocks as its tilt acceleration (about the roll axis) runs through accels, a frame a block."""
+        s, found = synth(), []
+        for n, accel in enumerate(accels):
+            s.render(frame(deflection=0.02 + 0.0001 * (n % 2), cabin_accel=(0.0, 0.0, accel)))
+            found += [b for effect, where, b in s.bursts if effect == "bumps" and where == "C" and b not in found]
+        return found
+
+    def test_the_cab_lurching_knocks_on_both_grips(self) -> None:
+        self.assertEqual(self.lurches([0.0] * 10 + [0.05, -0.05] * 20), [])  # pavement's own shaking
+        small, big = self.lurches([0.0] * 10 + [0.2] + [0.0] * 10), self.lurches([0.0] * 10 + [0.7] + [0.0] * 10)
+        self.assertEqual((len(small), len(big)), (1, 1))
+        self.assertLess(small[0].amplitude, big[0].amplitude)
+        self.assertLess(big[0].freq, small[0].freq)  # the heavier lurch knocks lower
+
+    def test_the_cab_lurches_once_while_it_swings(self) -> None:
+        self.assertEqual(len(self.lurches([0.0] * 10 + [0.3, 0.4, -0.3, 0.3, 0.0])), 1)  # within CAB_JOLT_GAP
+
     def test_the_ride_is_kept_while_parked_and_starts_over_in_another_truck(self) -> None:
         s = synth()
         self.ride(s, 0.08)

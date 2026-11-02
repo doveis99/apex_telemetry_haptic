@@ -216,6 +216,21 @@ BUMP_OVER_RIDE = 12.0  # threshold as a multiple of that average: 35 knocks a mi
 # picks which movements knock: how hard is still measured from Gains.bump_threshold, so a rut
 # lands as hard on any truck.
 BUMP_RIDE_MAX = 0.5  # m/s, as high as it goes
+# The cab on its mounts is what the driver sits in, and its tilt acceleration (Frame.cabin_accel)
+# tells a dirt road from pavement far better than the wheels do: in a 10 min drive without a
+# trailer (2026-11-02) its square had a median 30-100 times as large on dirt, and passed 0.02
+# (rad/s^2)^2 74 times a minute on dirt at 10-20 km/h but 18 times in 6 min of pavement, nearly
+# all at one kerb. ZAF's cab rattle follows the same square. So each lurch past CAB_JOLT knocks
+# low on both grips, the harder the larger, and the cab rattles (Texture) on whichever is the
+# larger of the wheels' roughness and the cab's own shaking.
+CAB_JOLT = 0.14  # rad/s^2 of tilt acceleration (0.02 squared) from which the cab lurches
+CAB_JOLT_FULL = 0.6  # where a lurch knocks at full strength: the dirt road's 99th percentile
+CAB_JOLT_FLOOR = 0.25  # strength of the smallest lurch, so it is felt
+CAB_JOLT_GAP = 0.15  # s before the cab lurches again
+CAB_JOLT_HZ = (55.0, 40.0)  # smallest and largest lurch: the heavy cab knocks lower than a wheel
+CAB_JOLT_DECAY = (0.04, 0.08)  # s
+CAB_RATTLE = (0.003, 0.05)  # (rad/s^2)^2 of shaking where the cab's rattle starts (pavement's 99th percentile) and is full
+CAB_SETTLE_TAU = 0.25  # s for the shaking the rattle follows to die away
 # The game's wheel deflection now and then leaps 25-100 mm for a single frame
 # and is back on the next one, on one wheel, at any speed: in a 49 min drive
 # (2026-10-31) four in five bump knocks came from such a frame, and nearly
@@ -775,7 +790,7 @@ class Texture:
         self.seam_gain = 0.0
         self.pitch = DEFAULT_SURFACE.pitch
 
-    def tune(self, surface: Surface, speed: float, roughness: float) -> None:
+    def tune(self, surface: Surface, speed: float, roughness: float, cab_shake: float = 0.0) -> None:
         pace = min(1.0, speed / 25.0)
         self.pitch = pitch = surface.pitch * (PITCH_STANDING + (1.0 - PITCH_STANDING) * pace)
         self.noise.filter.tune(pitch, surface.q)
@@ -790,7 +805,9 @@ class Texture:
         self.seams.tune(surface.seams, surface.seam_hz, surface.seam_q, speed)
         self.swell.tune(surface.swell, surface.swell_hz)
         low, full = RATTLE_ROUGH
-        self.rattle.rate = RATTLE_RATE * min(1.0, max(0.0, (roughness - low) / (full - low)))
+        cab_low, cab_full = CAB_RATTLE
+        self.rattle.rate = RATTLE_RATE * min(1.0, max(0.0, (roughness - low) / (full - low),
+                                                 (cab_shake - cab_low) / (cab_full - cab_low)))
 
     def next(self) -> float:
         value = (1.0 - self.crunch) * self.hiss * self.noise_gain * self.noise.next()
@@ -957,6 +974,8 @@ class Synth:
         self.gear_cooldown = 0.0
         self.prev_accel: tuple[float, float, float] | None = None
         self.impact_cooldown = 0.0
+        # (rad/s^2)^2 the cab has been shaking, whether it is past CAB_JOLT, s before it may lurch again
+        self.cab_shake, self.cab_above, self.cab_wait = 0.0, False, 0.0
         self.lock_phase = 0.0  # of the ABS-like chop, per sample
         self.was_locked = False
         self.steady_ref: dict[str, float] = {}
@@ -982,6 +1001,7 @@ class Synth:
         self.repeat_dt = 0.0
         self.leap_held = []
         self.prev_accel = None
+        self.cab_shake, self.cab_above, self.cab_wait = 0.0, False, 0.0
         self.prev_gear = None
         self.prev_state = {key: value for key, value in self.prev_state.items() if key == "game_events"}
         # coming back is a change too: the beds start in full and settle again
@@ -1153,6 +1173,24 @@ class Synth:
                 self.impact_cooldown = 0.3
                 self.levels.events.append(t("충돌 {accel} m/s²", accel=f"{jump:.0f}"))
         self.prev_accel = frame.accel
+
+    def _cab_event(self, frame: Frame, dt: float) -> None:
+        """The cab lurching on its mounts (CAB_JOLT), and how much it has been shaking (CAB_RATTLE)."""
+        square = sum(a * a for a in frame.cabin_accel)
+        self.cab_wait = max(0.0, self.cab_wait - dt)
+        if square > self.cab_shake or not dt:
+            self.cab_shake = square
+        else:
+            self.cab_shake += (square - self.cab_shake) * (1.0 - math.exp(-dt / CAB_SETTLE_TAU))
+        lurch = math.sqrt(square)
+        if dt and lurch > CAB_JOLT and not self.cab_above and not self.cab_wait:
+            size = min(1.0, (lurch - CAB_JOLT) / (CAB_JOLT_FULL - CAB_JOLT))
+            strength = (CAB_JOLT_FLOOR + (1.0 - CAB_JOLT_FLOOR) * size) * self.g.bumps
+            freq = CAB_JOLT_HZ[0] + (CAB_JOLT_HZ[1] - CAB_JOLT_HZ[0]) * size
+            decay = CAB_JOLT_DECAY[0] + (CAB_JOLT_DECAY[1] - CAB_JOLT_DECAY[0]) * size
+            self._both("bumps", Burst(freq, strength, decay, phase=0.25))
+            self.cab_wait = CAB_JOLT_GAP
+        self.cab_above = lurch > CAB_JOLT
 
     def _changed(self, key: str, value: object) -> bool:
         """True when value differs from the last frame's (never on the first frame)."""
@@ -1357,6 +1395,7 @@ class Synth:
             if dt is not None:  # the same frame read again holds no new movement
                 self._wheel_events(frame, dt)
                 self._impact_event(frame, dt)
+                self._cab_event(frame, dt)
             self._gear_event(frame)
             self._state_events(frame)
 
@@ -1390,7 +1429,7 @@ class Synth:
             textures = []
             for side, wheels in enumerate(sides):
                 surface = side_surface(wheels)
-                self.texture[side].tune(surface, speed, self.roughness[side])
+                self.texture[side].tune(surface, speed, self.roughness[side], self.cab_shake)
                 rough = self.roughness[side]
                 texture = min(1.0, surface.level * speed_factor + min(1.0, (rough / ROUGH_FULL) ** ROUGH_POWER))
                 # what counts as rougher ground stays in proportion (ROUGH_NOVELTY): squared, the

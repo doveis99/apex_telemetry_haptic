@@ -162,10 +162,11 @@ MESSAGES = {
          "tábuas de madeira tamborilam, o metal zumbe, a grama e a terra ondulam devagar, e o cascalho, a terra "
          "e a neve somam o estalo de pedrinhas soltas. Em estradas ruins a cabine chacoalha. Quanto mais rápido, "
          "mais denso, e as rodas esquerdas e direitas vão separadas."),
-    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다.":
+    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다. 흙길처럼 캐빈이 크게 출렁이면 양쪽 그립에 낮은 '쿵'이 더해집니다.":
         ("Uma pancada na pegada do lado da roda quando a suspensão se move de repente (buracos, meios-fios, juntas): "
          "uma junta pequena é um toque curto e agudo, um buraco grande um baque grave e pesado, e depois de uma "
-         "pancada forte a cabine chacoalha por um instante. A sensibilidade fica em 'Limite de buracos'."),
+         "pancada forte a cabine chacoalha por um instante. A sensibilidade fica em 'Limite de buracos'. "
+         "Quando a cabine balança forte, como numa estrada de terra, um baque grave vem nos dois punhos."),
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("Um brrrr na empunhadura do lado que passa sobre uma faixa sonora da linha central ou do "
          "acostamento. Detectada pela superfície que o jogo informa; quanto mais rápido, mais fino."),

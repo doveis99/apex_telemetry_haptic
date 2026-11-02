@@ -65,6 +65,15 @@ _FIELDS = {
     "accel_x": (1892, "f"),
     "accel_y": (1896, "f"),
     "accel_z": (1900, "f"),
+    # The cab on its mounts, against the chassis: how fast its tilt speeds up (rad/s^2, about
+    # x pitch, y yaw, z roll) and where it sits (m). In a 2.5 min live drive (2026-11-02) the
+    # squared tilt acceleration had a median 81 times as large on a dirt road as on pavement.
+    "cabin_accel_x": (1928, "f"),
+    "cabin_accel_y": (1932, "f"),
+    "cabin_accel_z": (1936, "f"),
+    "cabin_x": (2000, "f"),
+    "cabin_y": (2004, "f"),
+    "cabin_z": (2008, "f"),
 }
 _ARRAYS = {
     "wheel_substance": (120, "16I"),
@@ -131,6 +140,8 @@ class Frame:
     accel: tuple[float, float, float] = (0.0, 0.0, 0.0)
     yaw_rate: float = 0.0  # rad/s, positive turning left
     velocity: tuple[float, float, float] = (0.0, 0.0, 0.0)  # m/s in the truck's space: x right, y up, z back
+    cabin_accel: tuple[float, float, float] = (0.0, 0.0, 0.0)  # rad/s^2 of the cab's tilt: pitch, yaw, roll
+    cabin_offset: tuple[float, float, float] = (0.0, 0.0, 0.0)  # m the cab sits off its rest on the chassis
     wheels: list[Wheel] = field(default_factory=list)
     trailer_wheels: list[Wheel] = field(default_factory=list)  # every attached trailer's, in order
     air_pressure: float = 120.0
@@ -240,6 +251,8 @@ class SharedMemoryTelemetry:
             engine_on=values["engine_on"], motor_brake=values["motor_brake"], park_brake=values["park_brake"],
             accel=(values["accel_x"], values["accel_y"], values["accel_z"]), yaw_rate=values["yaw_rate"],
             velocity=(values["velocity_x"], values["velocity_y"], values["velocity_z"]),
+            cabin_accel=(values["cabin_accel_x"], values["cabin_accel_y"], values["cabin_accel_z"]),
+            cabin_offset=(values["cabin_x"], values["cabin_y"], values["cabin_z"]),
             wheels=wheels,
             trailer_wheels=trailer_wheels,
             air_pressure=values["air_pressure"],

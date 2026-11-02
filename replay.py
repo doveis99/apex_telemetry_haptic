@@ -116,6 +116,8 @@ class _State:
                       accel=tuple(_floats(x.get("accel", ""))) or (0.0, 0.0, 0.0),
                       yaw_rate=float(x.get("yaw") or 0.0),
                       velocity=tuple(_floats(x.get("velocity", ""))) or (0.0, 0.0, 0.0),
+                      cabin_accel=tuple(_floats(x.get("cabin_accel", ""))) or (0.0, 0.0, 0.0),
+                      cabin_offset=tuple(v / 1000.0 for v in _floats(x.get("cabin_mm", ""))) or (0.0, 0.0, 0.0),
                       air_pressure=float(x.get("air_pressure") or 120.0),
                       blinker_left="L" in row["blinkers"], blinker_right="R" in row["blinkers"],
                       shifter_toggle=("R" in row["shifter"], "S" in row["shifter"]),

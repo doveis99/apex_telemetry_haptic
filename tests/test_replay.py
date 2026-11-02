@@ -25,6 +25,8 @@ def write_log(folder: Path, seconds: float, events: tuple[tuple[float, str], ...
         frame.render_time = n * 8000 // 16667 * 16667
         frame.accel = (0.5, 9.8, -1.25)
         frame.velocity = (0.75, 0.0, -12.5)
+        frame.cabin_accel = (0.125, 0.0, -0.0625)
+        frame.cabin_offset = (0.0005, -0.00125, 0.0)
         frame.game_events = frozenset(name for at, name in events if at <= n * DT < at + 0.1)
         if n in (100, 101):  # 101 has a new game frame
             frame.wheels[3].on_ground = False
@@ -63,6 +65,8 @@ class ReplayTest(unittest.TestCase):
                 self.assertAlmostEqual(g.velocity * g.radius, s.velocity * s.radius, delta=0.005 / (2 * math.pi))
             self.assertEqual(got.accel, (0.5, 9.8, -1.25))
             self.assertEqual(got.velocity, (0.75, 0.0, -12.5))
+            self.assertEqual(got.cabin_accel, (0.125, 0.0, -0.0625))
+            self.assertEqual(got.cabin_offset, (0.0005, -0.00125, 0.0))
         self.assertFalse(rows[101][2].wheels[3].on_ground)
         self.assertTrue(rows[201][2].paused)
         fined = [n for n, (_, _, f) in enumerate(rows) if f.game_events]
@@ -83,7 +87,7 @@ class ReplayTest(unittest.TestCase):
         old = self.path.with_name("blocks-old.csv")
         columns = [c for c in rows[0] if c not in ("render_us", "game_throttle", "game_brake", "rpm_max",
                                                    "retarder_steps", "air_pressure", "accel", "wheel_speed",
-                                                   "yaw", "velocity", "airborne", "substances", "game_events")]
+                                                   "yaw", "velocity", "cabin_accel", "cabin_mm", "airborne", "substances", "game_events")]
         for n, row in enumerate(rows):  # written as fast as it goes; a drive takes 8 ms a block
             row["time"] = f"12:00:{n * 0.008:06.3f}" if n < 7500 else row["time"]
         with old.open("w", encoding="utf-8", newline="") as file:
@@ -98,6 +102,7 @@ class ReplayTest(unittest.TestCase):
         self.assertAlmostEqual(got.wheels[2].deflection, sent.wheels[2].deflection, delta=0.00005)
         self.assertEqual(got.accel, (0.0, 0.0, 0.0))
         self.assertEqual(got.velocity, (0.0, 0.0, 0.0))
+        self.assertEqual(got.cabin_accel, (0.0, 0.0, 0.0))
         self.assertGreater(frames[403].render_time, frames[401].render_time)  # from the wall clock
 
     def test_the_settings_it_was_recorded_with(self) -> None:

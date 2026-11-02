@@ -175,6 +175,23 @@ BUMP_GAP_S = 0.06  # s before a wheel knocks again: a step's rebound and the nex
 # straight from the frame before to the frame after.
 SPIKE_MIN = 0.004  # m in one frame, about the bump threshold at 50 fps: smaller moves are left as they are
 SPIKE_BACK = 0.3  # the next frame within this share of the jump from where it started: it came back
+# Now and then the game also sends one physics state on two or more render frames, every
+# wheel to the last bit the same (1 in 200-500 frames at speed in that drive). A leap held
+# over such a repeat passed for a step: in the same drive a front wheel stood at 59 mm for
+# two frames at 35 km/h, came back to 5 on the third and knocked at full strength. So a
+# repeat is not a frame of its own; its time goes to the next one that moves.
+# Slower than a few metres a second the game's leaps also last two to four frames: one wheel
+# 40-70 mm up and staying there, then back (in that drive at 3 and 11 km/h, each knocking at
+# full strength; 22 knocks of half strength or more in 49 min, nearly all in yards). A rolling
+# wheel cannot rise that fast: over a step of height h the wheel's centre climbs at most about
+# sqrt(2h/r) per metre driven, 0.45 for a 5 cm kerb under a 0.5 m wheel. So a wheel that reads
+# further from where it was than LEAP_SLOPE per metre driven plus LEAP_FLOOR per second (the
+# cab rocking, a landing) is held where it was, until it comes back within reach. One that
+# stays out longer than LEAP_HOLD is where the wheel is from then on, without a knock. From
+# about 30 km/h the reach is wider than any leap seen, so the road's own steps are left alone.
+LEAP_SLOPE = 0.5  # m of travel per m driven
+LEAP_FLOOR = 0.5  # m/s
+LEAP_HOLD = 0.15  # s
 # Gear shifts, after the 12 Eaton Fuller shifts (Zeemods) the game plays at each
 # gear change: the lever comes out of gear in a soft knock and slides across
 # the gate, and about 90 ms later the next gear goes in with a clack that rings
@@ -245,9 +262,17 @@ TOGGLEABLE = ("engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarde
 # and fire constantly on rough surfaces, and the brakes vent on every release
 # of the pedal, so neither ducks it.
 DUCK_EXEMPT = ("bumps", "air_brake")
-# Letting go of the service brake vents the brake chambers, as recorded: a
-# valve thump around 35-65 Hz, then a hiss that swells in tens of
-# milliseconds and falls 20 dB in about 0.3 s, louder the harder it braked.
+# Letting go of the service brake vents the brake chambers, as recorded: a hiss
+# that swells in tens of milliseconds and falls 20 dB within 0.17-0.31 s (all
+# four release sets of the Zeemods Western Star and Freightliner packs agree),
+# louder the harder it braked. Only one set (the 4900's) opens with a valve
+# thump at 50-90 Hz; the others, the stock Cascadia among them, have next to
+# nothing below 100 Hz, so the thump is a soft one.
+AIR_BRAKE_THUMP = 0.25  # at gain 1, of the hiss's 0.5
+AIR_BRAKE_HISS_DECAY = 0.105  # s: 20 dB down 0.24 s after it peaks
+# A pedal hitting the floor knocks once on the trigger. At 0.8 it reached 90-112 of 112
+# there, four or five times the trigger's own bed, and was felt as a jolt.
+PEDAL_FLOOR = 0.4
 AIR_BRAKE_HOLD = 0.3  # s the pedal must be held; a dab sends too little air to hear
 AIR_BRAKE_ON, AIR_BRAKE_OFF = 0.1, 0.03  # pedal travel that holds it, and that lets go
 # The flasher relay, after the relay clicks of Sound Fixes Pack and Zeemods: within
@@ -427,6 +452,7 @@ class Equalizer:
         return cls({**cls.DEFAULT, **own})
 
     def __init__(self, curves: dict | None = None) -> None:
+        self.curves = curves or {}  # as given, for the debug log to keep
         self.points: dict[str, list[tuple[float, float]]] = {}
         for channel in self.CHANNELS:
             stored = (curves or {}).get(channel)
@@ -862,6 +888,8 @@ class Synth:
         self.prev_deflection: list[float] = []
         self.deflection_rate_avg: list[float] = []
         self.held_frame: tuple[Frame, list[float], float] | None = None  # the frame read next, its deflections, dt
+        self.repeat_dt = 0.0  # s of repeated frames since the held one
+        self.leap_held: list[float] = []  # s each wheel has been held at its last reading (LEAP_HOLD)
         self.bump_bursts: list[tuple[str, Burst] | None] = []  # each wheel's pulse and its side while it rings
         self.bump_rattles: list[Burst] = []  # the cab's knocks after big hits, all wheels together
         self.rng = random.Random(7)
@@ -895,6 +923,8 @@ class Synth:
         self.brake_held = self.brake_peak = 0.0
         self.prev_deflection = []
         self.held_frame = None
+        self.repeat_dt = 0.0
+        self.leap_held = []
         self.prev_accel = None
         self.prev_gear = None
         self.prev_state = {key: value for key, value in self.prev_state.items() if key == "game_events"}
@@ -917,7 +947,15 @@ class Synth:
 
     def _wheel_events(self, frame: Frame, dt: float) -> None:
         """Bumps and roughness of the frame before this one, once this one shows its spikes (SPIKE_MIN)."""
-        held, self.held_frame = self.held_frame, (frame, [w.deflection for w in frame.wheels + frame.trailer_wheels], dt)
+        deflections = [w.deflection for w in frame.wheels + frame.trailer_wheels]
+        if dt and self.held_frame is not None and deflections == self.held_frame[1]:
+            self.repeat_dt += dt  # the game repeating a state (see SPIKE_BACK): its time belongs to the next real frame
+            return
+        if dt:
+            dt += self.repeat_dt
+            dt = dt if dt <= MAX_FRAME_GAP else 0.0  # repeated that long, it was a hitch
+        self.repeat_dt = 0.0
+        held, self.held_frame = self.held_frame, (frame, deflections, dt)
         if held is None:
             return
         frame, deflections, dt = held
@@ -927,7 +965,25 @@ class Synth:
                 jump = now - before
                 if abs(jump) >= SPIKE_MIN and abs(then - before) < SPIKE_BACK * abs(jump):
                     deflections[i] = before + (then - before) * dt / (dt + after_dt)
+        self._drop_leaps(frame, deflections, dt)
         self._suspension(frame, deflections, dt)
+
+    def _drop_leaps(self, frame: Frame, deflections: list[float], dt: float) -> None:
+        """Hold a wheel where it was while it reads further off than rolling could take it (LEAP_*)."""
+        if len(self.leap_held) != len(deflections):
+            self.leap_held = [0.0] * len(deflections)
+        if not dt or len(self.prev_deflection) != len(deflections):
+            return
+        reach = (LEAP_SLOPE * abs(frame.speed) + LEAP_FLOOR) * dt
+        for i, (before, now) in enumerate(zip(self.prev_deflection, deflections)):
+            if abs(now - before) <= reach:
+                self.leap_held[i] = 0.0
+            elif self.leap_held[i] + dt <= LEAP_HOLD:
+                self.leap_held[i] += dt
+                deflections[i] = before
+            else:  # it stays there: where the wheel is from now on, not a movement
+                self.leap_held[i] = 0.0
+                self.prev_deflection[i] = now
 
     def _suspension(self, frame: Frame, deflections: list[float], dt: float) -> None:
         wheels = frame.wheels + frame.trailer_wheels
@@ -1045,7 +1101,7 @@ class Synth:
         for key, value in (("throttle", frame.user_throttle), ("brake", frame.user_brake)):
             floored = value >= 0.97
             if self._changed(f"{key}_floor", floored) and floored and g.pedal:
-                self._both("pedal", Burst(130.0, 0.8 * g.pedal, 0.012, phase=0.25))
+                self._both("pedal", Burst(130.0, PEDAL_FLOOR * g.pedal, 0.012, phase=0.25))
                 log.append(t("페달 바닥"))
 
         if self._changed("park_brake", frame.park_brake) and g.park_brake:
@@ -1080,8 +1136,8 @@ class Synth:
         elif frame.user_brake < AIR_BRAKE_OFF:
             if self.brake_held >= AIR_BRAKE_HOLD and g.air_brake and frame.air_pressure > 30.0:
                 s = g.air_brake * (0.4 + 0.6 * self.brake_peak)
-                self._both("air_brake", Burst(50.0, 0.6 * s, 0.03, phase=0.25))
-                self._both("air_brake", NoiseBurst(250.0, 0.5 * s, 0.15, delay_s=0.01, attack_s=0.04))
+                self._both("air_brake", Burst(50.0, AIR_BRAKE_THUMP * s, 0.03, phase=0.25))
+                self._both("air_brake", NoiseBurst(250.0, 0.5 * s, AIR_BRAKE_HISS_DECAY, delay_s=0.01, attack_s=0.04))
             self.brake_held = self.brake_peak = 0.0
 
         # The lamp flag toggles with every flash; the relay clicks on both edges.

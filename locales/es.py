@@ -246,11 +246,24 @@ MESSAGES = {
         "Muestra las notas de la versión y luego descarga, instala y reinicia. Tus ajustes se conservan.",
     "게임에 설치된 텔레메트리 플러그인을 확인하고, 없으면 동봉한 플러그인을 설치합니다.":
         "Muestra el plugin de telemetría instalado en cada juego e instala el incluido si hace falta.",
-    ("ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n테스트 주행: 게임 없이 60초 시나리오를 재생합니다. 효과 확인과 튜닝용입니다.\n실행 "
-     "중에는 바꿀 수 없습니다."):
-        ("Juego ATS/ETS2: vibración a partir de la telemetría; el mando solo se usa mientras el juego está "
-         "abierto.\nPrueba de manejo: reproduce un escenario de 60 s sin el juego, para revisar y ajustar los "
-         "efectos.\nNo se puede cambiar en marcha."),
+    'ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n테스트 주행: 게임 없이 옆의 ▾에서 고른 주행을 재생합니다. 효과 확인과 튜닝용입니다.\n실행 중에는 바꿀 수 없습니다.':
+        'Juego ATS/ETS2: vibración a partir de la telemetría; el mando solo se usa mientras el juego está abierto.\nPrueba de manejo: reproduce sin el juego el recorrido elegido en el ▾ de al lado, para revisar y ajustar los efectos.\nNo se puede cambiar en marcha.',
+    '테스트 주행이 재생할 주행입니다. 기본 60초는 모든 효과를 한 번씩, 고속도로·시내·산길은 효과가 겹치는 실제 주행 몇 분입니다. 디버그 기록 재생은 기록해 둔 주행을 지금 설정으로 다시 느껴 봅니다. 실행 중에는 바꿀 수 없습니다.':
+        'Lo que reproduce la prueba de manejo. La de 60 s toca cada efecto una vez; autopista, ciudad y montaña son unos minutos de conducción real donde los efectos se juntan. Reproducir registro de depuración vuelve a reproducir un recorrido grabado con los ajustes actuales. No se puede cambiar en marcha.',
+    '기본 60초':
+        'Básica 60 s',
+    '고속도로 4분':
+        'Autopista 4 min',
+    '시내 2분 30초':
+        'Ciudad 2,5 min',
+    '산길 3분':
+        'Montaña 3 min',
+    '디버그 기록 재생…':
+        'Reproducir registro de depuración…',
+    '재생할 디버그 기록':
+        'Registro de depuración a reproducir',
+    '기록 {date}':
+        'Registro {date}',
     "진동 출력을 시작하거나 멈춥니다. 정지하면 모터를 끄고 컨트롤러를 놓습니다.":
         "Inicia o detiene la vibración. Al detener se apagan los motores y se libera el mando.",
     "슬라이더, 켜기/끄기, 진동 위치를 %APPDATA%\\ATSHaptics\\config.json에 저장합니다. 프리셋을 쓰는 중이면 그 프리셋에도 저장합니다. 저장하지 않은 변경이 있으면 버튼이 파랗게 바뀝니다.":

@@ -4,6 +4,7 @@
   python ats_haptics.py --simulate      scripted 60 s test drive, no game needed
   python ats_haptics.py --simulate --sim-fps 30   the same drive as a 30 fps game (0: new data every block)
   python ats_haptics.py --scenario city   a few minutes of real driving: highway, city or mountain (scenarios.py)
+  python ats_haptics.py --replay LOG.csv  a drive recorded by the debug log, again (replay.py; --from/--to HH:MM:SS)
   python ats_haptics.py --dry-run       no controller; print levels only
   python ats_haptics.py --gain 0.8 --road 0.4 --trigger 0.3 --monitor
   python ats_haptics.py --exit-with-game
@@ -29,6 +30,7 @@ from effects import Equalizer, Gains, Synth, effective_gains
 from gamewatch import GameWatcher
 from i18n import set_language, system_language, t
 from preview import Preview
+from replay import LogTelemetry
 from scenarios import SCENARIOS, ScenarioTelemetry
 from settings import load_app_options, load_eq, load_gains
 from telemetry import SIMULATED_FPS, Frame, SharedMemoryTelemetry, SimulatedTelemetry
@@ -48,13 +50,16 @@ class Runner:
     def __init__(self, gains: Gains, simulate: bool = False,
                  on_state: Callable[[str], None] | None = None, seconds: float | None = None,
                  log_blocks: bool = False, sim_fps: float | None = SIMULATED_FPS,
-                 eq: Equalizer | None = None, scenario: str | None = None) -> None:
+                 eq: Equalizer | None = None, scenario: str | None = None,
+                 replay: tuple[str, str | None, str | None] | None = None) -> None:
         self.gains = effective_gains(gains)
         self.eq = eq or Equalizer()
         self.synth = Synth(self.gains, self.eq)
-        simulate = simulate or scenario is not None
+        simulate = simulate or scenario is not None or replay is not None
         self.simulated = simulate
-        if scenario is not None:
+        if replay is not None:  # (log, from, to)
+            self.source = LogTelemetry(*replay)
+        elif scenario is not None:
             self.source = ScenarioTelemetry(SCENARIOS[scenario], sim_fps)
         else:
             self.source = SimulatedTelemetry(sim_fps) if simulate else SharedMemoryTelemetry()
@@ -160,7 +165,7 @@ class Runner:
             return
         try:
             self.block_log = BlockLog(info={"version": __version__, "source": self.source.name,
-                                            "gains": asdict(self.gains), "eq": self.eq.points})
+                                            "gains": asdict(self.gains), "eq_curves": self.eq.curves})
             self.events.append(f"{stamp} {t('디버그 기록: {name}', name=self.block_log.path.name)}")
         except OSError as exc:
             self._log_here = False  # not again every 8 ms; the next connection tries afresh
@@ -274,6 +279,9 @@ def parse_args(defaults: Gains) -> argparse.Namespace:
                         help="game frame rate the scripted drive updates at; 0 updates every 8 ms block")
     parser.add_argument("--scenario", choices=sorted(SCENARIOS),
                         help="play a few minutes of real driving instead of the game (implies --simulate)")
+    parser.add_argument("--replay", metavar="LOG", help="play a debug log's drive instead of the game (replay.py)")
+    parser.add_argument("--from", dest="replay_from", metavar="HH:MM:SS", help="where in the log to start")
+    parser.add_argument("--to", dest="replay_to", metavar="HH:MM:SS", help="where in the log to stop")
     parser.add_argument("--dry-run", action="store_true", help="do not open the controller")
     parser.add_argument("--monitor", action="store_true", help="print a status line twice a second")
     parser.add_argument("--seconds", type=float, help="stop after this many seconds")
@@ -303,6 +311,7 @@ def main() -> None:
         setattr(gains, name, getattr(args, name))
     runner = Runner(gains, simulate=args.simulate, seconds=args.seconds, log_blocks=args.log_blocks,
                     sim_fps=args.sim_fps or None, eq=Equalizer.for_player(load_eq()), scenario=args.scenario,
+                    replay=(args.replay, args.replay_from, args.replay_to) if args.replay else None,
                     on_state=lambda s: print(f"\n[{time.strftime('%H:%M:%S')}] {s}", flush=True))
     monitor = args.monitor or args.dry_run
     if monitor:

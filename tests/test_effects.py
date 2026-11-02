@@ -104,7 +104,7 @@ class ResumeTest(unittest.TestCase):
         self.gap(s)
         s.render(frame(deflection=0.025))
         s.render(frame(deflection=0.035))  # a real 10 mm step on the next block
-        s.render(frame(deflection=0.035))  # that stays: the frame after shows it was no spike
+        s.render(frame(deflection=0.0348))  # that stays, settling: the frame after shows it was no spike
         self.assertIn("bumps", effects_of(s))
 
     def test_game_event_on_resume_still_fires(self) -> None:
@@ -126,7 +126,7 @@ class BumpTest(unittest.TestCase):
 
     def test_pulse_rises_to_the_stronger_hit(self) -> None:
         s = synth()
-        for depth in (0.02, 0.0225, 0.0325, 0.0325):  # a pothole: a slight dip first, then the hard edge
+        for depth in (0.02, 0.0225, 0.0325, 0.0324):  # a pothole: a slight dip first, then the hard edge
             s.render(frame(deflection=depth, truck_wheels=1))
         pulses = [entry[1] for entry in s.bump_bursts if entry]
         self.assertEqual(len(pulses), 1)
@@ -135,9 +135,9 @@ class BumpTest(unittest.TestCase):
 
     @staticmethod
     def hit(step: float, trailer: bool = False) -> Synth:
-        """One wheel dropping by step metres within a block, and staying there."""
+        """One wheel dropping by step metres within a block, and staying there as it settles."""
         s = synth()
-        for depth in (0.02, 0.02 + step, 0.02 + step):
+        for depth in (0.02, 0.02 + step, 0.02 + 0.97 * step):
             f = frame(deflection=depth, truck_wheels=0 if trailer else 1, trailer_wheels=1 if trailer else 0)
             if trailer:
                 f.trailer_wheels[0].deflection = depth
@@ -162,6 +162,37 @@ class BumpTest(unittest.TestCase):
             s.render(frame(deflection=list(depths)))
             self.assertNotIn("bumps", effects_of(s))
         self.assertLess(max(s.roughness), 0.01)
+
+    def test_a_leap_held_over_a_repeated_frame_is_no_bump(self) -> None:
+        # the game sent the leap twice, every wheel the same, then came back
+        s, depths = synth(), [0.02] * 6
+        for n in range(60):
+            depths[1] = 0.07 if n in (30, 31) else 0.02
+            s.render(frame(deflection=list(depths)))
+            self.assertNotIn("bumps", effects_of(s))
+
+    def test_a_leap_of_a_few_frames_at_walking_pace_is_no_bump(self) -> None:
+        # in a yard at 5 km/h: one wheel 50 mm up for three frames, rising, then back
+        s, depths = synth(), [0.02] * 6
+        for n in range(60):
+            depths[1] = {30: 0.07, 31: 0.075, 32: 0.08}.get(n, 0.02 + 0.0001 * (n % 2))
+            s.render(frame(deflection=list(depths), speed=1.4))
+            self.assertNotIn("bumps", effects_of(s))
+
+    def test_a_kerb_at_walking_pace_still_knocks(self) -> None:
+        # the front wheel climbing 40 mm over five frames at 9 km/h, as a wheel rolls up a kerb
+        s, depths = synth(), [0.02] * 6
+        for n in range(30):
+            depths[0] = 0.02 + 0.008 * min(5, max(0, n - 10)) + 0.0001 * (n % 2)
+            s.render(frame(deflection=list(depths), speed=2.5))
+        self.assertIn("bumps", effects_of(s))
+
+    def test_a_leap_at_speed_is_left_to_the_spike_rules(self) -> None:
+        s, depths = synth(), [0.02] * 6
+        for n in range(60):
+            depths[1] = {30: 0.07, 31: 0.075, 32: 0.08}.get(n, 0.02 + 0.0001 * (n % 2))
+            s.render(frame(deflection=list(depths)))  # 22 m/s: a wheel could get there
+        self.assertIn("bumps", effects_of(s))
 
     def test_a_step_knocks_one_frame_late(self) -> None:
         s = synth()
@@ -872,7 +903,7 @@ class FrameRateTest(unittest.TestCase):
         s.render(frame(deflection=0.03, accel=(3.0, 0.0, -20.0), render_time=0))
         self.assertEqual(effects_of(s), [])
         s.render(frame(deflection=0.04, accel=(3.0, 0.0, -20.0), render_time=int(1e6 / 60)))  # and they work again
-        s.render(frame(deflection=0.04, accel=(3.0, 0.0, -20.0), render_time=int(2e6 / 60)))
+        s.render(frame(deflection=0.0398, accel=(3.0, 0.0, -20.0), render_time=int(2e6 / 60)))
         self.assertIn("bumps", effects_of(s))
 
 

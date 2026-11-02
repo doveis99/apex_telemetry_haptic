@@ -46,6 +46,7 @@ from version import __version__
 from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Equalizer, Gains, route_of
 from gamewatch import GameWatcher
 from preview import ROAD_SURFACES, SURFACE_STEP_S, Player, Preview
+from scenarios import SCENARIOS
 from settings import (delete_preset, load_app_options, load_eq, load_gains, load_presets, save_app_options, save_eq,
                       save_gains, save_preset)
 from widgets import (ACCENT, BG, BOTH_COLOR, CARD, FAINT, FIELD_HI, GO, GRIP_COLOR, MUTED, STOP, TEXT, TILE,
@@ -163,6 +164,8 @@ ROUTE_COLORS = {route: color for route, _, color in ROUTE_OPTIONS}
 LEVEL_COLORS = {"master": ACCENT, "grip_level": GRIP_COLOR, "trigger_level": TRIGGER_COLOR,
                 "throttle_pulse": TRIGGER_COLOR}
 # not translated: whoever cannot read the current language still finds the menu
+# what 테스트 주행 plays, besides a debug log: the 60 s drive of telemetry.py and the scenarios
+DRIVES = {"": N_("기본 60초"), "highway": N_("고속도로 4분"), "city": N_("시내 2분 30초"), "mountain": N_("산길 3분")}
 LANGUAGE_TIP = "Language · 언어 · 言語 · 语言 · Sprache · Langue · Idioma · Język · Язык"
 
 
@@ -248,8 +251,14 @@ class App:
         self.source_picker = Segmented(control, (("game", t("ATS/ETS2 게임"), ACCENT), ("sim", t("테스트 주행"), ACCENT)),
                                        self._on_source, segment_width=104, height=32, size=10)
         tip(self.source_picker, t("ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n"
-                                  "테스트 주행: 게임 없이 60초 시나리오를 재생합니다. 효과 확인과 튜닝용입니다.\n"
+                                  "테스트 주행: 게임 없이 옆의 ▾에서 고른 주행을 재생합니다. 효과 확인과 튜닝용입니다.\n"
                                   "실행 중에는 바꿀 수 없습니다.")).pack(side="left")
+        if not hasattr(self, "drive"):  # kept across a language change
+            self.drive = ""  # what 테스트 주행 plays: "" the 60 s drive, a scenario's name or a debug log's path
+        self.drive_button = Button(control, "", self._drive_menu, size=9, height=30, bg=CARD)
+        tip(self.drive_button, t("테스트 주행이 재생할 주행입니다. 기본 60초는 모든 효과를 한 번씩, 고속도로·시내·산길은 "
+                                 "효과가 겹치는 실제 주행 몇 분입니다. 디버그 기록 재생은 기록해 둔 주행을 지금 설정으로 "
+                                 "다시 느껴 봅니다. 실행 중에는 바꿀 수 없습니다.")).pack(side="left", padx=(px(6), 0))
         self.run_button = Button(control, t("▶  시작"), self.toggle_run, kind="go", size=11, height=36,
                                  min_width=120, bg=CARD)
         tip(self.run_button, t("진동 출력을 시작하거나 멈춥니다. 정지하면 모터를 끄고 컨트롤러를 놓습니다.")).pack(
@@ -533,6 +542,40 @@ class App:
     def _on_source(self, source: str) -> None:
         self.source.set(source)
 
+    def _drive_label(self) -> str:
+        if self.drive in DRIVES:
+            return t(DRIVES[self.drive])
+        stem = Path(self.drive).stem  # blocks-20261031-183522
+        _, day, clock = (stem.split("-") + ["", "", ""])[:3]
+        date = f"{day[4:6]}/{day[6:8]} {clock[:2]}:{clock[2:4]}" if len(day) == 8 and len(clock) >= 4 else stem
+        return t("기록 {date}", date=date)
+
+    def _drive_menu(self) -> None:
+        """What 테스트 주행 plays: the 60 s drive, a scenario or a recorded drive. Picking one selects 테스트 주행."""
+        menu = tk.Menu(self.root, tearoff=False, bg=TILE, fg=TEXT, activebackground=FIELD_HI,
+                       activeforeground=TEXT, selectcolor=ACCENT, bd=0)
+        current = tk.StringVar(value=self.drive)
+        for value, name in DRIVES.items():
+            menu.add_radiobutton(label=t(name), value=value, variable=current, command=lambda v=value: self._set_drive(v))
+        menu.add_separator()
+        menu.add_command(label=t("디버그 기록 재생…"), command=self._pick_log)
+        button = self.drive_button
+        try:
+            menu.tk_popup(button.winfo_rootx(), button.winfo_rooty() + button.winfo_height())
+        finally:
+            menu.grab_release()
+
+    def _pick_log(self) -> None:
+        path = filedialog.askopenfilename(parent=self.root, title=t("재생할 디버그 기록"),
+                                          initialdir=LOG_DIR if LOG_DIR.exists() else None,
+                                          filetypes=[("CSV", "blocks-*.csv"), ("CSV", "*.csv")])
+        if path:
+            self._set_drive(path)
+
+    def _set_drive(self, drive: str) -> None:
+        self.drive = drive
+        self.source.set("sim")  # redraws the picker through _show_run_state
+
     def _surface_menu(self, button: Button) -> None:
         """The road's ▶: asphalt then gravel as before, every surface in turn, or one alone."""
         menu = tk.Menu(self.root, tearoff=False, bg=TILE, fg=TEXT, activebackground=FIELD_HI,
@@ -768,6 +811,7 @@ class App:
         else:
             self.run_button.set(t("■  정지"), kind="danger", state="normal")
         self.source_picker.set(self.source.get(), locked=running)
+        self.drive_button.set(f"{self._drive_label()}  ▾", state="disabled" if running else "normal")
 
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
@@ -778,8 +822,11 @@ class App:
         self.error = None
         self.connected = None
         self.events.delete(0, "end")
-        self.runner = Runner(self.gains, simulate=self.source.get() == "sim", log_blocks=self.options.debug_log,
-                             eq=Equalizer.for_player(load_eq()))  # read at each start: a new calibration applies
+        sim = self.source.get() == "sim"
+        self.runner = Runner(self.gains, simulate=sim, log_blocks=self.options.debug_log,
+                             eq=Equalizer.for_player(load_eq()),  # read at each start: a new calibration applies
+                             scenario=self.drive if sim and self.drive in SCENARIOS else None,
+                             replay=(self.drive, None, None) if sim and self.drive not in DRIVES else None)
         self.thread = threading.Thread(target=self._worker, args=(self.runner,), daemon=True)
         self.thread.start()
         self._show_run_state()

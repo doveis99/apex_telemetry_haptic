@@ -237,11 +237,24 @@ MESSAGES = {
         "Pokazuje informacje o wydaniu, a potem pobiera, instaluje i uruchamia ponownie. Ustawienia zostają.",
     "게임에 설치된 텔레메트리 플러그인을 확인하고, 없으면 동봉한 플러그인을 설치합니다.":
         "Pokazuje wtyczkę telemetrii zainstalowaną w każdej grze i w razie potrzeby instaluje dołączoną.",
-    ("ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n테스트 주행: 게임 없이 60초 시나리오를 재생합니다. 효과 확인과 튜닝용입니다.\n실행 "
-     "중에는 바꿀 수 없습니다."):
-        ("Gra ATS/ETS2: wibracje z telemetrii gry; kontroler jest używany tylko, gdy gra działa.\nJazda testowa: "
-         "odtwarza 60-sekundowy scenariusz bez gry, do sprawdzania i strojenia efektów.\nNie można zmienić w "
-         "trakcie działania."),
+    'ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n테스트 주행: 게임 없이 옆의 ▾에서 고른 주행을 재생합니다. 효과 확인과 튜닝용입니다.\n실행 중에는 바꿀 수 없습니다.':
+        'Gra ATS/ETS2: wibracje z telemetrii gry; kontroler jest używany tylko, gdy gra działa.\nJazda testowa: odtwarza bez gry przejazd wybrany w ▾ obok, do sprawdzania i strojenia efektów.\nNie można zmienić w trakcie działania.',
+    '테스트 주행이 재생할 주행입니다. 기본 60초는 모든 효과를 한 번씩, 고속도로·시내·산길은 효과가 겹치는 실제 주행 몇 분입니다. 디버그 기록 재생은 기록해 둔 주행을 지금 설정으로 다시 느껴 봅니다. 실행 중에는 바꿀 수 없습니다.':
+        'Co odtwarza jazda testowa. Domyślna 60 s odtwarza każdy efekt raz; autostrada, miasto i góry to kilka minut prawdziwej jazdy, w której efekty się nakładają. Odtwórz dziennik debugowania odtwarza nagrany przejazd z obecnymi ustawieniami. Nie można zmienić w trakcie działania.',
+    '기본 60초':
+        'Domyślna 60 s',
+    '고속도로 4분':
+        'Autostrada 4 min',
+    '시내 2분 30초':
+        'Miasto 2,5 min',
+    '산길 3분':
+        'Góry 3 min',
+    '디버그 기록 재생…':
+        'Odtwórz dziennik debugowania…',
+    '재생할 디버그 기록':
+        'Dziennik debugowania do odtworzenia',
+    '기록 {date}':
+        'Dziennik {date}',
     "진동 출력을 시작하거나 멈춥니다. 정지하면 모터를 끄고 컨트롤러를 놓습니다.":
         "Uruchamia lub zatrzymuje wibracje. Zatrzymanie wyłącza silniki i zwalnia kontroler.",
     "슬라이더, 켜기/끄기, 진동 위치를 %APPDATA%\\ATSHaptics\\config.json에 저장합니다. 프리셋을 쓰는 중이면 그 프리셋에도 저장합니다. 저장하지 않은 변경이 있으면 버튼이 파랗게 바뀝니다.":

@@ -4,7 +4,7 @@ Off by default (app option debug_log, or --log-blocks on the command line).
 Each session writes %APPDATA%\\ATSHaptics\\logs\\blocks-<date>-<time>.csv and
 beside it a .json with the version, the telemetry source, the settings and
 the motor curves it started with; only the newest KEEP sessions are kept.
-About 80 MB per hour of driving.
+About 90 MB per hour of driving.
 
 When something feels wrong, note the time on the clock and look up that row.
 The columns, so a row answers what the game said, what the synth made of it
@@ -25,6 +25,13 @@ and what reached the motors:
   deflection_mm  suspension of every wheel, truck then trailers, left to
                  right axle by axle; only on a new frame, to see what a bump
                  was made of (or why one fired on a smooth road)
+  render_us ... game_events
+                 the rest of a new frame, for replay.py to play the drive
+                 back as the game sent it: the game's clock, the throttle and
+                 brake it applied, the truck's rpm limit, retarder steps and
+                 air pressure, acceleration, each truck wheel's rim speed,
+                 wheels off the ground, every wheel's substance (only when one
+                 changed) and the plugin's one-shot events
   engine, road_l, road_r, trigger_level, trigger_mode
                  the continuous effects' levels before the output stage
   fresh          engine/road/trigger steady fade: 1 just after a change,
@@ -40,6 +47,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import time
 from datetime import datetime
 from pathlib import Path
@@ -55,11 +63,14 @@ if TYPE_CHECKING:
 LOG_DIR = CONFIG_PATH.parent / "logs"
 KEEP = 10
 FLUSH_S = 1.0
+TAU = 2.0 * math.pi
 COLUMNS = ("time", "gap_ms", "new_frame", "route", "trigger", "left_grip", "right_grip",
            "speed_kmh", "rpm", "gear", "gear_engine", "throttle", "brake", "retarder", "engine_brake", "park_brake",
            "blinkers", "shifter", "engine_on", "trailer", "surface_l", "surface_r", "deflection_mm",
+           "render_us", "game_throttle", "game_brake", "rpm_max", "retarder_steps", "air_pressure", "accel",
+           "wheel_speed", "airborne", "substances", "game_events",
            "engine", "road_l", "road_r", "trigger_level", "trigger_mode", "fresh", "duck", "sounding", "events")
-GAME_COLUMNS = COLUMNS.index("deflection_mm") + 1 - COLUMNS.index("speed_kmh")
+GAME_COLUMNS = COLUMNS.index("game_events") + 1 - COLUMNS.index("speed_kmh")
 
 
 def _peak(samples: Sequence[float]) -> int:
@@ -91,7 +102,20 @@ class BlockLog:
         self._csv.writerow(COLUMNS)
         self._last: float | None = None
         self._last_render_time: int | None = None
+        self._substances = ""
         self._flushed = time.monotonic()
+
+    def _frame_columns(self, frame: Frame) -> tuple[str, ...]:
+        """deflection_mm to game_events, written on a new frame only: in between the frame is the same."""
+        wheels = frame.wheels + frame.trailer_wheels
+        substances = "/".join(w.substance for w in wheels)
+        changed, self._substances = substances != self._substances, substances
+        return ("/".join(f"{w.deflection * 1000:.1f}" for w in wheels), frame.render_time,
+                f"{frame.game_throttle:.2f}", f"{frame.game_brake:.2f}", f"{frame.rpm_max:.0f}",
+                frame.retarder_steps, f"{frame.air_pressure:.0f}", "/".join(f"{a:.2f}" for a in frame.accel),
+                "/".join(f"{abs(w.velocity) * TAU * w.radius:.2f}" for w in frame.wheels),
+                "/".join(str(i) for i, w in enumerate(wheels) if not w.on_ground),
+                substances if changed else "", " ".join(sorted(frame.game_events)))
 
     def add(self, block: Block, frame: Frame | None, events: Sequence[str], synth: Synth | None = None,
             preview: str = "") -> None:
@@ -102,14 +126,13 @@ class BlockLog:
         if frame is not None:
             new_frame = _flag(frame.render_time != self._last_render_time)
             self._last_render_time = frame.render_time
-            deflection = "/".join(f"{w.deflection * 1000:.1f}" for w in frame.wheels + frame.trailer_wheels)
             game = (f"{frame.speed * 3.6:.1f}", f"{frame.rpm:.0f}", frame.gear, frame.gear_engine,
                     f"{frame.user_throttle:.2f}", f"{frame.user_brake:.2f}", frame.retarder or "",
                     _flag(frame.motor_brake), _flag(frame.park_brake),
                     "L" * frame.blinker_left + "R" * frame.blinker_right,
                     "R" * frame.shifter_toggle[0] + "S" * frame.shifter_toggle[1],
                     _flag(frame.engine_on), _flag(frame.trailer_attached), _side(frame, -1), _side(frame, 1),
-                    deflection if new_frame else "")
+                    *(self._frame_columns(frame) if new_frame else ("",) * 12))
         else:
             game = ("",) * GAME_COLUMNS
         if synth is not None:

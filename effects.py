@@ -231,6 +231,15 @@ CAB_JOLT_HZ = (55.0, 40.0)  # smallest and largest lurch: the heavy cab knocks l
 CAB_JOLT_DECAY = (0.04, 0.08)  # s
 CAB_RATTLE = (0.003, 0.05)  # (rad/s^2)^2 of shaking where the cab's rattle starts (pavement's 99th percentile) and is full
 CAB_SETTLE_TAU = 0.25  # s for the shaking the rattle follows to die away
+# The lurches alone left the road's own strength alike: in a 40 min drive (2026-11-02) the
+# grips' median was 22 of 112 on a dirt road below 30 km/h and on the highway. The cab's
+# shaking (the square above, settling over CAB_SETTLE_TAU) had a median of 0.004-0.01 on that
+# dirt road and 0.0004 on the highway, whose 90th percentile is 0.0014: 0.037 rad/s^2. So the
+# road also grows with the cab's shaking, from CAB_TEXTURE[0] rad/s^2, by its full strength at
+# CAB_TEXTURE[1], where the dirt road shook at 15-30 km/h: replayed, the dirt road's median came
+# to 31-36 against the highway's 21-22, and pavement's moved by less than 1. Full at 0.24, its
+# 90th percentile, it came only to 27-32.
+CAB_TEXTURE = (0.04, 0.12)
 # The game's wheel deflection now and then leaps 25-100 mm for a single frame
 # and is back on the next one, on one wheel, at any speed: in a 49 min drive
 # (2026-10-31) four in five bump knocks came from such a frame, and nearly
@@ -1431,7 +1440,9 @@ class Synth:
                 surface = side_surface(wheels)
                 self.texture[side].tune(surface, speed, self.roughness[side], self.cab_shake)
                 rough = self.roughness[side]
-                texture = min(1.0, surface.level * speed_factor + min(1.0, (rough / ROUGH_FULL) ** ROUGH_POWER))
+                cab_low, cab_full = CAB_TEXTURE
+                cab = min(1.0, max(0.0, (math.sqrt(self.cab_shake) - cab_low) / (cab_full - cab_low)))
+                texture = min(1.0, surface.level * speed_factor + min(1.0, (rough / ROUGH_FULL) ** ROUGH_POWER) + cab)
                 # what counts as rougher ground stays in proportion (ROUGH_NOVELTY): squared, the
                 # highway's every jolt took the road out of its fade
                 road_moved = max(road_moved, self._novelty(f"road_{side}", min(1.0, surface.level * speed_factor

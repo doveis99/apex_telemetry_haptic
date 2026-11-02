@@ -260,6 +260,15 @@ class BumpTest(unittest.TestCase):
         self.assertLess(small[0].amplitude, big[0].amplitude)
         self.assertLess(big[0].freq, small[0].freq)  # the heavier lurch knocks lower
 
+    def test_a_shaking_cab_raises_the_road(self) -> None:
+        def road(accel: float) -> float:
+            s = synth()
+            for n in range(100):
+                s.render(frame(deflection=0.02 + 0.0001 * (n % 2), cabin_accel=(0.0, 0.0, accel * (-1) ** n)))
+            return s.levels.road_left
+        self.assertEqual(road(0.03), road(0.0))  # the highway's own shaking
+        self.assertGreater(road(0.12), 1.5 * road(0.0))  # a dirt road's
+
     def test_the_cab_lurches_once_while_it_swings(self) -> None:
         self.assertEqual(len(self.lurches([0.0] * 10 + [0.3, 0.4, -0.3, 0.3, 0.0])), 1)  # within CAB_JOLT_GAP
 

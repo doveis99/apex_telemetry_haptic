@@ -15,6 +15,8 @@ how loud each channel ran.
 Logs from before 0.16.0 hold only what the columns up to deflection_mm show: no
 acceleration (no impacts), no wheel speeds (no wheelspin or lock), the front axle's
 substance for every wheel on its side, and the game's clock from the wall clock.
+No log says which wheels are driven or where they sit, so every truck wheel counts as
+driven and a turn (yaw, logged since 0.16.0) moves each side by a metre's worth.
 """
 
 from __future__ import annotations
@@ -112,6 +114,7 @@ class _State:
                       retarder_steps=int(x["retarder_steps"]) if x.get("retarder_steps") else max(4, retarder),
                       engine_on=flag("engine_on"), motor_brake=flag("engine_brake"), park_brake=flag("park_brake"),
                       accel=tuple(_floats(x.get("accel", ""))) or (0.0, 0.0, 0.0),
+                      yaw_rate=float(x.get("yaw") or 0.0),
                       air_pressure=float(x.get("air_pressure") or 120.0),
                       blinker_left="L" in row["blinkers"], blinker_right="R" in row["blinkers"],
                       shifter_toggle=("R" in row["shifter"], "S" in row["shifter"]),

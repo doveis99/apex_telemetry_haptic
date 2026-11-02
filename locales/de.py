@@ -27,6 +27,7 @@ MESSAGES = {
     "기차": "Zug",
     "주유": "Tanken",
     "변속 {gear}단": "Schaltung in Gang {gear}",
+    "회전 각속도 부호 뒤집음 (바퀴 속도 기준)": "Vorzeichen der Gierrate umgekehrt (nach den Raddrehzahlen)",
     "충돌 {accel} m/s²": "Aufprall {accel} m/s²",
     "페달 바닥": "Pedal am Anschlag",
     "파킹 브레이크 체결": "Feststellbremse an",

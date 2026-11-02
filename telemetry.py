@@ -51,6 +51,9 @@ _FIELDS = {
     "engine_on": (1576, "?"),
     "blinker_left": (1580, "?"),  # lamp state, toggles with each flash
     "blinker_right": (1581, "?"),
+    # Angular velocity about the truck's up axis, rad/s; positive turning left
+    # (the SDK's local space: x right, y up, z back).
+    "yaw_rate": (1884, "f"),
     "accel_x": (1892, "f"),
     "accel_y": (1896, "f"),
     "accel_z": (1900, "f"),
@@ -60,8 +63,10 @@ _ARRAYS = {
     "wheel_radius": (752, "16f"),
     "wheel_deflection": (1072, "16f"),
     "wheel_velocity": (1136, "16f"),  # rotations per second
+    "wheel_powered": (1532, "16?"),  # the truck's drive axles (configuration)
     "wheel_on_ground": (1590, "16?"),
     "wheel_pos_x": (1676, "16f"),  # negative = left side of the truck
+    "wheel_pos_z": (1804, "16f"),  # negative = ahead of the truck's origin
     "shifter_toggle": (1606, "2?"),  # H-shifter range / splitter switches
     # Gameplay event flags; the plugin raises them briefly when the event fires.
     "game_events": (4303, "6?"),
@@ -89,8 +94,11 @@ class Wheel:
     on_ground: bool = True
     substance: str = "road"
     pos_x: float = 0.0
+    pos_z: float = 0.0
     velocity: float = 0.0
     radius: float = 0.5
+    # Driven by the engine. Logs and older sources don't say, so it counts unless told otherwise.
+    powered: bool = True
 
 
 @dataclass
@@ -113,6 +121,7 @@ class Frame:
     motor_brake: bool = False
     park_brake: bool = False
     accel: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    yaw_rate: float = 0.0  # rad/s, positive turning left
     wheels: list[Wheel] = field(default_factory=list)
     trailer_wheels: list[Wheel] = field(default_factory=list)  # every attached trailer's, in order
     air_pressure: float = 120.0
@@ -180,10 +189,10 @@ class SharedMemoryTelemetry:
         self._substances_read_at = time.monotonic()
 
     def _wheel(self, substance: int, deflection: float, on_ground: bool, pos_x: float, velocity: float,
-               radius: float) -> Wheel:
+               radius: float, powered: bool = True, pos_z: float = 0.0) -> Wheel:
         name = self._substances[substance] if substance < len(self._substances) else ""
-        return Wheel(deflection=deflection, on_ground=on_ground, substance=name, pos_x=pos_x,
-                     velocity=velocity, radius=radius or 0.5)
+        return Wheel(deflection=deflection, on_ground=on_ground, substance=name, pos_x=pos_x, pos_z=pos_z,
+                     velocity=velocity, radius=radius or 0.5, powered=powered)
 
     def read(self) -> Frame | None:
         if self._mem is None and not self._open():
@@ -195,9 +204,12 @@ class SharedMemoryTelemetry:
             self._read_substances(buf)
 
         count = min(values["wheel_count"], MAX_WHEELS)
+        # a truck with no driven wheel is configuration not filled in yet: count them all
+        powered = arrays["wheel_powered"] if any(arrays["wheel_powered"][:count]) else (True,) * MAX_WHEELS
         wheels = [self._wheel(arrays["wheel_substance"][i], arrays["wheel_deflection"][i],
                               arrays["wheel_on_ground"][i], arrays["wheel_pos_x"][i],
-                              arrays["wheel_velocity"][i], arrays["wheel_radius"][i]) for i in range(count)]
+                              arrays["wheel_velocity"][i], arrays["wheel_radius"][i], powered[i],
+                              arrays["wheel_pos_z"][i]) for i in range(count)]
         trailer_attached = False
         trailer_wheels = []
         for i in range(min(values["max_trailers"] or 1, MAX_TRAILERS)):
@@ -209,7 +221,7 @@ class SharedMemoryTelemetry:
             columns = (struct.unpack_from(f"{count}{fmt}", buf, base + off) for fmt, off in (
                 ("I", _TRAILER_WHEEL_SUBSTANCE), ("f", _TRAILER_WHEEL_DEFLECTION), ("?", _TRAILER_WHEEL_ON_GROUND),
                 ("f", _TRAILER_WHEEL_POS_X), ("f", _TRAILER_WHEEL_VELOCITY), ("f", _TRAILER_WHEEL_RADIUS)))
-            trailer_wheels += [self._wheel(*wheel) for wheel in zip(*columns)]
+            trailer_wheels += [self._wheel(*wheel, powered=False) for wheel in zip(*columns)]
         return Frame(
             active=values["sdk_active"], paused=values["paused"], render_time=values["render_time"],
             rpm=values["rpm"], rpm_max=values["rpm_max"] or 2100.0, speed=values["speed"],
@@ -217,7 +229,7 @@ class SharedMemoryTelemetry:
             game_throttle=values["game_throttle"], game_brake=values["game_brake"],
             gear=values["gear"], gear_engine=values["gear_engine"], retarder=values["retarder"], retarder_steps=values["retarder_steps"],
             engine_on=values["engine_on"], motor_brake=values["motor_brake"], park_brake=values["park_brake"],
-            accel=(values["accel_x"], values["accel_y"], values["accel_z"]),
+            accel=(values["accel_x"], values["accel_y"], values["accel_z"]), yaw_rate=values["yaw_rate"],
             wheels=wheels,
             trailer_wheels=trailer_wheels,
             air_pressure=values["air_pressure"],
@@ -351,7 +363,7 @@ class SimulatedTelemetry:
             # The game flickers back to road between the strip's grooves.
             on_strip = x > 0 and 20.0 <= u < 21.5 and int(u / 0.12) % 3 != 0
             return Wheel(deflection=deflection, on_ground=True, substance="rumble_stripe" if on_strip else surface,
-                         pos_x=x, velocity=speed / (2 * math.pi * 0.5), radius=0.5)
+                         pos_x=x, velocity=speed / (2 * math.pi * 0.5), radius=0.5, powered=i >= 2)
 
         frame.wheels = [wheel(i, x, delay) for i, (x, delay) in enumerate(self.TRUCK_WHEELS)]
         for w in frame.wheels[2:]:  # the drive axles

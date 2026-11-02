@@ -27,6 +27,7 @@ MESSAGES = {
     "기차": "Train",
     "주유": "Refuel",
     "변속 {gear}단": "Shift to gear {gear}",
+    "회전 각속도 부호 뒤집음 (바퀴 속도 기준)": "Yaw rate sign flipped (from the wheel speeds)",
     "충돌 {accel} m/s²": "Impact {accel} m/s²",
     "페달 바닥": "Pedal floored",
     "파킹 브레이크 체결": "Parking brake on",

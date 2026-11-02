@@ -27,6 +27,7 @@ MESSAGES = {
     "기차": "Pociąg",
     "주유": "Tankowanie",
     "변속 {gear}단": "Zmiana na bieg {gear}",
+    "회전 각속도 부호 뒤집음 (바퀴 속도 기준)": "Odwrócono znak prędkości odchylenia (wg prędkości kół)",
     "충돌 {accel} m/s²": "Uderzenie {accel} m/s²",
     "페달 바닥": "Pedał do oporu",
     "파킹 브레이크 체결": "Hamulec ręczny zaciągnięty",

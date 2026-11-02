@@ -460,6 +460,57 @@ class ThrottlePulseTest(unittest.TestCase):
         self.assertGreater(spread, 0.04)  # a steady sine pulsed every firing alike
 
 
+class WheelSpinTest(unittest.TestCase):
+    # Logged 2026-11-02 13:59:43 on a truck with a driven front axle, 12.5 km/h on light throttle:
+    # rim speeds in m/s, front axle first, left then right. The yaw rate is the one the rear axle's
+    # spread gives (0.95 m/s over 2 m), about an 8 m radius turning left.
+    RIMS = [3.73, 4.61, 3.01, 3.94, 3.08, 4.00]
+    POS = [(-1.0, -4.0), (1.0, -4.0), (-1.0, 0.0), (1.0, 0.0), (-1.0, 1.3), (1.0, 1.3)]  # (x, z) in m
+
+    def frame(self, yaw: float, rims: list[float] | None = None, powered: bool = True) -> Frame:
+        wheels = [Wheel(velocity=rim / (TAU * 0.5), radius=0.5, pos_x=x, pos_z=z, powered=powered)
+                  for rim, (x, z) in zip(rims or self.RIMS, self.POS)]
+        return Frame(active=True, paused=False, speed=3.47, yaw_rate=yaw, user_throttle=0.08, engine_on=True,
+                     wheels=wheels)
+
+    def test_the_outer_front_wheel_of_a_tight_turn_is_no_spin(self) -> None:
+        s = synth()
+        self.assertGreater(s._wheel_spin(self.frame(0.0)), 0.0)  # what the straight-line check saw
+        self.assertEqual(s._wheel_spin(self.frame(0.47)), 0.0)
+
+    def test_a_turn_the_other_way_does_not_excuse_it(self) -> None:  # with the sign as the SDK says
+        self.assertGreater(synth()._wheel_spin(self.frame(-0.47)), 0.0)
+
+    def test_a_driven_wheel_outrunning_its_spot_in_the_turn_is(self) -> None:
+        rims = list(self.RIMS)
+        rims[3] = 6.5  # the rear right well past its 3.94
+        self.assertAlmostEqual(synth()._wheel_spin(self.frame(0.47, rims)), 1 / 6)
+
+    def test_a_game_whose_yaw_runs_the_other_way_is_caught_by_its_wheels(self) -> None:
+        s = synth()
+        backwards = self.frame(-0.47)  # the same left turn, the yaw rate reported negative
+        backwards.user_throttle = 0.0
+        for _ in range(4):
+            s.render(backwards)
+        self.assertEqual(s.yaw_sign, 1.0)  # not enough yet to overrule the SDK's axes
+        for _ in range(10):
+            s.render(backwards)
+        self.assertEqual(s.yaw_sign, -1.0)
+        self.assertEqual(s._wheel_spin(self.frame(-0.47)), 0.0)
+
+    def test_the_sdk_sign_holds_when_the_wheels_agree(self) -> None:
+        s = synth()
+        turn = self.frame(0.47)
+        turn.user_throttle = 0.0
+        for _ in range(20):
+            s.render(turn)
+        self.assertEqual(s.yaw_sign, 1.0)
+        self.assertGreater(s.yaw_evidence, 0.0)
+
+    def test_wheels_the_engine_does_not_drive_never_spin(self) -> None:
+        self.assertEqual(synth()._wheel_spin(self.frame(0.0, [9.0] * 6, powered=False)), 0.0)
+
+
 class OutputLimitTest(unittest.TestCase):
     def test_quiet_output_keeps_its_level_and_peaks_stop_at_each_ceiling(self) -> None:
         s = Synth(effective_gains(Gains()))

@@ -28,6 +28,7 @@ MESSAGES = {
     "기차": "Train",
     "주유": "Plein",
     "변속 {gear}단": "Passage du rapport {gear}",
+    "회전 각속도 부호 뒤집음 (바퀴 속도 기준)": "Signe de la vitesse de lacet inversé (d'après les roues)",
     "충돌 {accel} m/s²": "Choc {accel} m/s²",
     "페달 바닥": "Pédale à fond",
     "파킹 브레이크 체결": "Frein à main serré",

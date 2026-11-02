@@ -27,6 +27,7 @@ MESSAGES = {
     "기차": "Tren",
     "주유": "Repostaje",
     "변속 {gear}단": "Cambio a marcha {gear}",
+    "회전 각속도 부호 뒤집음 (바퀴 속도 기준)": "Signo de la velocidad de giro invertido (según las ruedas)",
     "충돌 {accel} m/s²": "Impacto {accel} m/s²",
     "페달 바닥": "Pedal a fondo",
     "파킹 브레이크 체결": "Freno de mano puesto",

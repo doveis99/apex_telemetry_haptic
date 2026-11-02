@@ -28,6 +28,7 @@ MESSAGES = {
     "기차": "Trem",
     "주유": "Abastecimento",
     "변속 {gear}단": "Troca para marcha {gear}",
+    "회전 각속도 부호 뒤집음 (바퀴 속도 기준)": "Sinal da taxa de guinada invertido (pelas rodas)",
     "충돌 {accel} m/s²": "Impacto {accel} m/s²",
     "페달 바닥": "Pedal no fundo",
     "파킹 브레이크 체결": "Freio de mão puxado",

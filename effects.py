@@ -57,6 +57,11 @@ ROUGH_TAU = 0.076  # s, smoothing of the road roughness estimate
 # pulse is the same length (whole blocks gave 40 or 48 ms).
 LOCK_RATE = 12.0  # Hz
 LOCK_EDGE = 0.003  # s ramp at each edge: a crisp pulse without the click of a step
+# Which way the game's yaw rate turns is read off the wheels (in a left turn the
+# right ones run faster) rather than trusted from the SDK's axes: the sign may
+# change once the turns summed to this much (rad/s times m/s of left/right
+# spread), about a tenth of a second into a tight one.
+YAW_EVIDENCE = 2.0
 # Retarder: a smooth hum whose pitch follows the driveline. Engine brake: each
 # cylinder letting its compression go knocks once per firing, a bark at the
 # engine's firing rate that is gone under throttle.
@@ -903,6 +908,8 @@ class Synth:
         # s left of each side's rumble after its wheels left the strip; truck, then trailer
         self.rumble_hold = ([0.0, 0.0], [0.0, 0.0])
         self.spin = 0.0
+        self.yaw_sign = 1.0  # +1: the yaw rate is positive turning left, as the SDK's axes say
+        self.yaw_evidence = 0.0
         self.prev_gear: int | None = None  # None until the first live frame sets the reference
         self.gear_cooldown = 0.0
         self.prev_accel: tuple[float, float, float] | None = None
@@ -1219,15 +1226,42 @@ class Synth:
         floor = 1.0 - min(1.0, max(0.0, self.g.steady_fade))
         return floor + (1.0 - floor) * held
 
+    def _learn_yaw_sign(self, frame: Frame) -> None:
+        """Weigh one frame's turn against its wheels and flip yaw_sign once they clearly disagree."""
+        if abs(frame.yaw_rate) < 0.05 or abs(frame.speed) < 1.0:
+            return
+        rims = [(w.pos_x, abs(w.velocity) * TAU * w.radius) for w in frame.wheels if w.on_ground]
+        left = [rim for x, rim in rims if x < -0.3]
+        right = [rim for x, rim in rims if x > 0.3]
+        if not left or not right:
+            return
+        spread = sum(right) / len(right) - sum(left) / len(left)  # reversing, the inside runs faster
+        self.yaw_evidence += frame.yaw_rate * spread * math.copysign(1.0, frame.speed)
+        self.yaw_evidence = max(-5 * YAW_EVIDENCE, min(5 * YAW_EVIDENCE, self.yaw_evidence))
+        sign = math.copysign(1.0, self.yaw_evidence)
+        if abs(self.yaw_evidence) > YAW_EVIDENCE and sign != self.yaw_sign:
+            self.yaw_sign = sign
+            self.levels.events.append(t("회전 각속도 부호 뒤집음 (바퀴 속도 기준)"))
+
     def _wheel_spin(self, frame: Frame) -> float:
-        """Share of grounded wheels turning clearly faster than the truck moves."""
+        """Share of grounded driven wheels turning clearly faster than their own spot of road moves.
+
+        In a turn every wheel rolls at its own speed: in a tight one at walking
+        pace the outer front wheel runs a third faster than the truck, and on a
+        truck whose front axle is driven that alone made the grips buzz with
+        wheelspin for 3 s of a drive (2026-11-02). So each wheel is held to
+        where its contact patch goes as the truck turns at its yaw rate.
+        """
         speed = abs(frame.speed)
-        grounded = [w for w in frame.wheels if w.on_ground]
+        grounded = [w for w in frame.wheels if w.on_ground and w.powered]
         if not grounded:
             return 0.0
         spinning = 0
+        yaw = frame.yaw_rate * self.yaw_sign
         for wheel in grounded:
-            excess = abs(wheel.velocity) * TAU * wheel.radius - speed
+            # the patch's velocity: forward speed plus the turn's share (x right, z back)
+            ground = math.hypot(frame.speed + yaw * wheel.pos_x, yaw * wheel.pos_z)
+            excess = abs(wheel.velocity) * TAU * wheel.radius - ground
             # 25% clears the outer wheels of a tight turn; 1 m/s the creep off the line
             if excess > max(1.0, 0.25 * speed):
                 spinning += 1
@@ -1322,6 +1356,7 @@ class Synth:
             rumble_l, rumble_r = strip * rumble[0], strip * rumble[1]
 
             # Wheelspin: driven wheels outrunning the truck under power (ice, mud, a hard launch).
+            self._learn_yaw_sign(frame)
             powered = frame.engine_on and max(frame.user_throttle, frame.game_throttle) > 0.05
             spin = self._wheel_spin(frame) if powered else 0.0
             self.spin = max(spin, self.spin - DT / 0.15)  # let go over 150 ms, not on one frame

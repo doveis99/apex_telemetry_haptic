@@ -53,6 +53,7 @@ STEADY_BEDS = ("engine", "road", "trigger")
 MAX_FRAME_GAP = 0.2  # s; across a longer hitch, or the game's timer restarting, only take a new reference
 RATE_AVG_TAU = 0.2  # s, the slow suspension movement that bumps stand out from
 ROUGH_TAU = 0.076  # s, smoothing of the road roughness estimate
+ROUGH_GAIN = 1.5  # texture strength per m/s of roughness
 # A locking wheel chops the brake trigger like ABS, timed per sample so every
 # pulse is the same length (whole blocks gave 40 or 48 ms).
 LOCK_RATE = 12.0  # Hz
@@ -195,11 +196,15 @@ BUMP_GAP_S = 0.06  # s before a wheel knocks again: a step's rebound and the nex
 BUMP_RIDE_TAU = 20.0  # s of driving the average spans
 BUMP_RIDE_SPEED = 3.0  # m/s; slower (and parked) the ride is not learnt, and what was learnt stays
 BUMP_OVER_RIDE = 12.0  # threshold as a multiple of that average: 35 knocks a minute became 9, the other 4.6 stayed 4.4
-# A dirt road is no ride to learn: the wheels move 5-10 times as much there, all the time
-# (99th percentile 0.4-1.1 m/s in a 2.5 min drive, 2026-11-02). Learning it put the threshold
-# past 2 m/s and the road went quiet for over a minute; without it, it knocked over 20 times a
-# second. Held at BUMP_RIDE_MAX, the road knocks 2.6 times a second, a hard one every 2 s.
-BUMP_RIDE_MAX = 0.8  # m/s, as high as it goes
+# A dirt road is no ride to learn: the wheels move 3-10 times as much there, all the time, and
+# its ruts are no bigger than the rest (99th percentile 0.3-0.5 m/s at the usual 15-28 km/h,
+# 0.4-1.1 driven hard; 2026-11-02, about 4.5 times the average where pavement's is 2-4).
+# Learnt, the threshold rose past every rut and the road went quiet; without it, it knocked
+# over 20 times a second. Held at BUMP_RIDE_MAX, it knocks 1.4 times a second at the usual
+# speed, a hard one every 3 s; the paved drives above never reach it. The raised threshold only
+# picks which movements knock: how hard is still measured from Gains.bump_threshold, so a rut
+# lands as hard on any truck.
+BUMP_RIDE_MAX = 0.5  # m/s, as high as it goes
 # The game's wheel deflection now and then leaps 25-100 mm for a single frame
 # and is back on the next one, on one wheel, at any speed: in a 49 min drive
 # (2026-10-31) four in five bump knocks came from such a frame, and nearly
@@ -1060,7 +1065,7 @@ class Synth:
             ride_counts[trailer] += 1
             threshold = thresholds[trailer]
             if high > threshold:  # a step in suspension travel: pothole, kerb, joint
-                size = min(1.0, (high - threshold) / 0.8)
+                size = min(1.0, (high - self.g.bump_threshold) / 0.8)
                 strength = size * self.g.bumps * (TRAILER_FEEL if trailer else 1.0)
                 small_hz, big_hz = BUMP_HZ
                 freq = small_hz + (big_hz - small_hz) * size + (TRAILER_BUMP_HZ if trailer else 0.0)
@@ -1375,7 +1380,7 @@ class Synth:
             for side, wheels in enumerate(sides):
                 surface = side_surface(wheels)
                 self.texture[side].tune(surface, speed, self.roughness[side])
-                texture = min(1.0, surface.level * speed_factor + min(1.0, self.roughness[side] * 1.5))
+                texture = min(1.0, surface.level * speed_factor + min(1.0, self.roughness[side] * ROUGH_GAIN))
                 road_moved = max(road_moved, self._novelty(f"road_{side}", texture, 0.15, 0.05))
                 textures.append(texture)
             road_gain = g.road * self._steady_gain("road", road_moved)

@@ -233,8 +233,16 @@ class BumpTest(unittest.TestCase):
         s = synth()
         self.ride(s, 0.3)  # as much as a dirt road moves the wheels, all the time
         self.assertGreater(BUMP_OVER_RIDE * s.ride[0], 2.0 * BUMP_RIDE_MAX)
-        self.assertFalse(self.step(s, 0.6))  # the dirt's own bumps
-        self.assertTrue(self.step(s, 1.5))  # a rut or a pothole in it
+        self.assertFalse(self.step(s, 0.4))  # the dirt's own bumps
+        self.assertTrue(self.step(s, 0.7))  # a rut in it
+
+    def test_a_pothole_lands_as_hard_on_a_rough_riding_truck(self) -> None:
+        calm, rough = synth(), synth()  # each driven in turn: the frames' clock is shared
+        self.ride(calm, 0.01)
+        self.assertTrue(self.step(calm, 0.9))
+        self.ride(rough, 0.08)
+        self.assertTrue(self.step(rough, 0.9))
+        self.assertAlmostEqual(rough.bump_bursts[0][1].amplitude, calm.bump_bursts[0][1].amplitude, places=2)
 
     def test_the_ride_is_kept_while_parked_and_starts_over_in_another_truck(self) -> None:
         s = synth()

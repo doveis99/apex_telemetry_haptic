@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE
-from effects import (BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RATTLE_S, CEILING, DT, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
+from effects import (BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RATTLE_S, CEILING, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
                      Gains, NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
@@ -406,6 +406,20 @@ class EngineTest(unittest.TestCase):
             elif current is not None:
                 current = max(current, b)
         return peaks
+
+    @staticmethod
+    def level(speed: float, throttle: float = 0.0) -> float:
+        s = Synth(effective_gains(Gains(steady_fade=0.0)))
+        for _ in range(20):
+            s.render(frame(speed=speed, rpm=700.0, game_throttle=throttle, user_throttle=throttle))
+        return s.levels.engine
+
+    def test_the_idle_shakes_the_cab_once_the_truck_stops(self) -> None:
+        rolling, crawling, standing = self.level(5.0), self.level(1.5), self.level(0.0)
+        self.assertAlmostEqual(standing, ENGINE_STANDING * rolling)
+        self.assertTrue(rolling < crawling < standing)
+        revving, driving = self.level(0.0, throttle=1.0), self.level(5.0, throttle=1.0)
+        self.assertAlmostEqual(revving, driving)  # the revs on top of the idle are not made stronger
 
     def firings(self, cylinders: int = 6, **values) -> tuple[float, float]:
         """Spread of the firings' crests over 16 s: the pattern each cycle of the cylinders

@@ -149,10 +149,11 @@ MESSAGES = {
     "트리거 모터에만 적용되는 최종 세기입니다. 0%면 트리거 진동이 완전히 꺼집니다. 손가락이 부담스러우면 여기서 낮추세요. 효과별 비율은 그대로 유지됩니다.":
         ("Końcowa siła tylko dla silników spustów; 0% całkowicie wyłącza ich wibracje. Zmniejsz tutaj, jeśli męczą "
          "się palce: proporcje między efektami zostają bez zmian."),
-    "엔진 점화 주파수(rpm ÷ 60 × 기통 수 ÷ 2)에 2배음을 더한 진동입니다. 엑셀을 밟을수록, rpm이 높을수록 세집니다. 공회전에서는 실린더마다 폭발이 고르지 않아 울렁이고, 부하가 크면 거칠어집니다. 시동이 꺼져 있으면 없습니다.":
+    "엔진 점화 주파수(rpm ÷ 60 × 기통 수 ÷ 2)에 2배음을 더한 진동입니다. 엑셀을 밟을수록, rpm이 높을수록 세집니다. 공회전에서는 실린더마다 폭발이 고르지 않아 울렁이고, 부하가 크면 거칠어집니다. 시동이 꺼져 있으면 없습니다. 차가 멈춰 서면 공회전 진동이 최대 3배로 커집니다.":
         ("Częstotliwość zapłonu silnika (obr./min ÷ 60 × cylindry ÷ 2) plus druga harmoniczna. Mocniejsza przy "
          "większym gazie i obrotach. Na biegu jałowym cylindry zapalają nierówno i silnik faluje; pod obciążeniem "
-         "robi się szorstki. Brak przy wyłączonym silniku."),
+         "robi się szorstki. Brak przy wyłączonym silniku. "
+         "Gdy ciężarówka stoi, wibracja biegu jałowego rośnie nawet 3-krotnie."),
     "노면 재질(얼음 < 아스팔트 < 콘크리트 < 눈 < 나무 < 금속 < 잔디 < 흙 < 자갈)과 속도로 세기와 질감이 정해집니다. 아스팔트는 고르게 '쉬익', 콘크리트는 이음매마다 '툭·툭', 나무는 판자가 '두두두', 금속은 '웅' 하고 울리고, 잔디·흙은 천천히 출렁이며, 자갈·흙·눈에는 돌이 튀는 '탁탁'이 섞입니다. 험한 길에서는 캡이 덜컹거립니다. 빠를수록 촘촘해지고, 왼쪽과 오른쪽 바퀴가 따로 갑니다.":
         ("Siła i charakter zależą od nawierzchni (lód < asfalt < beton < śnieg < drewno < metal < trawa < ziemia "
          "< żwir) i prędkości. Asfalt równo szumi, beton stuka na każdym złączu, drewniane deski dudnią, metal "

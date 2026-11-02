@@ -89,6 +89,14 @@ ENGINE_UNEVEN_FLOOR = 0.4  # share of it that stays at any load and revs
 # as for the sixes' recordings.
 ENGINE_V8_PATTERN = 0.5  # spread between cylinders (std/mean) of an eight
 ENGINE_HARSH = 0.25  # third harmonic at full load
+# Standing still, the idling engine is all the cab gives, and a diesel at idle shakes it;
+# rolling, the road takes over. Replaying a 40 min drive (2026-11-02) at the default engine
+# gain, the grips got 4 of 112 at a standstill (median; 9 in town, 19 at highway speed):
+# next to nothing. So the idle grows up to ENGINE_STANDING times its strength as the truck
+# stops, not the revs on top of it: 10 standing, as strong as the town's bed (4 times
+# came to 13, nearly the highway's).
+ENGINE_STANDING = 3.0
+ENGINE_STANDING_SPEED = 3.0  # m/s from which the engine is as strong as on the move
 
 
 @dataclass(frozen=True)
@@ -1344,7 +1352,9 @@ class Synth:
             if frame.engine_on and frame.rpm > 100:
                 # Firing frequency of a 4-stroke engine: rpm/60 * cylinders/2.
                 engine_freq = max(25.0, min(140.0, frame.rpm / 60.0 * g.cylinders / 2.0))
+                standing = max(0.0, 1.0 - speed / ENGINE_STANDING_SPEED) * (1.0 - load)
                 engine_amp = (g.engine * (0.25 + 0.55 * load + 0.2 * rpm_frac)
+                              * (1.0 + (ENGINE_STANDING - 1.0) * standing)
                               * self._steady_gain("engine", engine_moved))
                 engine_harsh = ENGINE_HARSH * load
                 engine_uneven = max(ENGINE_UNEVEN_FLOOR, 1.0 - 2.0 * load - rpm_frac)

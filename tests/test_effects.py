@@ -269,6 +269,24 @@ class BumpTest(unittest.TestCase):
         self.assertEqual(road(0.03), road(0.0))  # the highway's own shaking
         self.assertGreater(road(0.12), 1.5 * road(0.0))  # a dirt road's
 
+    @staticmethod
+    def patch() -> float:
+        """How much stronger the road is over a rougher patch (8-9 s of 12 s on pavement) than before it."""
+        s, levels, depths = synth(), [], [0.02] * 6
+        rng = random.Random(5)
+        for n in range(1500):
+            swing = 0.04 if 1000 <= n < 1125 else 0.02
+            depths = [d + rng.choice((-1.0, 1.0)) * swing * DT for d in depths]
+            s.render(frame(deflection=list(depths)))
+            levels.append(s.levels.road_left)
+        before, patch = levels[900:1000], levels[1060:1125]
+        return (sum(patch) / len(patch)) / (sum(before) / len(before))
+
+    def test_the_road_follows_a_rough_patch_beyond_its_strength(self) -> None:
+        with mock.patch("effects.DETAIL_RANGE", (1.0, 1.0)):
+            level_only = self.patch()
+        self.assertGreater(self.patch(), 1.1 * level_only)  # the patch felt against the road around it
+
     def test_the_cab_lurches_once_while_it_swings(self) -> None:
         self.assertEqual(len(self.lurches([0.0] * 10 + [0.3, 0.4, -0.3, 0.3, 0.0])), 1)  # within CAB_JOLT_GAP
 

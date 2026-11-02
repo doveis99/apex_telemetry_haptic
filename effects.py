@@ -63,6 +63,14 @@ ROUGH_TAU = 0.076  # s, smoothing of the road roughness estimate
 ROUGH_FULL = 0.12  # m/s of roughness that alone gives the texture its full strength
 ROUGH_POWER = 2.0
 ROUGH_NOVELTY = 1.5  # per m/s of roughness, what the steady fade takes for a change of ground
+# The game calls nearly all pavement "road" (93% of the time at speed in three drives, the rest
+# mostly "static" for bridges and yards), so the surfaces' own textures hardly ever differ on a
+# drive. What does differ is the road under the wheels: against its own last few seconds the
+# roughness ran from half to 1.6 times (10th to 90th percentile, at any speed, both drives
+# measured). The road follows that, by its square root (0.7-1.3 times), around the same level:
+# a worn patch coarsens it, new asphalt smooths it.
+DETAIL_TAU = 2.0  # s the roughness is held against
+DETAIL_RANGE = (0.25, 4.0)  # of that ratio, before the root
 # A locking wheel chops the brake trigger like ABS, timed per sample so every
 # pulse is the same length (whole blocks gave 40 or 48 ms).
 LOCK_RATE = 12.0  # Hz
@@ -974,6 +982,7 @@ class Synth:
         self.ride_wheels = [0, 0]
         self.rng = random.Random(7)
         self.roughness = [0.0, 0.0]
+        self.rough_avg = [0.0, 0.0]  # roughness over the last DETAIL_TAU, each side
         # s left of each side's rumble after its wheels left the strip; truck, then trailer
         self.rumble_hold = ([0.0, 0.0], [0.0, 0.0])
         self.spin = 0.0
@@ -1139,6 +1148,7 @@ class Synth:
         for side in (0, 1):
             value = rough[side] / counts[side] if counts[side] else 0.0
             self.roughness[side] += (value - self.roughness[side]) * rough_k
+            self.rough_avg[side] += (self.roughness[side] - self.rough_avg[side]) * (1.0 - math.exp(-dt / DETAIL_TAU))
 
     def _rattle(self, where: str, strength: float, size: float) -> None:
         """A few small knocks over the next BUMP_RATTLE_S, fading: the cab settling after a hit."""
@@ -1182,6 +1192,13 @@ class Synth:
                 self.impact_cooldown = 0.3
                 self.levels.events.append(t("충돌 {accel} m/s²", accel=f"{jump:.0f}"))
         self.prev_accel = frame.accel
+
+    def _detail(self, side: int) -> float:
+        """How much rougher the road under that side is now than over the last few seconds, rooted (DETAIL_*)."""
+        if self.rough_avg[side] < 1e-4:
+            return 1.0
+        low, high = DETAIL_RANGE
+        return math.sqrt(min(high, max(low, self.roughness[side] / self.rough_avg[side])))
 
     def _cab_event(self, frame: Frame, dt: float) -> None:
         """The cab lurching on its mounts (CAB_JOLT), and how much it has been shaking (CAB_RATTLE)."""
@@ -1449,7 +1466,7 @@ class Synth:
                                                                                 + ROUGH_NOVELTY * rough), 0.15, 0.05))
                 textures.append(texture)
             road_gain = g.road * self._steady_gain("road", road_moved)
-            road_l, road_r = (road_gain * texture for texture in textures)
+            road_l, road_r = (road_gain * texture * self._detail(side) for side, texture in enumerate(textures))
             rumble_freq = max(25.0, min(120.0, abs(frame.speed) / RUMBLE_SPACING))
             trailer_sides = ([w for w in frame.trailer_wheels if w.pos_x < 0 and w.on_ground],
                              [w for w in frame.trailer_wheels if w.pos_x >= 0 and w.on_ground])

@@ -116,7 +116,7 @@ All event effects range from 0 to 200%. Air brake, turn signals and game alerts 
 
 | Item | Default (range) | Description |
 |---|---|---|
-| **Bump threshold** | 20 cm/s (5–100) | A bump pulse fires when the suspension suddenly moves faster than this. Lower reacts to small bumps, higher only to big hits. |
+| **Bump threshold** | 20 cm/s (5–100) | A bump pulse fires when the suspension suddenly moves faster than this. Lower reacts to small bumps, higher only to big hits. If the truck rides rough, the threshold rises above this by itself. |
 | **Impact threshold** | 12 m/s² (4–40) | An impact pulse fires when acceleration changes by more than this from one game frame to the next. Keep it well above the **Peak accel.** you see under [Telemetry](#telemetry) in normal driving. |
 | **Engine cylinders** | 6 (4–12) | Used for the engine vibration frequency; 8 also gives it a V8's lumpy beat. Most stock ATS trucks have an inline six; set 8 for trucks such as the ETS2 Scania V8. Telemetry does not report the cylinder count, so it is set by hand. |
 

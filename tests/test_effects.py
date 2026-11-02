@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE
-from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, CEILING, DT, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
+from effects import (BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RATTLE_S, CEILING, DT, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
                      Gains, NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
@@ -201,6 +201,46 @@ class BumpTest(unittest.TestCase):
         self.assertNotIn("bumps", effects_of(s))  # it could still be a spike
         s.render(frame(deflection=0.031, truck_wheels=1))
         self.assertIn("bumps", effects_of(s))
+
+    @staticmethod
+    def ride(s: Synth, swing: float, seconds: float = 60.0, **values) -> None:
+        """Drive on with every truck wheel moving at about swing m/s, steady enough to stay under the threshold."""
+        rng = random.Random(3)
+        depths = [0.02] * 6
+        for _ in range(round(seconds / DT)):
+            depths = [depth + rng.choice((-1.0, 1.0)) * swing * DT for depth in depths]
+            s.render(frame(deflection=list(depths), **values))
+
+    def step(self, s: Synth, size: float) -> bool:
+        """One truck wheel stepping size m/s for a frame and staying there as it settles; did it knock?"""
+        depths = [w.deflection for w in s.held_frame[0].wheels]
+        s.bursts.clear()
+        for n in range(3):
+            depths[0] += size * DT if n == 0 else -0.0001  # a frame that moves nothing is the game repeating one
+            s.render(frame(deflection=list(depths)))
+        return "bumps" in effects_of(s)
+
+    def test_a_rough_riding_truck_learns_a_higher_threshold(self) -> None:
+        calm, rough = synth(), synth()  # each driven in turn: the frames' clock is shared
+        self.ride(calm, 0.01)
+        self.assertEqual(max(calm.g.bump_threshold, BUMP_OVER_RIDE * calm.ride[0]), calm.g.bump_threshold)
+        self.assertTrue(self.step(calm, 0.4))  # a joint the calm truck knocks on
+        self.ride(rough, 0.08)
+        self.assertFalse(self.step(rough, 0.4))  # is part of the rough one's ride
+        self.assertTrue(self.step(rough, 1.5))  # a pothole still knocks
+
+    def test_the_ride_is_kept_while_parked_and_starts_over_in_another_truck(self) -> None:
+        s = synth()
+        self.ride(s, 0.08)
+        learnt = s.ride[0]
+        self.ride(s, 0.0, seconds=30.0, speed=0.0)
+        self.assertAlmostEqual(s.ride[0], learnt, places=4)  # but the frame read one late, still moving
+        learnt = s.ride[0]
+        s.render(frame(trailer_wheels=6))
+        self.assertEqual(s.ride[0], learnt)  # hooking a trailer leaves the truck's own ride
+        for n in range(2):  # read one frame late
+            s.render(frame(deflection=0.02 + 0.0001 * n, truck_wheels=4, trailer_wheels=6))
+        self.assertEqual(s.ride[0], 0.0)
 
     def test_a_pothole_leaves_the_cab_rattling(self) -> None:
         pothole, joint = self.hit(0.012), self.hit(0.0035)

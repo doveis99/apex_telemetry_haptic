@@ -220,9 +220,10 @@ MESSAGES = {
         ("Se aplica a todos los efectos de evento, cambios de marcha e impactos incluidos: cuánto baja un momento "
          "la vibración de conducción en el mismo motor mientras suena uno, para que no quede tapado. 0 % no la "
          "toca."),
-    "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다.":
+    "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다. 트럭이 평소에 많이 흔들리면 기준이 저절로 그만큼 올라갑니다.":
         ("Salta un pulso de bache cuando la suspensión se mueve de golpe más rápido que esto. Bájalo para notar "
-         "baches pequeños; súbelo para notar solo golpes fuertes."),
+         "baches pequeños; súbelo para notar solo golpes fuertes. "
+         "Si el camión va muy movido, el umbral sube solo por encima de este valor."),
     "게임 화면 한 프레임 사이의 가속도 변화가 이 값을 넘으면 충돌 펄스를 냅니다. 평소 주행 중 '가속도 최대' 값보다 충분히 높게 두세요.":
         ("Salta un pulso de impacto cuando la aceleración cambia más que esto de un fotograma del juego al "
          "siguiente. Déjalo bastante por encima de la «Acel. máx.» que ves al conducir normalmente."),

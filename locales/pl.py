@@ -212,9 +212,10 @@ MESSAGES = {
     "변속과 충돌을 포함한 모든 이벤트 효과가 울리는 순간, 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.":
         ("Dotyczy wszystkich efektów zdarzeń, także zmiany biegu i uderzenia: jak bardzo wibracja jazdy na tym "
          "samym silniku na chwilę słabnie podczas zdarzenia, by go nie zagłuszyć. 0% jej nie zmienia."),
-    "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다.":
+    "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다. 트럭이 평소에 많이 흔들리면 기준이 저절로 그만큼 올라갑니다.":
         ("Impuls nierówności pojawia się, gdy zawieszenie nagle porusza się szybciej. Obniż, by czuć małe "
-         "nierówności; podnieś, by czuć tylko mocne uderzenia."),
+         "nierówności; podnieś, by czuć tylko mocne uderzenia. "
+         "Gdy ciężarówka jedzie niespokojnie, próg sam podnosi się ponad tę wartość."),
     "게임 화면 한 프레임 사이의 가속도 변화가 이 값을 넘으면 충돌 펄스를 냅니다. 평소 주행 중 '가속도 최대' 값보다 충분히 높게 두세요.":
         ("Impuls uderzenia pojawia się, gdy przyspieszenie zmieni się o więcej między kolejnymi klatkami gry. Ustaw "
          "wyraźnie powyżej „Maks. przysp.” przy zwykłej jeździe."),

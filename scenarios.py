@@ -46,10 +46,10 @@ WHEEL_RADIUS = 0.5
 TRUCK_AXLES = ((0.0, 1.0), (5.0, 0.9), (6.3, 0.9))
 TRAILER_AXLES = ((13.0, 0.98), (14.3, 0.98))
 # Fine unevenness of each surface, m of suspension movement: a long wave and a short one,
-# fixed to the road so every axle rides the same ground. Like the 60 s drive's, paved roads
-# stay under the bump threshold (0.2 m/s) up to 105 km/h; how rough the game's own roads
-# read is for a recorded drive to show.
-ROUGH = {"road": 0.003, "concrete": 0.003, "road_coarse": 0.0035, "gravel": 0.006, "metal": 0.001}
+# fixed to the road so every axle rides the same ground. Recorded drives moved the truck's
+# wheels 0.012-0.015 m/s on average at highway speed, 0.027 under a stiff chassis mod
+# (effects.BUMP_OVER_RIDE); these give 0.016 at 95 km/h, the calmer truck's ride.
+ROUGH = {"road": 0.0009, "concrete": 0.0009, "road_coarse": 0.00105, "gravel": 0.0018, "metal": 0.0003}
 ROUGH_WAVES = ((5.0, 0.8), (2.5, 0.2))  # (wavelength m, share)
 STRIP_FLICKER = 2.6  # m: the game reports road under one groove in three
 

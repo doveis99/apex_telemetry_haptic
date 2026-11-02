@@ -218,9 +218,10 @@ MESSAGES = {
         ("Vale para todos os efeitos de evento, incluindo trocas de marcha e impactos: quanto a vibração de "
          "rodagem no mesmo motor cai por um instante durante um evento, para que ele não fique encoberto. 0% não "
          "mexe nela."),
-    "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다.":
+    "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다. 트럭이 평소에 많이 흔들리면 기준이 저절로 그만큼 올라갑니다.":
         ("Um pulso de buraco dispara quando a suspensão se move de repente mais rápido que isso. Diminua para "
-         "sentir buracos pequenos; aumente para sentir só impactos fortes."),
+         "sentir buracos pequenos; aumente para sentir só impactos fortes. "
+         "Se o caminhão balança muito, o limite sobe sozinho acima deste valor."),
     "게임 화면 한 프레임 사이의 가속도 변화가 이 값을 넘으면 충돌 펄스를 냅니다. 평소 주행 중 '가속도 최대' 값보다 충분히 높게 두세요.":
         ("Um pulso de impacto dispara quando a aceleração muda mais que isso de um quadro do jogo para o seguinte. "
          "Deixe bem acima da \"Acel. máx.\" da direção normal."),

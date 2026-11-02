@@ -176,6 +176,17 @@ BUMP_RATTLE_S = 0.3
 BUMP_RATTLE_MAX = 16  # knocks alive at once, all wheels together
 BUMP_RESTRIKE_S = 0.02  # s: a stronger reading this soon is the same step peaking (the next frame from 50 fps)
 BUMP_GAP_S = 0.06  # s before a wheel knocks again: a step's rebound and the next frames of rough ground wait
+# Each truck rides its own way, and so does each chassis physics mod: at 50 km/h and more, a
+# 40 min drive in another truck under a stiff "realistic" chassis mod (2026-11-02) moved the
+# suspension 2.5-3 times as fast as a 49 min drive under, most likely, the same mod's flexible
+# version (2026-10-31), every minute of both (99th percentile 0.14-0.21 against 0.04-0.10 m/s).
+# At the same threshold the first knocked 35 times a minute and the other 5: a rattle, not bumps. So
+# the threshold also sits a few times above a slow average of how the vehicle itself has been
+# moving (as SimHub's ShakeIt calibrates its wheel effects to each car), never below
+# Gains.bump_threshold. Truck and trailer learn apart; each starts over when its wheels change.
+BUMP_RIDE_TAU = 20.0  # s of driving the average spans
+BUMP_RIDE_SPEED = 3.0  # m/s; slower (and parked) the ride is not learnt, and what was learnt stays
+BUMP_OVER_RIDE = 12.0  # threshold as a multiple of that average: 35 knocks a minute became 9, the other 4.6 stayed 4.4
 # The game's wheel deflection now and then leaps 25-100 mm for a single frame
 # and is back on the next one, on one wheel, at any speed: in a 49 min drive
 # (2026-10-31) four in five bump knocks came from such a frame, and nearly
@@ -903,6 +914,9 @@ class Synth:
         self.leap_held: list[float] = []  # s each wheel has been held at its last reading (LEAP_HOLD)
         self.bump_bursts: list[tuple[str, Burst] | None] = []  # each wheel's pulse and its side while it rings
         self.bump_rattles: list[Burst] = []  # the cab's knocks after big hits, all wheels together
+        # truck, trailer: m/s of sudden suspension travel on average (BUMP_RIDE_*), and over how many wheels
+        self.ride = [0.0, 0.0]
+        self.ride_wheels = [0, 0]
         self.rng = random.Random(7)
         self.roughness = [0.0, 0.0]
         # s left of each side's rumble after its wheels left the strip; truck, then trailer
@@ -1000,6 +1014,9 @@ class Synth:
 
     def _suspension(self, frame: Frame, deflections: list[float], dt: float) -> None:
         wheels = frame.wheels + frame.trailer_wheels
+        for group, count in enumerate((len(frame.wheels), len(frame.trailer_wheels))):
+            if self.ride_wheels[group] != count:  # another truck or trailer, or none: learn its ride afresh
+                self.ride_wheels[group], self.ride[group] = count, 0.0
         if len(self.prev_deflection) != len(wheels):
             self.prev_deflection = deflections
             self.deflection_rate_avg = [0.0] * len(wheels)
@@ -1011,6 +1028,8 @@ class Synth:
         avg_k = 1.0 - math.exp(-dt / RATE_AVG_TAU)
         rough = [0.0, 0.0]
         counts = [0, 0]
+        thresholds = [max(self.g.bump_threshold, BUMP_OVER_RIDE * ride) for ride in self.ride]
+        ride, ride_counts = [0.0, 0.0], [0, 0]
         for i, wheel in enumerate(wheels):
             rate = (deflections[i] - self.prev_deflection[i]) / dt  # m/s
             self.prev_deflection[i] = deflections[i]
@@ -1024,7 +1043,9 @@ class Synth:
                 counts[side] += 1
             if not wheel.on_ground:
                 continue
-            threshold = self.g.bump_threshold
+            ride[trailer] += high
+            ride_counts[trailer] += 1
+            threshold = thresholds[trailer]
             if high > threshold:  # a step in suspension travel: pothole, kerb, joint
                 size = min(1.0, (high - threshold) / 0.8)
                 strength = size * self.g.bumps * (TRAILER_FEEL if trailer else 1.0)
@@ -1051,6 +1072,11 @@ class Synth:
                 self.bump_bursts[i] = (where, burst)
                 if rattles:
                     self._rattle(where, strength, size)
+        if abs(frame.speed) >= BUMP_RIDE_SPEED:
+            ride_k = 1.0 - math.exp(-dt / BUMP_RIDE_TAU)
+            for group in (0, 1):
+                if ride_counts[group]:
+                    self.ride[group] += (ride[group] / ride_counts[group] - self.ride[group]) * ride_k
         rough_k = 1.0 - math.exp(-dt / ROUGH_TAU)
         for side in (0, 1):
             value = rough[side] / counts[side] if counts[side] else 0.0

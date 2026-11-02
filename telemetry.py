@@ -51,6 +51,11 @@ _FIELDS = {
     "engine_on": (1576, "?"),
     "blinker_left": (1580, "?"),  # lamp state, toggles with each flash
     "blinker_right": (1581, "?"),
+    # The truck's linear velocity in its own space, m/s, just ahead of the angular one: x is
+    # sideways (a slide), z back. Placed by the layout, not yet seen in a game drive.
+    "velocity_x": (1868, "f"),
+    "velocity_y": (1872, "f"),
+    "velocity_z": (1876, "f"),
     # Angular velocity about the truck's up axis, rad/s; positive turning left
     # (the SDK's local space: x right, y up, z back).
     "yaw_rate": (1884, "f"),
@@ -122,6 +127,7 @@ class Frame:
     park_brake: bool = False
     accel: tuple[float, float, float] = (0.0, 0.0, 0.0)
     yaw_rate: float = 0.0  # rad/s, positive turning left
+    velocity: tuple[float, float, float] = (0.0, 0.0, 0.0)  # m/s in the truck's space: x right, y up, z back
     wheels: list[Wheel] = field(default_factory=list)
     trailer_wheels: list[Wheel] = field(default_factory=list)  # every attached trailer's, in order
     air_pressure: float = 120.0
@@ -230,6 +236,7 @@ class SharedMemoryTelemetry:
             gear=values["gear"], gear_engine=values["gear_engine"], retarder=values["retarder"], retarder_steps=values["retarder_steps"],
             engine_on=values["engine_on"], motor_brake=values["motor_brake"], park_brake=values["park_brake"],
             accel=(values["accel_x"], values["accel_y"], values["accel_z"]), yaw_rate=values["yaw_rate"],
+            velocity=(values["velocity_x"], values["velocity_y"], values["velocity_z"]),
             wheels=wheels,
             trailer_wheels=trailer_wheels,
             air_pressure=values["air_pressure"],

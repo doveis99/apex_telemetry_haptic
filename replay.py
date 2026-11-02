@@ -115,6 +115,7 @@ class _State:
                       engine_on=flag("engine_on"), motor_brake=flag("engine_brake"), park_brake=flag("park_brake"),
                       accel=tuple(_floats(x.get("accel", ""))) or (0.0, 0.0, 0.0),
                       yaw_rate=float(x.get("yaw") or 0.0),
+                      velocity=tuple(_floats(x.get("velocity", ""))) or (0.0, 0.0, 0.0),
                       air_pressure=float(x.get("air_pressure") or 120.0),
                       blinker_left="L" in row["blinkers"], blinker_right="R" in row["blinkers"],
                       shifter_toggle=("R" in row["shifter"], "S" in row["shifter"]),

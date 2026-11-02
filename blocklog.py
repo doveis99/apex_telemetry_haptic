@@ -30,7 +30,8 @@ and what reached the motors:
                  back as the game sent it: the game's clock, the throttle and
                  brake it applied, the truck's rpm limit, retarder steps and
                  air pressure, acceleration, each truck wheel's rim speed, the
-                 yaw rate (rad/s, positive turning left),
+                 yaw rate (rad/s, positive turning left), the truck's velocity
+                 in its own space (m/s x/y/z: right, up, back; x is a slide),
                  wheels off the ground, every wheel's substance (only when one
                  changed) and the plugin's one-shot events
   engine, road_l, road_r, trigger_level, trigger_mode
@@ -69,7 +70,7 @@ COLUMNS = ("time", "gap_ms", "new_frame", "route", "trigger", "left_grip", "righ
            "speed_kmh", "rpm", "gear", "gear_engine", "throttle", "brake", "retarder", "engine_brake", "park_brake",
            "blinkers", "shifter", "engine_on", "trailer", "surface_l", "surface_r", "deflection_mm",
            "render_us", "game_throttle", "game_brake", "rpm_max", "retarder_steps", "air_pressure", "accel",
-           "wheel_speed", "yaw", "airborne", "substances", "game_events",
+           "wheel_speed", "yaw", "velocity", "airborne", "substances", "game_events",
            "engine", "road_l", "road_r", "trigger_level", "trigger_mode", "fresh", "duck", "sounding", "events")
 GAME_COLUMNS = COLUMNS.index("game_events") + 1 - COLUMNS.index("speed_kmh")
 FRAME_COLUMNS = COLUMNS.index("game_events") + 1 - COLUMNS.index("deflection_mm")  # written on a new frame only
@@ -116,6 +117,7 @@ class BlockLog:
                 f"{frame.game_throttle:.2f}", f"{frame.game_brake:.2f}", f"{frame.rpm_max:.0f}",
                 frame.retarder_steps, f"{frame.air_pressure:.0f}", "/".join(f"{a:.2f}" for a in frame.accel),
                 "/".join(f"{abs(w.velocity) * TAU * w.radius:.2f}" for w in frame.wheels), f"{frame.yaw_rate:.3f}",
+                "/".join(f"{v:.2f}" for v in frame.velocity),
                 "/".join(str(i) for i, w in enumerate(wheels) if not w.on_ground),
                 substances if changed else "", " ".join(sorted(frame.game_events)))
 

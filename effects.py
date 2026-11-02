@@ -53,7 +53,16 @@ STEADY_BEDS = ("engine", "road", "trigger")
 MAX_FRAME_GAP = 0.2  # s; across a longer hitch, or the game's timer restarting, only take a new reference
 RATE_AVG_TAU = 0.2  # s, the slow suspension movement that bumps stand out from
 ROUGH_TAU = 0.076  # s, smoothing of the road roughness estimate
-ROUGH_GAIN = 1.5  # texture strength per m/s of roughness
+# How rough the ground under the truck is, from its own suspension: the median at 10-30 km/h
+# was 0.004 m/s on pavement and 0.071 on a dirt road, 0.017 on pavement from 60 km/h
+# (2026-10-31 to 11-02). Taken in proportion and small (1.5 per m/s), it added 0.1 to the
+# dirt and the surfaces' own strength, which falls with speed, ruled: a dirt road at its
+# usual pace came out weaker than the highway (grips 11 against 18 of 112), and every road
+# felt the same. ZAF's cab rattle grows with the square of the cab's acceleration, which was
+# 4-8 times as large on that dirt road as on pavement; so does this, full at ROUGH_FULL.
+ROUGH_FULL = 0.12  # m/s of roughness that alone gives the texture its full strength
+ROUGH_POWER = 2.0
+ROUGH_NOVELTY = 1.5  # per m/s of roughness, what the steady fade takes for a change of ground
 # A locking wheel chops the brake trigger like ABS, timed per sample so every
 # pulse is the same length (whole blocks gave 40 or 48 ms).
 LOCK_RATE = 12.0  # Hz
@@ -159,7 +168,9 @@ SEAM_JITTER = 0.05  # seams are never quite evenly laid
 # On rough ground the cab rattles: short low knocks, many a second.
 RATTLE_HZ = 55.0
 RATTLE_RATE = 40.0  # knocks per second per side at full roughness
-RATTLE_ROUGH = (0.08, 0.3)  # m/s of roughness where the rattle starts, and where it is full
+# From 0.04, which pavement passes only one moment in ten at highway speed, a dirt road at
+# its usual pace rattles half the time (it began at 0.08, its median, and was full at 0.3).
+RATTLE_ROUGH = (0.04, 0.15)  # m/s of roughness where the rattle starts, and where it is full
 # Rumble strips: the game reports a "rumble_stripe" substance under a wheel.
 # It flickers back to road between the grooves, so a short hold bridges the
 # gaps. Grooves are milled about 30 cm apart: 83 Hz at 90 km/h.
@@ -1380,8 +1391,12 @@ class Synth:
             for side, wheels in enumerate(sides):
                 surface = side_surface(wheels)
                 self.texture[side].tune(surface, speed, self.roughness[side])
-                texture = min(1.0, surface.level * speed_factor + min(1.0, self.roughness[side] * ROUGH_GAIN))
-                road_moved = max(road_moved, self._novelty(f"road_{side}", texture, 0.15, 0.05))
+                rough = self.roughness[side]
+                texture = min(1.0, surface.level * speed_factor + min(1.0, (rough / ROUGH_FULL) ** ROUGH_POWER))
+                # what counts as rougher ground stays in proportion (ROUGH_NOVELTY): squared, the
+                # highway's every jolt took the road out of its fade
+                road_moved = max(road_moved, self._novelty(f"road_{side}", min(1.0, surface.level * speed_factor
+                                                                                + ROUGH_NOVELTY * rough), 0.15, 0.05))
                 textures.append(texture)
             road_gain = g.road * self._steady_gain("road", road_moved)
             road_l, road_r = (road_gain * texture for texture in textures)

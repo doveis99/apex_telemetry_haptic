@@ -26,7 +26,10 @@ from telemetry import Frame, Wheel
 FADE_S = 0.1
 CRUISE = 22.0  # m/s, 80 km/h
 TRUCK_WHEELS = (-1.0, 1.0, -0.9, 0.9, -0.9, 0.9)  # pos_x: the steer axle, then the two drive axles
-ROUGH = 0.003  # m of fine suspension movement at 6 Hz, as in the scripted drive
+# m of fine suspension movement at 6 Hz, as in the scripted drive: 0.015 m/s of roughness,
+# pavement at highway speed; loose ground moves LOOSE times as much, a dirt road at its usual pace
+ROUGH = 0.0006
+LOOSE = 5.0
 # the road test's surfaces, smooth to rough as the road slider's tip lists them; each is a substance the game reports
 ROAD_SURFACES = ("ice", "road", "concrete", "snow", "wood", "metal", "grass", "dirt", "gravel")
 SURFACE_S = 3.0  # one surface alone
@@ -61,7 +64,7 @@ def _engine(t: float, _: Gains) -> Frame:
 
 def _road(t: float, _: Gains) -> Frame:
     gravel = t >= 1.6
-    frame = _frame(t, rough=2 * ROUGH if gravel else ROUGH)
+    frame = _frame(t, rough=LOOSE * ROUGH if gravel else ROUGH)
     for wheel in frame.wheels:
         wheel.substance = "gravel" if gravel else "road"
     return frame
@@ -70,7 +73,7 @@ def _road(t: float, _: Gains) -> Frame:
 def _on_surface(t: float, substance: str) -> Frame:
     """Cruising on one surface; loose ground (stones underfoot) moves the suspension more, as gravel does above."""
     surface = surface_of(substance)
-    frame = _frame(t, rough=2 * ROUGH if surface and surface.stones >= 1.0 else ROUGH)
+    frame = _frame(t, rough=LOOSE * ROUGH if surface and surface.stones >= 1.0 else ROUGH)
     for wheel in frame.wheels:
         wheel.substance = substance
     return frame

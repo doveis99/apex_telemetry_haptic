@@ -358,7 +358,9 @@ class SimulatedTelemetry:
 
         def wheel(i: int, x: float, delay: float) -> Wheel:
             u = t - delay  # when this axle reaches a spot the front axle passed at t
-            jitter = 0.006 if surface == "gravel" else 0.003
+            # 0.015 m/s of roughness on pavement, as at highway speed; gravel five times it, as a
+            # dirt road at its usual pace (effects.ROUGH_FULL)
+            jitter = 0.003 if surface == "gravel" else 0.0006
             # 6 Hz: a whole number of cycles per loop, so the restart does not jolt
             deflection = 0.02 + jitter * math.sin(t * 2 * math.pi * 6 + i)
             if x < 0:

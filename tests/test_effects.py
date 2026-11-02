@@ -785,7 +785,7 @@ class SurfaceTest(unittest.TestCase):
         smooth, rough = self.texture(), self.texture(roughness=0.3)
         self.assertGreater(rms(rough), 1.15 * rms(smooth))
         self.assertGreater(self.kurtosis(rough), 1.3 * self.kurtosis(smooth))  # in knocks, not more hiss
-        self.assertEqual(self.texture(roughness=0.05), smooth)  # under the start of the rattle
+        self.assertEqual(self.texture(roughness=0.03), smooth)  # under the start of the rattle
 
     def test_static_ground_is_still_paved(self) -> None:
         # yards, bridges and ramps; it used to drop the road out for seconds at speed

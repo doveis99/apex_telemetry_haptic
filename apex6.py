@@ -6,7 +6,7 @@ src/flydigi/Apex6Protocol.cpp, src/flydigi/Apex5Device.cpp and
 src/dualsense/Apex6HapticBridge.cpp.
 
 Stream model: every 8 ms one 33-byte report carries eight 1 kHz subframes,
-each with a trigger, left-grip and right-grip sample (signed, +-112 max).
+each with a trigger, left-grip and right-grip sample (signed, +-127 max).
 The trigger channel is a single waveform routed to left, right or both.
 """
 
@@ -42,7 +42,16 @@ FIRMWARE_OFFSETS = {"controller": 15, "dongle": 17, "si": 19, "trigger": 21, "sc
 SAMPLE_RATE = 1000
 SUBFRAMES = 8
 FRAME_PERIOD = SUBFRAMES / SAMPLE_RATE  # 8 ms
-MAX_SAMPLE = 112  # ASB never exceeds this; keeps headroom below the int8 limit
+# Samples go out as int8 around 0x80; +-127 is the protocol's whole range.
+SAMPLE_LIMIT = 127
+# What the synth and tone.py call full strength (the slope of the soft limit,
+# tone.py's 100%). ASB picked 112 for its own sines without a pad, and its
+# PCM path uses 127; Flydigi's engine was captured sending grip peaks of 122.
+# Kept as the unit so tuned settings and test percentages stay where they
+# were; how far an output may go past it is effects.CEILING.
+MAX_SAMPLE = 112
+# ASB's wait after the motor route ("about 94 ms" in its notes, no reason
+# given, never measured); enable() fills it with silence.
 ENABLE_DELAY = 0.094
 # The firmware drops the motor route when something else configures the
 # motors (the game or Steam initialising the gamepad as it loads) or when the
@@ -105,7 +114,7 @@ MOTOR_DISABLE = (
 
 def _encode(sample: float) -> int:
     value = int(round(sample))
-    value = max(-MAX_SAMPLE, min(MAX_SAMPLE, value))
+    value = max(-SAMPLE_LIMIT, min(SAMPLE_LIMIT, value))
     return value + 128  # 0x80 is electrical zero
 
 
@@ -351,7 +360,11 @@ class Apex6:
         self._trigger_mode, self._trigger_target = trigger_mode, trigger_target
         self.reassert()
         self._enabled = True
-        time.sleep(ENABLE_DELAY)
+        # Silence every 8 ms through the wait, as stream() sends it: a pad left
+        # without reports plays the next sound low and pulsing.
+        for _ in range(round(ENABLE_DELAY / FRAME_PERIOD)):
+            self._write(SILENT_REPORT)
+            time.sleep(FRAME_PERIOD)
 
     def reassert(self) -> None:
         """Send the motor route again; harmless when it is still in place."""

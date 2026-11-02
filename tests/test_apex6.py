@@ -5,8 +5,9 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from apex6 import (CMD_MOTOR_ROUTE, CMD_RAM_READ, MAGIC, RAM_MOTOR, SUBFRAMES, Apex6, Block, _inline_command,
-                   _ram_chunk, build_command, build_realtime, motor_enable_reports)
+from apex6 import (CMD_MOTOR_ROUTE, CMD_RAM_READ, ENABLE_DELAY, FRAME_PERIOD, MAGIC, RAM_MOTOR, SILENT_REPORT,
+                   SUBFRAMES, Apex6, Block, _inline_command, _ram_chunk, build_command, build_realtime,
+                   motor_enable_reports)
 
 
 class FakeDevice:
@@ -39,6 +40,26 @@ class StreamTest(unittest.TestCase):
             stats = pad.stream(lambda first: Block() if first < 10 * SUBFRAMES else None, period=0.002)
         self.assertEqual((stats.frames, stats.late_frames), (10, 0))
         self.assertAlmostEqual(clock.now, 0.02)
+
+
+class EnableTest(unittest.TestCase):
+    def test_the_wait_after_the_route_is_silence_every_block(self) -> None:
+        clock = FakeClock()
+        pad = Apex6.__new__(Apex6)
+        pad._dev = FakeDevice()
+        with mock.patch("apex6.time", clock):
+            pad.enable()
+        self.assertEqual(pad._dev.reports[:2], list(motor_enable_reports()))
+        silence = pad._dev.reports[2:]
+        self.assertEqual(silence, [SILENT_REPORT] * len(silence))
+        self.assertEqual(len(silence), round(ENABLE_DELAY / FRAME_PERIOD))
+        self.assertAlmostEqual(clock.now, len(silence) * FRAME_PERIOD)
+
+
+class EncodeTest(unittest.TestCase):
+    def test_samples_use_the_whole_int8_range(self) -> None:
+        report = build_realtime(Block(left_grip=[127.0] * SUBFRAMES, right_grip=[-300.0] * SUBFRAMES))
+        self.assertEqual((report[7], report[8]), (0x80 + 127, 0x80 - 127))
 
 
 class FakeClock:

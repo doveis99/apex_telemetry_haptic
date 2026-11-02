@@ -6,9 +6,9 @@ grips, the trigger or both (Gains.routes). Telemetry is read once per 8 ms
 block; amplitudes are ramped across the block and oscillator phases carry
 over, so parameter changes do not click.
 
-Resonances from the xHaptics reverse-engineering notes: grips ~65 Hz,
-triggers ~95-110 Hz. Effects are placed near those to get the most feel per
-unit of drive.
+Resonances as the motor calibration felt them on the developer's pad: grips
+65 Hz, triggers about 100 Hz (Flydigi's engine presets say 65 and 95).
+Effects are placed near those to get the most feel per unit of drive.
 """
 
 from __future__ import annotations
@@ -19,11 +19,17 @@ import math
 import random
 from dataclasses import dataclass, field, replace
 
-from apex6 import MAX_SAMPLE, SAMPLE_RATE, SUBFRAMES, Block, Route
+from apex6 import MAX_SAMPLE, SAMPLE_LIMIT, SAMPLE_RATE, SUBFRAMES, Block, Route
 from i18n import N_, t
 from telemetry import Frame, Wheel
 
 DT = SUBFRAMES / SAMPLE_RATE  # 8 ms per telemetry update
+# Where each channel's soft limit tops out; its slope stays MAX_SAMPLE, so
+# only the loudest peaks change. Grips get the protocol's whole range, as
+# Flydigi's engine gives them (no grip ceiling in its composer, captured at
+# 122). Triggers stop at 0.8 of it, the composer's trigger ceiling in xHaptics
+# Engine 5.0.2.6. Both replace ASB's flat 112, which no pad decided.
+CEILING = {"grip": SAMPLE_LIMIT, "trigger": round(0.8 * SAMPLE_LIMIT)}
 TAU = 2.0 * math.pi
 # Steady fade: a vibration that holds still soon goes unnoticed and only tires
 # the hand, so what the continuous effects tell lies in how they change. Engine,
@@ -1448,9 +1454,9 @@ class Synth:
                 if cut:
                     out[i] = cut.next(out[i])
 
-            left.append(self._out(out[0], self.g.grip_level))
-            right.append(self._out(out[1], self.g.grip_level))
-            trigger.append(self._out(out[2], self.g.trigger_level))
+            left.append(self._out(out[0], self.g.grip_level, CEILING["grip"]))
+            right.append(self._out(out[1], self.g.grip_level, CEILING["grip"]))
+            trigger.append(self._out(out[2], self.g.trigger_level, CEILING["trigger"]))
         self.prev_amp = {"engine": engine_amp, "road_l": road_l, "road_r": road_r,
                          "rumble_l": rumble_l, "rumble_r": rumble_r, "spin": spin_amp, "retarder": retarder_amp,
                          "jake": jake_amp, "trigger": trigger_amp, "squeal": squeal_amp, "harsh": engine_harsh}
@@ -1496,10 +1502,10 @@ class Synth:
             imbalance = ENGINE_IMBALANCE * uneven * offset
         self.firing_gain = (1.0 + imbalance) * (1.0 + ENGINE_JITTER * self.rng.uniform(-1.0, 1.0))
 
-    def _out(self, x: float, channel_level: float) -> float:
-        # Soft limit so stacked effects saturate smoothly instead of clipping;
-        # never exceeds MAX_SAMPLE.
-        return math.tanh(x * self.g.master * channel_level) * MAX_SAMPLE
+    def _out(self, x: float, channel_level: float, ceiling: float) -> float:
+        # Soft limit so stacked effects saturate smoothly instead of clipping:
+        # MAX_SAMPLE per unit while quiet, never past the channel's ceiling.
+        return math.tanh(x * self.g.master * channel_level * MAX_SAMPLE / ceiling) * ceiling
 
 
 def _mix(out: list[float], route: str, left: float, right: float, trigger: float,

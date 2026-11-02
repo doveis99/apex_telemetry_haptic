@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE
-from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, DT, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
+from effects import (BUMP_HZ, BUMP_RATTLE_MAX, BUMP_RATTLE_S, CEILING, DT, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
                      Gains, NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
@@ -458,6 +458,17 @@ class ThrottlePulseTest(unittest.TestCase):
         mean = sum(crests) / len(crests)
         spread = math.sqrt(sum((c - mean) ** 2 for c in crests) / len(crests)) / mean
         self.assertGreater(spread, 0.04)  # a steady sine pulsed every firing alike
+
+
+class OutputLimitTest(unittest.TestCase):
+    def test_quiet_output_keeps_its_level_and_peaks_stop_at_each_ceiling(self) -> None:
+        s = Synth(effective_gains(Gains()))
+        for channel in ("grip", "trigger"):
+            with self.subTest(channel):
+                self.assertAlmostEqual(s._out(0.01, 1.0, CEILING[channel]), 0.01 * MAX_SAMPLE, places=2)
+                self.assertLess(s._out(100.0, 1.0, CEILING[channel]), CEILING[channel] + 1e-9)
+                self.assertGreater(s._out(100.0, 1.0, CEILING[channel]), CEILING[channel] - 0.5)
+        self.assertEqual(CEILING, {"grip": 127, "trigger": 102})
 
 
 class EqualizerTest(unittest.TestCase):

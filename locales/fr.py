@@ -167,8 +167,8 @@ MESSAGES = {
          "joint, les planches de bois tambourinent, le métal bourdonne, l'herbe et la terre ondulent lentement, "
          "et le gravier, la terre et la neige ajoutent le claquement des cailloux. Sur route dégradée, la cabine "
          "brinquebale. Plus on va vite, plus c'est serré, et les roues gauches et droites jouent séparément."),
-    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다. 흙길처럼 캐빈이 크게 출렁이면 양쪽 그립에 낮은 '쿵'이 더해집니다.":
-        "Un choc dans la poignée du côté de la roue quand la suspension bouge brusquement (nids-de-poule, bordures, joints) : un petit joint est un tapotement bref et aigu, un gros nid-de-poule un coup sourd et lourd, et après un gros choc la cabine claque un instant. Réglez la sensibilité avec « Seuil des bosses ». Quand la cabine tangue, comme sur une piste en terre, un coup sourd s'ajoute sur les deux poignées.",
+    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다. 흙길처럼 캐빈이 출렁이면 그 흔들림을 따라 낮은 '웅'이 이어지고, 캐빈이 기우는 쪽 그립이 더 셉니다.":
+        "Un choc dans la poignée du côté de la roue quand la suspension bouge brusquement (nids-de-poule, bordures, joints) : un petit joint est un tapotement bref et aigu, un gros nid-de-poule un coup sourd et lourd, et après un gros choc la cabine claque un instant. Réglez la sensibilité avec « Seuil des bosses ». Quand la cabine tangue, comme sur une piste en terre, un bourdonnement grave suit son balancement, plus fort du côté où elle penche.",
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("Un brrrr dans la poignée du côté qui roule sur une bande rugueuse de ligne centrale ou "
          "d'accotement. Détectée via le revêtement signalé par le jeu ; plus on va vite, plus c'est fin."),

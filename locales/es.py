@@ -166,8 +166,8 @@ MESSAGES = {
          "despacio, y la grava, la tierra y la nieve añaden el chasquido de piedras sueltas. En caminos "
          "bacheados la cabina traquetea. Cuanto más rápido, más denso, y las ruedas izquierdas y derechas van "
          "por separado."),
-    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다. 흙길처럼 캐빈이 크게 출렁이면 양쪽 그립에 낮은 '쿵'이 더해집니다.":
-        "Un golpe en el agarre del lado de esa rueda cuando la suspensión se mueve de repente (baches, bordillos, juntas): una junta pequeña es un toque corto y agudo, un bache grande un golpe grave y pesado, y tras un golpe fuerte la cabina traquetea un momento. La sensibilidad se ajusta en 'Umbral de baches'. Cuando la cabina se sacude, como en un camino de tierra, se suma un golpe grave en ambos agarres.",
+    "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다. 흙길처럼 캐빈이 출렁이면 그 흔들림을 따라 낮은 '웅'이 이어지고, 캐빈이 기우는 쪽 그립이 더 셉니다.":
+        "Un golpe en el agarre del lado de esa rueda cuando la suspensión se mueve de repente (baches, bordillos, juntas): una junta pequeña es un toque corto y agudo, un bache grande un golpe grave y pesado, y tras un golpe fuerte la cabina traquetea un momento. La sensibilidad se ajusta en 'Umbral de baches'. Cuando la cabina se balancea, como en un camino de tierra, un zumbido grave sigue su vaivén, más fuerte del lado hacia el que se inclina.",
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("Un brrrr en la empuñadura del lado que pisa una banda sonora de la línea central o del "
          "arcén. Se detecta por la superficie que informa el juego; cuanto más rápido, más fino."),

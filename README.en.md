@@ -77,9 +77,9 @@ The **meters** show what actually goes to the left grip, right grip and trigger.
 
 The switch on the left turns each effect on or off. An effect that is off is greyed out but keeps its slider and output, so turning it back on restores it.
 
-**Output to** on the right picks where each effect vibrates: **Grip** (blue) | **Trigger** (orange) | **Both** (violet), for driving and event effects alike. The slider takes the colour of the chosen output, so you can see at a glance what goes where. Picking an output on an effect that is off turns it back on. "Default output" in the tables is the initial setting. Sided effects (road, bumps, turn signals) sent to the trigger are summed into it; trigger effects sent to the grips play on both grips. Changes apply at once and are kept when you **Save**.
+**Output to** on the right picks where each effect vibrates: **Grip** (blue) | **Trigger** (orange) | **Both** (violet), for driving and event effects alike. The slider takes the colour of the chosen output, so you can see at a glance what goes where. Picking an output on an effect that is off turns it back on. "Default output" in the tables is the initial setting. Sided effects (road, bumps, turn signals) sent to the trigger are summed into it; trigger effects sent to the grips play on both grips. On the trigger, a pedal's effects play on that pedal's trigger only: the brake's (the brake side of **Throttle/brake**, **Brake squeal**, **Pedals** on the brake) on the left, the throttle's (the throttle side of **Throttle/brake**, **Pedals** on the throttle) on the right. When other effects are sent to the trigger too, or both pedals' effects overlap, both triggers play the same vibration. Changes apply at once and are kept when you **Save**.
 
-**▶** at the end of each row plays that effect alone for a few seconds, at its current level and output and with the motor calibration, even while it is switched off. Bumps, Rumble strips and Turn signals play on the left, then on the right, so you can check that the sides come apart; the meters show it too. With the output stopped it takes the controller only for those seconds; while the output runs it plays in place of the driving vibration.
+**▶** at the end of each row plays that effect alone for a few seconds, at its current level and output and with the motor calibration, even while it is switched off. Bumps, Rumble strips and Turn signals play on the left, then on the right, so you can check that the sides come apart; the meters show it too. **Throttle/brake** and **Pedals** play the throttle (right trigger), then the brake (left trigger). With the output stopped it takes the controller only for those seconds; while the output runs it plays in place of the driving vibration.
 
 | Effect | Default (range) | Default output | What it does |
 |---|---|---|---|
@@ -91,7 +91,7 @@ The switch on the left turns each effect on or off. An effect that is off is gre
 | **Gear shift** | 60% (0–200) | Both grips | A "clunk" on every gear change, shaped after real Eaton Fuller shift recordings: a soft knock as the lever leaves the gear (the driving vibration dips from here), then, 0.14 s after the change, a crisp 140 Hz clack as the next gear goes in, with a short ring from the gearbox. It keeps the recordings' timing. Works with automatic gearboxes too. Set **Gearbox** to Torque converter for a soft push instead (see **Gearbox** below). |
 | **Retarder** | 30% (0–200) | Both grips | A hum proportional to the retarder stage that rises in pitch with speed (40 Hz standing, 65 Hz from 90 km/h) and fades at low speed. The engine brake is a knock at the engine's firing rate (rpm ÷ 20 for six cylinders), stronger at higher rpm and gone while you press the throttle. |
 | **Impact** | 100% (0–200) | Both grips | A strong 50 Hz pulse when acceleration jumps sharply (collisions, big hits). The threshold is set under [Detection](#detection). |
-| **Throttle/brake** | 20% (0–100) | Trigger | Follows the pedal you are pressing. On the throttle, 100 Hz that grows with pedal travel. On the brake, a 110 Hz pulse chopped at 12 Hz when the wheels lock; without lock, a light vibration proportional to speed and braking. |
+| **Throttle/brake** | 20% (0–100) | Trigger (the pressed pedal's) | Follows the pedal you are pressing. On the throttle, 100 Hz that grows with pedal travel. On the brake, a 110 Hz pulse chopped at 12 Hz when the wheels lock; without lock, a light vibration proportional to speed and braking. |
 | **└ Engine pulse** | 80% (0–100) | Follows Throttle/brake | How much the throttle trigger swells with the engine firing rhythm. 0% is steady with no engine feel in the trigger; higher makes the rhythm clearer (older versions were fixed at 80%). The pulse follows the same firings as the engine vibration on the grips, so the uneven idle and each firing's slightly different strength come through the trigger too. No effect on the brake side. |
 | **Ease at steady speed** | 60% (0–100) | - | A vibration that never changes soon goes unnoticed and only tires the hands, so while what drives them holds steady, **Engine** (rpm and load), **Road** (surface, speed and roughness) and **Throttle/brake** (the pedal) fade by this amount (about half in 6 s, nearly all in 25 s). Speeding up or slowing down, shifting, a new surface or moving a pedal brings full strength back at once. Speed drifting within about 3.6 km/h on cruise control and a finger resting on the trigger do not count as changes. Fully faded, 60% is about −8 dB and 80% about −14 dB; on a recorded drive of about 19 minutes, 60% took the road about 6.6 dB down overall and 40% about 3.9 dB. 0% disables it. Bumps, rumble strips and the wheel-lock pulse are moments, not a bed, and never fade. |
 
@@ -99,8 +99,8 @@ The switch on the left turns each effect on or off. An effect that is off is gre
 
 | Effect | Default | Default output | What it does |
 |---|---|---|---|
-| **Pedals** | 60% | Trigger | A short "thud" the moment throttle or brake reaches the floor (97% or more) |
-| **Brake squeal** | 40% | Trigger | A 230 Hz squeal while braking gently to a stop below about 14 km/h. Like the recorded ones it comes in separate squeals of 0.15–0.5 s, each a little off the last in pitch |
+| **Pedals** | 60% | Trigger (the pressed pedal's) | A short "thud" the moment throttle or brake reaches the floor (97% or more) |
+| **Brake squeal** | 40% | Left trigger | A 230 Hz squeal while braking gently to a stop below about 14 km/h. Like the recorded ones it comes in separate squeals of 0.15–0.5 s, each a little off the last in pitch |
 | **Trailer coupled** | 90% | Both grips | As in recorded couplings, the fifth wheel clatters for about 0.6 s when coupling (a knock every 20–40 ms, the hardest one somewhere different each time); a thump followed by an air hiss when uncoupling |
 | **Parking brake** | 70% | Both grips | Set: a "clunk", then the spring brakes venting (swelling over 0.15 s, dying over most of a second). Released: a "thunk", then a short puff 0.3 s later |
 | **Engine start/stop** | 80% | Both grips | Follows the start and stop recordings of two engines. On start the starter engages with a knock, compression knocks go on for about a second, then the engine catches, firing faster and faster into a "vroom" (strongest 0.2–0.3 s after it catches). On stop it fires on at the idle's beat for about 0.3 s, then drops away and putters out within a second. Assumes the game reports the engine on as cranking starts. |
@@ -154,7 +154,7 @@ Presets live under `presets` in `config.json`.
 |---|---|
 | **Save** | Saves the sliders, on/off states and outputs (grip/trigger/both) to `%APPDATA%\ATSHaptics\config.json`. While a preset is in use, it is saved there too. While there are unsaved changes the **Save** button turns blue and "Changed · not saved" is shown, and closing the window asks whether to save. |
 | **Defaults** | Resets every level, threshold and output to its default and turns every effect on. Saving is a separate step. |
-| **Debug log** (switch) | When on, every time the app takes the controller (Start, the game launching, reconnecting after a drop) it writes each 8 ms block sent to the controller as one line in `%APPDATA%\ATSHaptics\logs\blocks-<date>-<time>.csv`. Columns: time (to the ms), gap since the previous block (over 8 ms means output ran late), trigger route, peak trigger / left grip / right grip value (full scale ±127 for the grips, ±102 for the trigger), what the game reported (speed, rpm, gear, throttle, brake, retarder, engine brake, park brake, blinkers, range/splitter, the surface under each side, and every wheel's suspension on a new frame), the app's own state (engine, road and trigger levels, the steady fade, ducking, the effects still ringing), and the events of that block (including settings changes and pauses). A `.json` of the same name keeps the version, settings and motor curves the log started with. About 80 MB per hour; only the latest 10 logs are kept. The switch is saved at once and takes effect right away, even mid-drive. The event log shows the file name when recording begins. |
+| **Debug log** (switch) | When on, every time the app takes the controller (Start, the game launching, reconnecting after a drop) it writes each 8 ms block sent to the controller as one line in `%APPDATA%\ATSHaptics\logs\blocks-<date>-<time>.csv`. Columns: time (to the ms), gap since the previous block (over 8 ms means output ran late), the trigger(s) it played on (LEFT/RIGHT/BOTH, MUTE when quiet), peak trigger / left grip / right grip value (full scale ±127 for the grips, ±102 for the trigger), what the game reported (speed, rpm, gear, throttle, brake, retarder, engine brake, park brake, blinkers, range/splitter, the surface under each side, and every wheel's suspension on a new frame), the app's own state (engine, road and trigger levels, the steady fade, ducking, the effects still ringing), and the events of that block (including settings changes and pauses). A `.json` of the same name keeps the version, settings and motor curves the log started with. About 80 MB per hour; only the latest 10 logs are kept. The switch is saved at once and takes effect right away, even mid-drive. The event log shows the file name when recording begins. |
 | **Log folder ↗** | Opens the debug log folder in Explorer. |
 | **Last session: late frames / max ms** (right) | How often the previous session missed the 8 ms output period, and the worst delay. Close to 0 is normal. |
 
@@ -245,7 +245,7 @@ When the window opens it checks GitHub for the latest release. If there is a new
 - Check whether the game is paused or in a menu.
 - In the plugin window, check for a compatible plugin (RenCloud, TruckDash); if there is none, install it and restart the game.
 
-**Both triggers vibrate.** A limitation of the controller. See [Known limitations](#known-limitations).
+**Both triggers vibrate.** The pedal effects play only on the pressed pedal's trigger (brake left, throttle right). Both vibrate when another effect (the engine, say) is sent to **Trigger** or **Both**, or when both pedals' effects overlap: there is only one trigger vibration, so then the same one plays on both. If they always vibrate together, check the controller firmware. See [Known limitations](#known-limitations).
 
 **The window does not open when I start the game from Steam.**
 - Check the path and quotes in the launch option.
@@ -261,7 +261,7 @@ When the window opens it checks GitHub for the latest release. If there is a new
 
 ## Known limitations
 
-- There is only one trigger channel, so it vibrates **both triggers together** with no left/right distinction. The grips are independent. Verified on controller firmware 9.0.5.5 with `tone.py split` (a blind check against a reference tone): routing to the left or right, or alternating every block, felt the same on both triggers. Flydigi Space Station and X-Haptics also treat the triggers as a single part.
+- The trigger gets one vibration at a time, so the left and right triggers cannot play different vibrations at once: one plays alone, or both play the same. Which side plays is picked with the controller's motor setup command, verified on controller firmware 9.0.6.8 with blind checks (`tone.py grip-target`, `tone.py trigger-side`); older firmware is untested. The grips are independent.
 - Telemetry carries no engine cylinder count, gearbox type, wiper speed and the like, so those effects are set by hand or left out.
 - Based on unofficial reverse engineering; controller firmware updates may change the behaviour.
 
@@ -272,8 +272,8 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # window (or start_gui.cmd)
 .\.venv\Scripts\python.exe ats_haptics.py --monitor   # command line: --simulate, --scenario highway|city|mountain, --exit-with-game, per-effect levels
-.\.venv\Scripts\python.exe tone.py probe              # diagnostics: probe | tone | sweep | walk | route-test | diag | split | calibrate
-.\.venv\Scripts\python.exe tone.py split              # blind left/right trigger check, results in logs\trigger-split-*.txt
+.\.venv\Scripts\python.exe tone.py probe              # diagnostics: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate
+.\.venv\Scripts\python.exe tone.py trigger-side       # blind check that the trigger follows its side (answered on the pad), results in logs\trigger-side-*.txt
 .\.venv\Scripts\python.exe tone.py calibrate          # the window's motor calibration in a console, --reset clears it
 powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<version>.zip (source included)
 .\.venv\Scripts\python.exe i18n.py                  # translation check: missing, unused or {placeholder}-mismatched strings

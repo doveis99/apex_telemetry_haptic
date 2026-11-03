@@ -10,7 +10,7 @@ import random
 import unittest
 from unittest import mock
 
-from apex6 import MAX_SAMPLE, SAMPLE_RATE
+from apex6 import MAX_SAMPLE, SAMPLE_RATE, Route
 from effects import (AMT, BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RATTLE_S, BUMP_RIDE_MAX, CAB_FAR_SIDE,
                      CEILING, CONVERTER, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer, Gains,
                      NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface, surface_of)
@@ -442,6 +442,45 @@ class PedalTriggerTest(unittest.TestCase):
         full = self.trigger(user_brake=1.0, user_throttle=0.0)
         locked = self.trigger(locked=True, user_brake=1.0, user_throttle=0.0)
         self.assertGreaterEqual(max(map(abs, locked)), max(map(abs, full)))
+
+
+class TriggerSideTest(unittest.TestCase):
+    """The brake's effects play on the left trigger, the throttle's on the right, anything else on both."""
+
+    @staticmethod
+    def sides(frames: list[Frame], **gains) -> list[Route | None]:
+        s = Synth(effective_gains(Gains(**gains)))
+        return [s.render(f).side for f in frames]
+
+    def test_each_pedal_plays_on_its_trigger(self) -> None:
+        self.assertEqual(set(self.sides([frame(user_throttle=0.4) for _ in range(10)])), {Route.RIGHT})
+        self.assertEqual(set(self.sides([frame(user_throttle=0.0, user_brake=0.4) for _ in range(10)])), {Route.LEFT})
+
+    def test_the_tail_stays_on_its_pedals_trigger(self) -> None:
+        s = Synth(effective_gains(Gains()))
+        for _ in range(10):
+            s.render(frame(user_throttle=0.0, user_brake=0.4))
+        blocks = [s.render(frame(user_throttle=0.0, user_brake=0.0)) for _ in range(20)]
+        self.assertEqual(blocks[0].side, Route.LEFT)
+        self.assertEqual({b.side for b in blocks}, {Route.LEFT, None})
+        self.assertEqual(blocks[-1].route, Route.MUTE)  # and once it is quiet the trigger mutes, leaving the side
+
+    def test_a_floored_pedal_knocks_its_own_trigger(self) -> None:
+        others = [n for n in TOGGLEABLE if n != "pedal"]
+        for pedals, side in (({"user_throttle": 1.0}, Route.RIGHT),
+                             ({"user_throttle": 0.0, "user_brake": 1.0}, Route.LEFT)):
+            idle = frame(**dict.fromkeys(pedals, 0.0))
+            sides = self.sides([idle] + [frame(**pedals) for _ in range(5)], disabled=others)
+            self.assertEqual(sides[0], None)
+            self.assertEqual(set(sides[1:]), {side}, pedals)
+
+    def test_both_pedals_at_once_play_on_both(self) -> None:
+        idle = frame(user_throttle=0.0, user_brake=0.0)
+        self.assertEqual(self.sides([idle, frame(user_throttle=1.0, user_brake=1.0)])[1], Route.BOTH)
+
+    def test_another_effect_on_the_trigger_takes_both(self) -> None:
+        sides = self.sides([frame(user_throttle=0.4) for _ in range(10)], routes={"engine": "both"})
+        self.assertEqual(set(sides), {Route.BOTH})
 
 
 class SteadyFadeTest(unittest.TestCase):

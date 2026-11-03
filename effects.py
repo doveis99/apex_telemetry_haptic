@@ -1,8 +1,10 @@
 """Turn telemetry frames into 1 kHz waveforms for the APEX 6 Pro.
 
-Outputs: left grip, right grip and one trigger channel (on this firmware the
-trigger channel always drives both triggers). Each effect is routed to the
-grips, the trigger or both (Gains.routes). Telemetry is read once per 8 ms
+Outputs: left grip, right grip and one trigger channel, which plays on the
+left trigger, the right or both (one waveform either way). Each effect is
+routed to the grips, the trigger or both (Gains.routes); on the trigger, what
+belongs to one pedal plays on its own trigger (BRAKE_TRIGGER,
+THROTTLE_TRIGGER). Telemetry is read once per 8 ms
 block; amplitudes are ramped across the block and oscillator phases carry
 over, so parameter changes do not click.
 
@@ -436,6 +438,12 @@ DUCK_LOOKAHEAD = 0.02  # delayed bursts start ducking this early, leaving a gap
 GRIP, TRIGGER, BOTH = "grip", "trigger", "both"
 ROUTES = (GRIP, TRIGGER, BOTH)
 DEFAULT_ROUTES = {name: TRIGGER if name in ("trigger", "pedal", "squeal") else GRIP for name in TOGGLEABLE}
+# The trigger channel is one waveform for whichever triggers it plays on (Block.side).
+# The mix keeps what belongs to one pedal apart from the rest until the block is made:
+# the brake's alone plays on the left trigger, the throttle's alone on the right,
+# anything else on the channel, or both pedals at once, on both (_trigger_side).
+BOTH_TRIGGERS, BRAKE_TRIGGER, THROTTLE_TRIGGER = 2, 3, 4  # mix slots after the two grips
+TRIGGER_SLOTS = (BOTH_TRIGGERS, BRAKE_TRIGGER, THROTTLE_TRIGGER)
 
 
 @dataclass
@@ -887,12 +895,14 @@ class Burst:
     phase 0.25 starts at the crest instead of zero: a hard edge, not a swell.
     attack_s ramps the envelope in, for sounds that swell, like venting air.
     ducks=False leaves the continuous effects alone while it plays.
+    trigger_slot puts it on one pedal's trigger when it plays on the trigger.
     """
 
     def __init__(self, freq: float, amplitude: float, decay_s: float, delay_s: float = 0.0,
-                 phase: float = 0.0, attack_s: float = 0.0, ducks: bool = True) -> None:
+                 phase: float = 0.0, attack_s: float = 0.0, ducks: bool = True,
+                 trigger_slot: int = BOTH_TRIGGERS) -> None:
         self.freq, self.amplitude, self.decay_s, self.attack_s = freq, amplitude, decay_s, attack_s
-        self.ducks = ducks
+        self.ducks, self.trigger_slot = ducks, trigger_slot
         self.age = -delay_s
         self.phase = phase
 
@@ -1005,9 +1015,11 @@ class Synth:
         self.rumble_half = (Oscillator(), Oscillator())  # locked to rumble_osc at half its rate
         self.spin_noise = BandNoise(45.0, 1.5, seed=3)
         self.spin_chatter = Oscillator()
-        # (effect, side, burst); side "L"/"R" is one grip, "C" both. The
-        # trigger has no sides and takes every burst of an effect routed there.
+        # (effect, side, burst); side "L"/"R" is one grip, "C" both. The trigger
+        # takes every burst of an effect routed there, in the burst's trigger_slot.
         self.bursts: list[tuple[str, str, Burst]] = []
+        self.trigger_slot = BOTH_TRIGGERS  # the pedal the throttle/brake effect last followed
+        self.trigger_side = Route.BOTH  # where the trigger channel last played
         # previous-block state
         self.prev_amp = {"engine": 0.0, "road_l": 0.0, "road_r": 0.0, "rumble_l": 0.0, "rumble_r": 0.0,
                          "spin": 0.0, "retarder": 0.0, "jake": 0.0, "trigger": 0.0, "squeal": 0.0,
@@ -1281,10 +1293,11 @@ class Synth:
     def _state_events(self, frame: Frame) -> None:
         g, log = self.g, self.levels.events
 
-        for key, value in (("throttle", frame.user_throttle), ("brake", frame.user_brake)):
+        for key, value, slot in (("throttle", frame.user_throttle, THROTTLE_TRIGGER),
+                                 ("brake", frame.user_brake, BRAKE_TRIGGER)):
             floored = value >= 0.97
             if self._changed(f"{key}_floor", floored) and floored and g.pedal:
-                self._both("pedal", Burst(130.0, PEDAL_FLOOR * g.pedal, 0.012, phase=0.25))
+                self._both("pedal", Burst(130.0, PEDAL_FLOOR * g.pedal, 0.012, phase=0.25, trigger_slot=slot))
                 log.append(t("페달 바닥"))
 
         if self._changed("park_brake", frame.park_brake) and g.park_brake:
@@ -1576,6 +1589,8 @@ class Synth:
         if lock > 0 and not self.was_locked:
             self.lock_phase = 0.0  # the warning starts with a pulse, not up to half a cycle late
         self.was_locked = lock > 0
+        if trigger_mode != "-":  # after letting go, its tail stays on that pedal's trigger
+            self.trigger_slot = BRAKE_TRIGGER if trigger_mode == "brake" else THROTTLE_TRIGGER
         sway_k = 1.0 - math.exp(-DT / CAB_SWAY_TAU)
         for side, want in enumerate(self.cab_sway if live else (0.0, 0.0)):
             self.sway[side] += (want - self.sway[side]) * sway_k
@@ -1592,6 +1607,7 @@ class Synth:
         eq_trigger = eq(110.0 if trigger_mode == "brake" and lock > 0 else 100.0)
         eq_bursts = [eq(burst.freq) for _, _, burst in self.bursts]
         trigger, left, right = [], [], []
+        heard: set[int] = set()  # the TRIGGER_SLOTS something played in
         p = self.prev_amp
         for n in range(SUBFRAMES):
             k = (n + 1) / SUBFRAMES
@@ -1609,8 +1625,8 @@ class Synth:
             wl = p["sway_l"] + (sway_l - p["sway_l"]) * k
             wr = p["sway_r"] + (sway_r - p["sway_r"]) * k
 
-            out = [0.0, 0.0, 0.0]  # left grip, right grip, trigger: events
-            bed = [0.0, 0.0, 0.0]  # continuous effects, ducked under the events
+            out = [0.0] * 5  # left grip, right grip, then the TRIGGER_SLOTS: events
+            bed = [0.0] * 5  # continuous effects, ducked under the events
             firing, fire_gain = self.engine_osc.phase, self.firing_gain
             w = TAU * firing
             engine = e * fire_gain * (self.engine_osc.next(engine_freq) + 0.3 * math.sin(2 * w)
@@ -1653,23 +1669,29 @@ class Synth:
                 t = tr * pulse * self.trigger_osc.next(100.0)
             else:
                 t = tr * self.trigger_osc.next(100.0)
-            _mix(bed, routes["trigger"], t, t, t, eq_trigger)
+            _mix(bed, routes["trigger"], t, t, t, eq_trigger, self.trigger_slot)
             if sq:
                 squeal = sq * self.squeal.next()
-                _mix(out, routes["squeal"], squeal, squeal, squeal, eq_squeal)
+                _mix(out, routes["squeal"], squeal, squeal, squeal, eq_squeal, BRAKE_TRIGGER)
             else:
                 self.squeal.restart()
             if wl or wr:
                 # one cab, one tone: the same swing on both grips, leaning as the cab does
                 c = self.sway_osc.next(CAB_SWAY_HZ)
                 _mix(out, routes["bumps"], wl * c, wr * c, 0.7 * (wl + wr) * c, eq_sway)
-            drive = [0.0, 0.0, 0.0]
+            drive = [0.0] * 5
             for (effect, side, burst), burst_eq in zip(self.bursts, eq_bursts):
+                slot = burst.trigger_slot
                 if effect not in DUCK_EXEMPT and burst.ducks:
                     d = burst.level
-                    _mix(drive, routes[effect], 0.0 if side == "R" else d, 0.0 if side == "L" else d, d)
+                    _mix(drive, routes[effect], 0.0 if side == "R" else d, 0.0 if side == "L" else d, d, FLAT, slot)
                 b = burst.next()
-                _mix(out, routes[effect], 0.0 if side == "R" else b, 0.0 if side == "L" else b, b, burst_eq)
+                _mix(out, routes[effect], 0.0 if side == "R" else b, 0.0 if side == "L" else b, b, burst_eq, slot)
+            for slot in TRIGGER_SLOTS:
+                if out[slot] or bed[slot]:
+                    heard.add(slot)
+            for mix in (out, bed, drive):  # one trigger channel from here on
+                mix[BOTH_TRIGGERS] += mix[BRAKE_TRIGGER] + mix[THROTTLE_TRIGGER]
             for i, cut in enumerate(self.cuts):
                 target = min(1.0, drive[i] / DUCK_FULL) * g.ducking
                 if target > self.duck[i]:
@@ -1692,9 +1714,23 @@ class Synth:
         lv = self.levels
         lv.engine, lv.road_left, lv.road_right = engine_amp, road_l, road_r
         lv.trigger, lv.trigger_mode = trigger_amp, trigger_mode
-        any_trigger = any(trigger)
-        return Block(trigger=trigger, left_grip=left, right_grip=right,
-                     route=Route.BOTH if any_trigger else Route.MUTE)
+        if not any(trigger):
+            return Block(trigger=trigger, left_grip=left, right_grip=right, route=Route.MUTE)
+        # the 0x57 route stays BOTH, as Flydigi's engine sends it: the side is picked by Block.side
+        return Block(trigger=trigger, left_grip=left, right_grip=right, route=Route.BOTH,
+                     side=self._trigger_side(heard))
+
+    def _trigger_side(self, heard: set[int]) -> Route:
+        """Where this block's trigger channel plays: one pedal's trigger when only its effects
+        played on the channel, else both; with nothing in the mix (the trigger's resonance cut
+        ringing out), where it played last."""
+        if heard == {BRAKE_TRIGGER}:
+            self.trigger_side = Route.LEFT
+        elif heard == {THROTTLE_TRIGGER}:
+            self.trigger_side = Route.RIGHT
+        elif heard:
+            self.trigger_side = Route.BOTH
+        return self.trigger_side
 
     def _strip(self, side: int, freq: float) -> tuple[float, float]:
         """One sample of a side's strip (RUMBLE_SHAPE): the grooves with their harmonics, and the half-rate part."""
@@ -1736,13 +1772,14 @@ class Synth:
 
 
 def _mix(out: list[float], route: str, left: float, right: float, trigger: float,
-         eq: tuple[float, float] = FLAT) -> None:
-    """Add one effect's sample to the channels its route selects, scaled by its (grip, trigger) eq."""
+         eq: tuple[float, float] = FLAT, slot: int = BOTH_TRIGGERS) -> None:
+    """Add one effect's sample to the channels its route selects, scaled by its (grip, trigger) eq;
+    on the trigger, in the slot of the pedal it belongs to (TRIGGER_SLOTS)."""
     if route != TRIGGER:
         out[0] += left * eq[0]
         out[1] += right * eq[0]
     if route != GRIP:
-        out[2] += trigger * eq[1]
+        out[slot] += trigger * eq[1]
 
 
 def _ramp(x: float, points: tuple[tuple[float, float], ...]) -> float:

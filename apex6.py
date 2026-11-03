@@ -7,7 +7,8 @@ src/dualsense/Apex6HapticBridge.cpp.
 
 Stream model: every 8 ms one 33-byte report carries eight 1 kHz subframes,
 each with a trigger, left-grip and right-grip sample (signed, +-127 max).
-The trigger channel is a single waveform routed to left, right or both.
+The trigger channel is a single waveform, played on the left, the right or
+both triggers (Block.side).
 """
 
 from __future__ import annotations
@@ -101,15 +102,29 @@ def build_command(command: int, payload: bytes = b"") -> bytes:
 # own trigger haptics use area 0 with target 0 left, 1 right and 2 both, so
 # 0x12 may read as triggers (0x1_), both (0x_2). Target and mode are the
 # fields varied in experiments and the defaults are the captured values;
-# modes 0-3 felt alike on firmware 9.0.5.5.
+# modes 0-3 felt alike on firmware 9.0.5.5, and so did targets 0x10-0x12 on
+# 9.0.5.5 and 9.0.6.8 though each wrote only its side's record in motor RAM.
+# The "grip" frame is in fact the one that sets up the triggers: its records
+# sit where area 0 keeps Space Station's trigger records, and its target picks
+# the trigger the 0x57 trigger channel plays on, 0x00 left, 0x01 right, 0x02
+# both (Route's values), with the grips unchanged (tone.py grip-target,
+# firmware 9.0.6.8 over the dongle, 2026-11-03). Each side is switched on
+# (01 0s 03 00 40) and off (01 0s 00) without touching the other. The 0x57
+# route bits never picked a side on 9.0.5.5 and later.
+DEFAULT_TRIGGER_SIDE = Route.BOTH
 DEFAULT_TRIGGER_TARGET = 0x12
 DEFAULT_TRIGGER_MODE = 0x02
 
 
+def trigger_side_report(side: int) -> bytes:
+    return build_command(CMD_MOTOR_ROUTE, bytes([0x01, side, 0x03, 0x00, 0x40]))
+
+
 def motor_enable_reports(trigger_mode: int = DEFAULT_TRIGGER_MODE,
-                         trigger_target: int = DEFAULT_TRIGGER_TARGET) -> tuple[bytes, bytes]:
+                         trigger_target: int = DEFAULT_TRIGGER_TARGET,
+                         trigger_side: int = DEFAULT_TRIGGER_SIDE) -> tuple[bytes, bytes]:
     return (
-        build_command(CMD_MOTOR_ROUTE, bytes([0x01, 0x02, 0x03, 0x00, 0x40])),
+        trigger_side_report(trigger_side),
         build_command(CMD_MOTOR_ROUTE, bytes([0x01, trigger_target, trigger_mode, 0x40, 0x00])),
     )
 
@@ -137,6 +152,10 @@ class Block:
     # None: set the trigger-valid bit only when routed. True/False forces it,
     # for diagnostics such as "trigger samples with route MUTE".
     trigger_bit: bool | None = None
+    # The trigger(s) the trigger channel plays on, Route.LEFT, RIGHT or BOTH,
+    # set with the 0x53 trigger frame before this block goes out; None leaves
+    # it where it is.
+    side: Route | None = None
 
     def is_silent(self) -> bool:
         return not any(self.trigger) and not any(self.left_grip) and not any(self.right_grip)
@@ -332,6 +351,7 @@ class Apex6:
         self._enabled = False
         self._trigger_mode = DEFAULT_TRIGGER_MODE
         self._trigger_target = DEFAULT_TRIGGER_TARGET
+        self._trigger_side = DEFAULT_TRIGGER_SIDE
 
     def __enter__(self) -> "Apex6":
         try:
@@ -383,8 +403,9 @@ class Apex6:
         raise DeviceUnavailable(t("컨트롤러 응답 없음 (절전 중이면 버튼을 눌러 깨우세요)"))
 
     def enable(self, trigger_mode: int = DEFAULT_TRIGGER_MODE,
-               trigger_target: int = DEFAULT_TRIGGER_TARGET) -> None:
-        self._trigger_mode, self._trigger_target = trigger_mode, trigger_target
+               trigger_target: int = DEFAULT_TRIGGER_TARGET,
+               trigger_side: int = DEFAULT_TRIGGER_SIDE) -> None:
+        self._trigger_mode, self._trigger_target, self._trigger_side = trigger_mode, trigger_target, trigger_side
         self.reassert()
         self._enabled = True
         # Silence every 8 ms through the wait, as stream() sends it: a pad left
@@ -395,22 +416,40 @@ class Apex6:
 
     def reassert(self) -> None:
         """Send the motor route again; harmless when it is still in place."""
-        for report in motor_enable_reports(self._trigger_mode, self._trigger_target):
+        for report in motor_enable_reports(self._trigger_mode, self._trigger_target, self._trigger_side):
             self._write(report)
 
     def reconfigure(self, trigger_mode: int = DEFAULT_TRIGGER_MODE,
-                    trigger_target: int = DEFAULT_TRIGGER_TARGET) -> None:
+                    trigger_target: int = DEFAULT_TRIGGER_TARGET,
+                    trigger_side: int = DEFAULT_TRIGGER_SIDE) -> None:
         if self._enabled:
             self.disable()
-        self.enable(trigger_mode, trigger_target)
+        self.enable(trigger_mode, trigger_target, trigger_side)
+
+    def set_trigger_side(self, side: Route) -> None:
+        """Play the trigger channel on Route.LEFT, RIGHT or BOTH from the next report on.
+
+        The new side goes on before the one it leaves goes off, so a trigger
+        that plays on through the change never drops out. Only a change is
+        sent: the stream calls this every block.
+        """
+        if side == self._trigger_side:
+            return
+        old, self._trigger_side = self._trigger_side, side
+        self._write(trigger_side_report(side))
+        for one in (Route.LEFT, Route.RIGHT):
+            if old in (one, Route.BOTH) and side not in (one, Route.BOTH):
+                self._write(build_command(CMD_MOTOR_ROUTE, bytes([0x01, one, 0x00])))
 
     def disable(self) -> None:
         for _ in range(3):
             self._write(SILENT_REPORT)
             time.sleep(FRAME_PERIOD)
-        if self._trigger_target != DEFAULT_TRIGGER_TARGET:
-            # an experimental target is released by name too, then the usual frames
-            self._write(build_command(CMD_MOTOR_ROUTE, bytes([0x01, self._trigger_target, 0x00])))
+        # a side or an experimental target is released by name too, then the usual frames
+        for target, default in ((self._trigger_side, DEFAULT_TRIGGER_SIDE),
+                                (self._trigger_target, DEFAULT_TRIGGER_TARGET)):
+            if target != default:
+                self._write(build_command(CMD_MOTOR_ROUTE, bytes([0x01, target, 0x00])))
         for report in MOTOR_DISABLE:
             self._write(report)
         self._enabled = False
@@ -485,6 +524,8 @@ class Apex6:
                 # then plays whatever comes next without slack: wired, a 250 Hz tone
                 # after 0.4 s of thinned silence came out low and pulsing, with no
                 # late frame on this side; after silence sent every 8 ms it did not.
+                if block.side is not None:
+                    self.set_trigger_side(block.side)
                 self.write_block(block)
                 write_ms = (time.perf_counter() - now) * 1000.0
                 stats.total_write_ms += write_ms

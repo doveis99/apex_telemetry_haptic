@@ -15,8 +15,9 @@ and what reached the motors:
   new_frame      1 when the game had rendered a new frame since the last
                  block (at 60 fps about every other one)
   route, trigger, left_grip, right_grip
-                 what was sent: the trigger route and each channel's peak
-                 sample (+-112 full scale)
+                 what was sent: the trigger(s) the trigger channel played
+                 on (LEFT, RIGHT, BOTH, or MUTE when silent) and each
+                 channel's peak sample (+-112 full scale)
   speed_kmh ... trailer
                  the game's values the effects follow; blinkers L/R as the
                  lamp shows, shifter R (range) / S (splitter) while switched
@@ -152,7 +153,8 @@ class BlockLog:
                      " ".join(([f"▶{preview}"] if preview else []) + sounding))
         else:
             inner = ("",) * 8
-        self._csv.writerow((f"{datetime.now():%H:%M:%S.%f}"[:-3], f"{gap:.1f}", new_frame, block.route.name,
+        side = block.route if block.side is None else block.side
+        self._csv.writerow((f"{datetime.now():%H:%M:%S.%f}"[:-3], f"{gap:.1f}", new_frame, side.name,
                             _peak(block.trigger), _peak(block.left_grip), _peak(block.right_grip),
                             *game, *inner, "; ".join(events)))
         if time.monotonic() - self._flushed > FLUSH_S:

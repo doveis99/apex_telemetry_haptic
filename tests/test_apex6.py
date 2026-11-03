@@ -7,9 +7,9 @@ import unittest
 from ctypes import wintypes
 from unittest import mock
 
-from apex6 import (CMD_MOTOR_ROUTE, CMD_RAM_READ, ENABLE_DELAY, FRAME_PERIOD, MAGIC, RAM_MOTOR, SILENT_REPORT,
-                   SUBFRAMES, THREAD_PRIORITY_TIME_CRITICAL, Apex6, Block, _inline_command, _ram_chunk,
-                   build_command, build_realtime, motor_enable_reports)
+from apex6 import (CMD_MOTOR_ROUTE, CMD_RAM_READ, ENABLE_DELAY, FRAME_PERIOD, MAGIC, MOTOR_DISABLE, RAM_MOTOR,
+                   SILENT_REPORT, SUBFRAMES, THREAD_PRIORITY_TIME_CRITICAL, Apex6, Block, Route, _inline_command,
+                   _ram_chunk, build_command, build_realtime, motor_enable_reports)
 
 
 class FakeDevice:
@@ -27,6 +27,7 @@ class StreamTest(unittest.TestCase):
         # next tone low and pulsing; sent every block it plays it cleanly.
         pad = Apex6.__new__(Apex6)
         pad._dev, pad._enabled, pad._trigger_mode, pad._trigger_target = FakeDevice(), True, 0x02, 0x12
+        pad._trigger_side = 0x02
         tone = Block(left_grip=[50.0] * SUBFRAMES)
         blocks = [tone] * 5 + [Block()] * 40 + [tone] * 5
         stats = pad.stream(lambda first: blocks[first // SUBFRAMES] if first // SUBFRAMES < len(blocks) else None)
@@ -38,6 +39,7 @@ class StreamTest(unittest.TestCase):
         clock = FakeClock()
         pad = Apex6.__new__(Apex6)
         pad._dev, pad._enabled, pad._trigger_mode, pad._trigger_target = FakeDevice(), True, 0x02, 0x12
+        pad._trigger_side = 0x02
         with mock.patch("apex6.time", clock):
             stats = pad.stream(lambda first: Block() if first < 10 * SUBFRAMES else None, period=0.002)
         self.assertEqual((stats.frames, stats.late_frames), (10, 0))
@@ -54,6 +56,7 @@ class StreamTest(unittest.TestCase):
         before, during = priority(), []
         pad = Apex6.__new__(Apex6)
         pad._dev, pad._enabled, pad._trigger_mode, pad._trigger_target = FakeDevice(), True, 0x02, 0x12
+        pad._trigger_side = 0x02
         pad.stream(lambda first: during.append(priority()) or (Block() if first < 3 * SUBFRAMES else None))
         self.assertEqual(set(during), {THREAD_PRIORITY_TIME_CRITICAL})
         self.assertEqual(priority(), before)
@@ -134,12 +137,81 @@ class MotorRouteTest(unittest.TestCase):
         _, trigger = motor_enable_reports(trigger_target=0x10)
         self.assertEqual(trigger, build_command(CMD_MOTOR_ROUTE, bytes([0x01, 0x10, 0x02, 0x40, 0x00])))
 
+    def test_trigger_side_replaces_only_its_byte(self) -> None:
+        side, other = motor_enable_reports(trigger_side=Route.LEFT)
+        self.assertEqual(side, build_command(CMD_MOTOR_ROUTE, bytes([0x01, 0x00, 0x03, 0x00, 0x40])))
+        self.assertEqual(other, motor_enable_reports()[1])
+
     def test_an_experimental_target_is_released_too(self) -> None:
         pad = Apex6.__new__(Apex6)
         pad._dev, pad._enabled, pad._trigger_mode, pad._trigger_target = FakeDevice(), True, 0x02, 0x11
+        pad._trigger_side = 0x02
         pad.disable()
         self.assertIn(build_command(CMD_MOTOR_ROUTE, bytes([0x01, 0x11, 0x00])), pad._dev.reports)
         self.assertIn(build_command(CMD_MOTOR_ROUTE, bytes([0x01, 0x12, 0x00])), pad._dev.reports)
+        self.assertNotIn(build_command(CMD_MOTOR_ROUTE, bytes([0x01, 0x00, 0x00])), pad._dev.reports)
+
+    def test_one_side_is_released_too(self) -> None:
+        pad = Apex6.__new__(Apex6)
+        pad._dev, pad._enabled, pad._trigger_mode, pad._trigger_target = FakeDevice(), True, 0x02, 0x12
+        pad._trigger_side = Route.RIGHT
+        pad.disable()
+        released = [r for r in pad._dev.reports if r[3] == CMD_MOTOR_ROUTE]
+        self.assertEqual(released, [build_command(CMD_MOTOR_ROUTE, bytes([0x01, 0x01, 0x00])),
+                                    *MOTOR_DISABLE])
+
+    def test_reasserts_keep_the_side(self) -> None:
+        pad = Apex6.__new__(Apex6)
+        pad._dev, pad._enabled = FakeDevice(), False
+        with mock.patch("apex6.time", FakeClock()):
+            pad.reconfigure(trigger_side=Route.LEFT)
+        pad.set_trigger_side(Route.RIGHT)
+        pad._dev.reports.clear()
+        pad.reassert()
+        self.assertEqual(pad._dev.reports, list(motor_enable_reports(trigger_side=Route.RIGHT)))
+
+
+def side_on(side: int) -> bytes:
+    return build_command(CMD_MOTOR_ROUTE, bytes([0x01, side, 0x03, 0x00, 0x40]))
+
+
+def side_off(side: int) -> bytes:
+    return build_command(CMD_MOTOR_ROUTE, bytes([0x01, side, 0x00]))
+
+
+class TriggerSideTest(unittest.TestCase):
+    def pad(self, side: Route = Route.BOTH) -> Apex6:
+        pad = Apex6.__new__(Apex6)
+        pad._dev, pad._enabled, pad._trigger_mode, pad._trigger_target = FakeDevice(), True, 0x02, 0x12
+        pad._trigger_side = side
+        return pad
+
+    def test_the_new_side_goes_on_before_the_old_one_goes_off(self) -> None:
+        for old, new, sent in ((Route.BOTH, Route.LEFT, [side_on(0), side_off(1)]),
+                               (Route.LEFT, Route.RIGHT, [side_on(1), side_off(0)]),
+                               (Route.RIGHT, Route.BOTH, [side_on(2)]),
+                               (Route.LEFT, Route.LEFT, [])):
+            pad = self.pad(old)
+            pad.set_trigger_side(new)
+            self.assertEqual(pad._dev.reports, sent, f"{old.name} -> {new.name}")
+
+    def test_the_stream_follows_each_blocks_side(self) -> None:
+        pad = self.pad()
+        tone = [30.0] * SUBFRAMES
+        blocks = [Block(trigger=tone, route=Route.BOTH, side=Route.LEFT)] * 3 + [Block()] * 2 \
+            + [Block(trigger=tone, route=Route.BOTH, side=Route.RIGHT)] * 2
+        pad.stream(lambda first: blocks[first // SUBFRAMES] if first // SUBFRAMES < len(blocks) else None)
+        names = {side_on(0): "L on", side_off(0): "L off", side_on(1): "R on", side_off(1): "R off",
+                 build_realtime(blocks[0]): "tone", SILENT_REPORT: "-"}
+        # each switch goes out just before the first block that needs it
+        self.assertEqual([names[r] for r in pad._dev.reports],
+                         ["L on", "R off", "tone", "tone", "tone", "-", "-", "R on", "L off", "tone", "tone"])
+
+    def test_blocks_without_a_side_leave_it(self) -> None:
+        pad = self.pad(Route.LEFT)
+        pad.stream(lambda first: Block(trigger=[30.0] * SUBFRAMES, route=Route.RIGHT) if first < 3 * SUBFRAMES
+                   else None)
+        self.assertFalse([r for r in pad._dev.reports if r[3] == CMD_MOTOR_ROUTE])
 
 
 class RamReadTest(unittest.TestCase):

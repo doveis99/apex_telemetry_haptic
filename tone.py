@@ -9,6 +9,9 @@ Examples:
   python tone.py trigger-mode                blind check whether the 0x53 trigger mode byte picks a trigger
   python tone.py trigger-target              the same for its target byte, after showing the on-board trigger setup
   python tone.py trigger-ram                 motor RAM after enabling each trigger target, no vibration
+  python tone.py grip-target                 the same for the grip frame's target, then where a grip tone lands
+  python tone.py grip-ram                    motor RAM after enabling each grip frame target, no vibration
+  python tone.py trigger-side                blind check that one tone follows its side as it moves mid-stream
   python tone.py report-rate                 blind check whether reports sent faster than 8 ms raise the 1 kHz rate
   python tone.py report-model                blind X/Y check: are those reports played faster, or cut off at 1 kHz
   python tone.py calibrate                  match each frequency's strength by feel, for the synth's eq
@@ -19,8 +22,8 @@ from __future__ import annotations
 import argparse
 import math
 
-from apex6 import (DEFAULT_TRIGGER_MODE, DEFAULT_TRIGGER_TARGET, FRAME_PERIOD, MAX_SAMPLE, RAM_MOTOR, SAMPLE_RATE,
-                   SUBFRAMES, Apex6, Block, Route)
+from apex6 import (DEFAULT_TRIGGER_MODE, DEFAULT_TRIGGER_SIDE, DEFAULT_TRIGGER_TARGET, FRAME_PERIOD, MAX_SAMPLE,
+                   RAM_MOTOR, SAMPLE_RATE, SUBFRAMES, Apex6, Block, Route)
 
 TARGETS = {
     "left": (False, True, False, Route.MUTE),
@@ -236,7 +239,7 @@ def run_split(pad: Apex6, freq: float, amps: list[float], seconds: float,
     _save_report("trigger-split", lines)
 
 
-# 0x53 trigger frame checks. The frame is 01 tt mm 40 00: area 1, target tt,
+# 0x53 frame checks. The trigger frame is 01 tt mm 40 00: area 1, target tt,
 # mode mm (Space Station 5.0's [area, target, mode, params] layout).
 # - mode: the xHaptics Engine (5.0.2.6) configures the motors from separate
 #   left and right trigger switches (motor53Config), and mm is captured as 0x02
@@ -244,12 +247,26 @@ def run_split(pad: Apex6, freq: float, amps: list[float], seconds: float,
 # - target: Space Station's own trigger haptics (area 0) use target 0 left,
 #   1 right and 2 both, so 0x12 may be "triggers, both" and 0x10 and 0x11 one
 #   trigger each.
+# - grip-target: the grip frame 01 gg 03 00 40 writes the motor RAM records
+#   where area 0 keeps those trigger records, so its gg (0x02 captured) may be
+#   the trigger side instead, 0x00 left and 0x01 right. It may pick a grip as
+#   well, which a grip pass after the triggers asks.
 # Each value plays under one fingertip at a time, shuffled, after a reference
 # at the default value, with the same 0x57 route throughout, so only that byte
 # changes.
 TRIGGER_MODES = (0x00, 0x01, 0x02, 0x03)
 TRIGGER_TARGETS = (0x10, 0x11, 0x12)
-TRIGGER_FIELDS = {"mode": DEFAULT_TRIGGER_MODE, "target": DEFAULT_TRIGGER_TARGET}
+GRIP_TARGETS = (0x00, 0x01, 0x02)
+# check -> (Apex6.enable keyword, the captured value played as the reference,
+# name in prompts and reports, the RAM_RECORDS part its frame writes, and the
+# values that would write only the left and only the right record)
+BYTE_FIELDS = {
+    "trigger-mode": ("trigger_mode", DEFAULT_TRIGGER_MODE, "트리거 mode", 1, None),
+    "trigger-target": ("trigger_target", DEFAULT_TRIGGER_TARGET, "트리거 target", 1, (0x10, 0x11)),
+    "grip-target": ("trigger_side", DEFAULT_TRIGGER_SIDE, "그립 프레임 target", 0, (0x00, 0x01)),
+}
+# motor RAM check -> the byte it varies
+RAM_CHECKS = {"trigger-ram": "trigger-target", "grip-ram": "grip-target"}
 
 
 def mode_verdict(left: int, right: int) -> str:
@@ -284,22 +301,22 @@ def modes_verdict(ratings: dict[tuple[str, int], int], control: int = DEFAULT_TR
 
 def run_byte_check(pad: Apex6, field: str, values: list[int], route: str, freq: float,
                    amps: list[float], seconds: float) -> list[str]:
-    """Blind check of one 0x53 trigger byte ("mode" or "target"); returns the report lines."""
+    """Blind check of one 0x53 byte (a BYTE_FIELDS key) on the triggers; returns the report lines."""
     import random
     from datetime import datetime
 
     from version import __version__
 
-    control = TRIGGER_FIELDS[field]
+    keyword, control, name, _, _ = BYTE_FIELDS[field]
 
     def configure(value: int) -> None:
-        pad.reconfigure(**{f"trigger_{field}": value})
+        pad.reconfigure(**{keyword: value})
 
     info = pad.info
     print(f"펌웨어: {_firmware_text(info)}")
     print("\n컨트롤러를 책상에 내려놓고 그립은 잡지 마세요.")
     print("단계마다 안내하는 트리거 하나에만 손가락 끝을 가볍게 올려 두세요.")
-    print(f"단계마다 기준음(0x53 {field} 바이트 0x{control:02X}) 다음에 잠깐 쉬고 시험음이 울립니다.")
+    print(f"단계마다 기준음(0x53 {name} 바이트 0x{control:02X}) 다음에 잠깐 쉬고 시험음이 울립니다.")
     print("시험음이 기준음보다 어땠는지 답하세요. 바이트는 섞어서 나오고, 끝나면 표에서 공개됩니다.\n")
 
     steps = []
@@ -328,9 +345,9 @@ def run_byte_check(pad: Apex6, field: str, values: list[int], route: str, freq: 
     configure(control)
 
     lines = [
-        f"0x53 트리거 {field} 바이트 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        f"0x53 {name} 바이트 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
         *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
-        f"톤: {freq:g} Hz, {seconds:g}초, 0x57 route={route}, 기준 {field} 0x{control:02X}",
+        f"톤: {freq:g} Hz, {seconds:g}초, 0x57 route={route}, 기준 {name} 0x{control:02X}",
         f"평가: 기본값으로 울린 기준음과 비교한 시험음 (0x{control:02X} 칸은 대조군이라 '비슷'이 정상)",
         "",
         "세기   손가락         " + "  ".join(f" 0x{v:02X}" for v in values),
@@ -412,30 +429,34 @@ def ram_changes(before: bytes, after: bytes) -> list[str]:
             for i, (a, b) in enumerate(zip(before, after)) if a != b]
 
 
-def ram_target_verdict(written: dict[int, tuple[bool, bool]]) -> str:
-    """Judge from {target: (left, right) part-1 record on in area 1 while enabled}."""
-    if 0x10 not in written or 0x11 not in written:
-        return "0x10과 0x11을 둘 다 봐야 판정할 수 있음"
-    left, right = written[0x10], written[0x11]
+def ram_target_verdict(written: dict[int, tuple[bool, bool]], field: str = "trigger-target") -> str:
+    """Judge from {target: (left, right) record of the field's part on in area 1 while enabled}."""
+    left_value, right_value = BYTE_FIELDS[field][4]
+    left_name, right_name = f"0x{left_value:02X}", f"0x{right_value:02X}"
+    if left_value not in written or right_value not in written:
+        return f"{left_name}과 {right_name}을 둘 다 봐야 판정할 수 있음"
+    left, right = written[left_value], written[right_value]
     if left == (True, False) and right == (False, True):
-        return ("0x10은 왼쪽, 0x11은 오른쪽 기록만 씀. trigger-target에서 양쪽이 같게 느껴졌다면 "
-                "실시간 트리거 출력이 이 기록과 상관없이 양쪽으로 나감 (펌웨어 쪽 한계로 보임)")
+        return (f"{left_name}은 왼쪽, {right_name}은 오른쪽 기록만 씀. {field}에서 양쪽이 같게 느껴졌다면 "
+                "실시간 출력이 이 기록과 상관없이 양쪽으로 나감 (펌웨어 쪽 한계로 보임)")
     if left == right == (True, True):
-        return "0x10·0x11도 양쪽 기록을 다 씀: 펌웨어가 이 target을 '양쪽'으로 받음"
+        return f"{left_name}·{right_name}도 양쪽 기록을 다 씀: 펌웨어가 이 target을 '양쪽'으로 받음"
     if left == right == (False, False):
-        return "0x10·0x11은 트리거 기록을 쓰지 않음: 펌웨어가 받지 않는 값"
+        return f"{left_name}·{right_name}은 이 프레임의 기록을 쓰지 않음: 펌웨어가 받지 않는 값"
     return "예상과 다른 조합: 위 표를 보고 판단"
 
 
-def run_ram_check(pad: Apex6, targets: list[int]) -> None:
-    """Enable the motors with each trigger target and read motor RAM, on and off again; no vibration."""
+def run_ram_check(pad: Apex6, check: str, targets: list[int]) -> None:
+    """Enable the motors with each target of a RAM_CHECKS check and read motor RAM, on and off again; no vibration."""
     from datetime import datetime
 
     from version import __version__
 
+    field = RAM_CHECKS[check]
+    keyword, _, name, part, _ = BYTE_FIELDS[field]
     info = pad.info
     lines = [
-        f"0x53 트리거 target별 모터 RAM {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        f"0x53 {name}별 모터 RAM {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
         *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
         "진동 없이 모터를 켜고 끄기만 하며, 바뀐 바이트는 시작할 때와 비교",
         "",
@@ -448,7 +469,7 @@ def run_ram_check(pad: Apex6, targets: list[int]) -> None:
     written: dict[int, tuple[bool, bool]] = {}
     for target in targets:
         print(f"target 0x{target:02X} 켜고 끄는 중...")
-        pad.enable(trigger_target=target)
+        pad.enable(**{keyword: target})
         on, on_lines = _motor_ram(pad)
         pad.disable()
         off, off_lines = _motor_ram(pad)
@@ -457,22 +478,78 @@ def run_ram_check(pad: Apex6, targets: list[int]) -> None:
             lines += ram_changes(base, on) or ["    바뀐 바이트 없음"]
             if len(on) >= 2 * RAM_AREA_SIZE:
                 written[target] = tuple(bool(on[RAM_AREA_SIZE + start])
-                                        for part, _, start, _ in RAM_RECORDS if part == 1)
+                                        for record_part, _, start, _ in RAM_RECORDS if record_part == part)
         lines.append("  끈 뒤: " + (f"area 1: {ram_state(off)}" if off is not None else off_lines[0]))
         if off is not None:
             lines += ram_changes(base, off) or ["    시작할 때와 같음"]
-    lines += ["", f"-> {ram_target_verdict(written)}"]
-    _save_report("trigger-ram", lines)
+    lines += ["", f"-> {ram_target_verdict(written, field)}"]
+    _save_report(check, lines)
 
 
-def run_target_check(pad: Apex6, targets: list[int], route: str, freq: float, amps: list[float],
+# The grip frame may set up a grip rather than a trigger, so grip-target then
+# asks where a tone on both grips lands with each target, the controller held
+# as usual and no finger on the triggers.
+GRIP_SIDES = {0: "안 울림", 1: "왼손만", 2: "오른손만", 3: "양손"}
+GRIP_SIDE_FREQ = 80.0  # near the grip resonance, as tone and walk default to
+
+
+def grip_sides_verdict(heard: dict[int, int]) -> str:
+    """Judge the grip pass from {grip frame target: GRIP_SIDES key}."""
+    _, control, _, _, (left, right) = BYTE_FIELDS["grip-target"]
+    if control in heard and heard[control] != 3:
+        return f"다시 측정: 기준값 0x{control:02X}에서 양손에 울리지 않음"
+    if left not in heard or right not in heard:
+        return f"0x{left:02X}과 0x{right:02X}을 둘 다 봐야 판정할 수 있음"
+    if (heard[left], heard[right]) == (1, 2):
+        return f"그립 좌우를 고름: 이 프레임은 그립 설정 (0x{left:02X} 왼쪽, 0x{right:02X} 오른쪽)"
+    if heard[left] == heard[right] == 3:
+        return "그립과 상관없음: 이 target으로 그립은 바뀌지 않음"
+    return "예상과 다른 조합: 위 결과를 보고 판단"
+
+
+def _ask_side(replay) -> int:
+    while True:
+        answer = input("  어느 손에서 울렸나요? 0 안 울림 / 1 왼손만 / 2 오른손만 / 3 양손 / r 다시: ").strip().lower()
+        if answer.isdigit() and int(answer) in GRIP_SIDES:
+            return int(answer)
+        if answer == "r":
+            replay()
+
+
+def run_grip_sides(pad: Apex6, values: list[int], amp: float, seconds: float) -> list[str]:
+    """Where a tone on both grips lands with each grip frame target; returns the report lines."""
+    import random
+
+    print("\n--- 이제 컨트롤러를 평소처럼 양손으로 잡고, 트리거에서는 손가락을 떼세요 ---")
+    print("단계마다 양쪽 그립에 같은 톤이 울립니다. 어느 손에서 느껴졌는지 답하세요.\n")
+    order = list(values)
+    random.shuffle(order)
+    heard: dict[int, int] = {}
+    for number, value in enumerate(order, start=1):
+        input(f"[{number}/{len(order)}] Enter를 누르면 울립니다...")
+
+        def play(value=value) -> None:
+            pad.reconfigure(trigger_side=value)
+            pad.stream(tone_renderer("grips", GRIP_SIDE_FREQ, GRIP_SIDE_FREQ, amp, seconds))
+
+        play()
+        heard[value] = _ask_side(play)
+    pad.reconfigure()
+    return [f"그립 톤: {GRIP_SIDE_FREQ:g} Hz, {amp:g}%, 양쪽 그립에 같은 톤",
+            "       " + ", ".join(f"0x{v:02X} {GRIP_SIDES[heard[v]]}" for v in values),
+            f"       -> {grip_sides_verdict(heard)}"]
+
+
+def run_target_check(pad: Apex6, field: str, targets: list[int], route: str, freq: float, amps: list[float],
                      seconds: float) -> None:
     before, before_lines = _motor_ram(pad)
     print("\n".join(before_lines))
     if before and len(before) >= 23 and (before[1] or before[12]):
         print("  온보드 트리거 설정이 켜져 있어요. 손가락만 얹어 두면 대개 울리지 않지만, "
               "결과가 이상하면 Space Station에서 끄고 다시 해 주세요.")
-    lines = run_byte_check(pad, "target", targets, route, freq, amps, seconds)
+    lines = run_byte_check(pad, field, targets, route, freq, amps, seconds)
+    if field == "grip-target":
+        lines += ["", *run_grip_sides(pad, targets, max(amps), seconds)]
     after, after_lines = _motor_ram(pad)
     lines += ["", "시작 전 " + before_lines[0], *before_lines[1:]]
     if before is not None and before == after:
@@ -483,7 +560,115 @@ def run_target_check(pad: Apex6, targets: list[int], route: str, freq: float, am
             changed = [f"0x{i:02X} {a:02X}->{b:02X}" for i, (a, b) in enumerate(zip(before, after)) if a != b]
             if changed:
                 lines.append("  바뀐 바이트: " + ", ".join(changed))
-    _save_report("trigger-target", lines)
+    _save_report(field, lines)
+
+
+# Trigger side check. grip-target found the trigger's side, each time after a
+# fresh enable and its 94 ms of silence; the app moves it while it streams
+# (Block.side), the 0x53 frames going out just before the first block on the
+# new side. Here one tone plays on while it moves every SIDE_SEGMENT_S to a
+# side picked at random, never the same twice in a row; the player names the
+# sides in the order felt, then says whether the moves clicked or dropped out.
+SIDE_NAMES = {"L": Route.LEFT, "R": Route.RIGHT, "B": Route.BOTH}
+SIDE_LABELS = {"L": "왼쪽", "R": "오른쪽", "B": "양쪽"}
+SIDE_SEGMENT_S = 0.8
+SIDE_SEGMENTS = 5
+CLICKS = {0: "없음", 1: "약간", 2: "뚜렷"}
+
+
+def side_plan(segments: int, rng) -> list[str]:
+    """Sides for each segment (SIDE_NAMES keys), each a move from the one before."""
+    plan: list[str] = []
+    for _ in range(segments):
+        plan.append(rng.choice([side for side in SIDE_NAMES if not plan or side != plan[-1]]))
+    return plan
+
+
+def side_renderer(plan: list[str], freq: float, amp_percent: float, segment_s: float = SIDE_SEGMENT_S):
+    """One unbroken trigger tone, each segment on its side of the plan."""
+    tone = tone_renderer("triggers", freq, freq, amp_percent, segment_s * len(plan))
+    per = segment_s * SAMPLE_RATE
+
+    def render(first: int) -> Block | None:
+        block = tone(first)
+        if block is not None:
+            block.side = SIDE_NAMES[plan[min(len(plan) - 1, int(first / per))]]
+        return block
+
+    return render
+
+
+def side_verdict(trials: list[tuple[list[str], str]], clicks: list[int]) -> str:
+    """Judge from (plan, sides named) per trial and the click ratings."""
+    wrong = sum(sent != felt for plan, named in trials for sent, felt in zip(plan, named))
+    total = sum(len(plan) for plan, _ in trials)
+    if wrong == 0:
+        follows = "중간에 바꿔도 그대로 따라감"
+    elif all(named[1:] == "".join(plan[1:]) for plan, named in trials):
+        follows = "첫 구간만 틀림: 시작할 때 늦게 바뀜"
+    else:
+        follows = f"{total}구간 중 {wrong}구간이 다르게 느껴짐: 중간에 바꾸면 늦거나 안 바뀌는 듯"
+    worst = max(clicks, default=0)
+    clicked = {0: "바뀔 때 딸깍·끊김 없음", 1: "바뀔 때 약간 딸깍·끊김",
+               2: "바뀔 때 딸깍·끊김이 뚜렷: 조용할 때만 바꾸게 해야 함"}[worst]
+    return f"{follows}. {clicked}"
+
+
+def _ask_sides(count: int, replay) -> str:
+    while True:
+        answer = input(f"  느낀 순서를 L(왼쪽)/R(오른쪽)/B(양쪽) {count}글자로 (예: LRBLR) / r 다시: ").strip().upper()
+        if len(answer) == count and set(answer) <= set(SIDE_NAMES):
+            return answer
+        if answer == "R":  # never a whole answer: there is more than one segment
+            replay()
+
+
+def _ask_click(replay) -> int:
+    while True:
+        answer = input("  바뀔 때 딸깍 소리나 끊김은? 0 없음 / 1 약간 / 2 뚜렷 / r 다시: ").strip().lower()
+        if answer.isdigit() and int(answer) in CLICKS:
+            return int(answer)
+        if answer == "r":
+            replay()
+
+
+def run_side_check(pad: Apex6, freq: float, amp: float, trials: int) -> None:
+    import random
+    from datetime import datetime
+
+    from version import __version__
+
+    info = pad.info
+    print(f"펌웨어: {_firmware_text(info)}")
+    print("\n양손 검지를 양쪽 트리거에 가볍게 올려 두세요. 컨트롤러는 평소처럼 잡아도 됩니다.")
+    print(f"톤 하나가 끊기지 않고 {SIDE_SEGMENT_S:g}초마다 왼쪽·오른쪽·양쪽 중 한 곳으로 옮겨 가며 "
+          f"{SIDE_SEGMENTS}구간 울립니다. 느낀 순서를 적어 주세요.\n")
+    rng = random.Random()
+    results: list[tuple[list[str], str]] = []
+    clicks: list[int] = []
+    for number in range(1, trials + 1):
+        plan = side_plan(SIDE_SEGMENTS, rng)
+        input(f"[{number}/{trials}] Enter를 누르면 울립니다...")
+
+        def play(plan=plan) -> None:
+            pad.stream(side_renderer(plan, freq, amp))
+
+        play()
+        results.append((plan, _ask_sides(len(plan), play)))
+        clicks.append(_ask_click(play))
+
+    lines = [
+        f"트리거 좌우 전환 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
+        f"톤: {freq:g} Hz, {amp:g}%, {SIDE_SEGMENT_S:g}초씩 {SIDE_SEGMENTS}구간, 스트리밍 중에 0x53으로 쪽을 바꿈",
+        "",
+    ]
+    for number, ((plan, named), click) in enumerate(zip(results, clicks), start=1):
+        marks = " ".join(f"{SIDE_LABELS[sent]}{'' if sent == felt else f'(→{SIDE_LABELS[felt]})'}"
+                         for sent, felt in zip(plan, named))
+        lines.append(f"{number}회: {marks}  / 딸깍·끊김 {CLICKS[click]}")
+    lines += ["", f"-> {side_verdict(results, clicks)}"]
+    _save_report("trigger-side", lines)
 
 
 # Report-rate check. Every 0x57 report carries eight samples and has no rate
@@ -880,11 +1065,13 @@ def main() -> None:
     split.add_argument("--firmware", help="override the controller firmware read from the pad")
     split.add_argument("--dongle", help="override the dongle firmware read from the pad")
 
-    byte_checks = (("trigger-mode", "--modes", TRIGGER_MODES, "mode byte picks a trigger"),
+    byte_checks = (("trigger-mode", "--modes", TRIGGER_MODES, "the 0x53 trigger mode byte picks a trigger"),
                    ("trigger-target", "--targets", TRIGGER_TARGETS,
-                    "target byte picks a trigger, after showing the on-board trigger setup"))
+                    "the 0x53 trigger target byte picks a trigger, after showing the on-board trigger setup"),
+                   ("grip-target", "--targets", GRIP_TARGETS,
+                    "the 0x53 grip frame's target byte picks a trigger, then where a grip tone lands"))
     for command, values, default, what in byte_checks:
-        check = sub.add_parser(command, help=f"blind check whether the 0x53 trigger {what}")
+        check = sub.add_parser(command, help=f"blind check whether {what}")
         check.add_argument(values, type=lambda s: int(s, 0), nargs="+", default=list(default),
                            help=f"byte values to try (default: {' '.join(f'0x{v:02X}' for v in default)})")
         check.add_argument("--route", choices=("LEFT", "RIGHT", "BOTH"), default="BOTH",
@@ -893,9 +1080,16 @@ def main() -> None:
         check.add_argument("--amps", type=float, nargs="+", default=[20.0], help="percent of maximum")
         check.add_argument("--seconds", type=float, default=2.0)
 
-    ram = sub.add_parser("trigger-ram", help="motor RAM after enabling each trigger target, no vibration")
-    ram.add_argument("--targets", type=lambda s: int(s, 0), nargs="+", default=list(TRIGGER_TARGETS),
-                     help=f"byte values to try (default: {' '.join(f'0x{v:02X}' for v in TRIGGER_TARGETS)})")
+    for command, default, what in (("trigger-ram", TRIGGER_TARGETS, "trigger target"),
+                                   ("grip-ram", GRIP_TARGETS, "grip frame target")):
+        ram = sub.add_parser(command, help=f"motor RAM after enabling each {what}, no vibration")
+        ram.add_argument("--targets", type=lambda s: int(s, 0), nargs="+", default=list(default),
+                         help=f"byte values to try (default: {' '.join(f'0x{v:02X}' for v in default)})")
+
+    side = sub.add_parser("trigger-side", help="blind check that one trigger tone follows its side as it moves")
+    side.add_argument("--freq", type=float, default=100.0, help="the throttle/brake trigger's carrier")
+    side.add_argument("--amp", type=float, default=20.0)
+    side.add_argument("--trials", type=int, default=2)
 
     report_rate = sub.add_parser("report-rate",
                                  help="blind check whether reports sent faster than 8 ms raise the 1 kHz rate")
@@ -939,21 +1133,26 @@ def main() -> None:
         if args.command == "split":
             run_split(pad, args.freq, args.amps, args.seconds, args.firmware, args.dongle)
             return
-        if args.command in ("trigger-mode", "trigger-target"):
+        if args.command in BYTE_FIELDS:
             values = list(dict.fromkeys(args.modes if args.command == "trigger-mode" else args.targets))
             if any(not 0 <= v <= 0xFF for v in values):
                 parser.error("byte values go from 0 to 0xFF")
             if args.command == "trigger-mode":
-                _save_report("trigger-mode", run_byte_check(pad, "mode", values, args.route, args.freq,
+                _save_report("trigger-mode", run_byte_check(pad, "trigger-mode", values, args.route, args.freq,
                                                             args.amps, args.seconds))
             else:
-                run_target_check(pad, values, args.route, args.freq, args.amps, args.seconds)
+                run_target_check(pad, args.command, values, args.route, args.freq, args.amps, args.seconds)
             return
-        if args.command == "trigger-ram":
+        if args.command in RAM_CHECKS:
             values = list(dict.fromkeys(args.targets))
             if any(not 0 <= v <= 0xFF for v in values):
                 parser.error("byte values go from 0 to 0xFF")
-            run_ram_check(pad, values)
+            run_ram_check(pad, args.command, values)
+            return
+        if args.command == "trigger-side":
+            if args.trials < 1:
+                parser.error("--trials needs at least 1")
+            run_side_check(pad, args.freq, args.amp, args.trials)
             return
         if args.command == "report-rate":
             periods = list(dict.fromkeys(args.periods))

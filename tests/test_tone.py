@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import random
 import unittest
 
 from apex6 import SUBFRAMES, Route, _parse_device_info
-from tone import (MAX_SAMPLE, SPLIT_FINGERS, SPLIT_ROUTES, mode_verdict, model_renderer, model_summary,
-                  model_verdict, modes_verdict, motor_ram_lines, pulsed_tone, ram_changes, ram_record_name,
-                  ram_state, ram_target_verdict, rate_summary, rate_verdict, split_renderer, split_verdict,
+from tone import (BYTE_FIELDS, MAX_SAMPLE, RAM_AREA_SIZE, RAM_RECORDS, SPLIT_FINGERS, SPLIT_ROUTES,
+                  grip_sides_verdict, mode_verdict, model_renderer, model_summary, model_verdict, modes_verdict,
+                  motor_ram_lines, pulsed_tone, ram_changes, ram_record_name, ram_state, ram_target_verdict,
+                  rate_summary, rate_verdict, side_plan, side_renderer, side_verdict, split_renderer, split_verdict,
                   tap_renderer, tap_spacing)
 
 # Motor RAM from the first trigger-target run (fw 9.0.5.5): Space Station's
@@ -146,9 +148,53 @@ class MotorRamTest(unittest.TestCase):
         self.assertTrue(ram_target_verdict({0x10: (True, False), 0x11: (True, False)}).startswith("예상과 다른"))
         self.assertTrue(ram_target_verdict({0x12: (True, True)}).startswith("0x10과 0x11을"))
 
+    def test_grip_frame_target_verdicts(self) -> None:
+        self.assertTrue(ram_target_verdict({0x00: (True, False), 0x01: (False, True)}, "grip-target")
+                        .startswith("0x00은 왼쪽, 0x01은 오른쪽 기록만 씀. grip-target에서"))
+        self.assertTrue(ram_target_verdict({0x00: (True, True), 0x01: (True, True)}, "grip-target")
+                        .startswith("0x00·0x01도 양쪽"))
+        self.assertTrue(ram_target_verdict({0x02: (True, True)}, "grip-target").startswith("0x00과 0x01을"))
+
+    def test_each_frame_writes_its_own_part(self) -> None:
+        # the default enable puts the grip frame's mode 3 and the trigger frame's mode 2 in area 1
+        for field, mode in (("grip-target", 0x03), ("trigger-target", 0x02)):
+            part = BYTE_FIELDS[field][3]
+            self.assertEqual([RAM_ENABLED[RAM_AREA_SIZE + start] for p, _, start, _ in RAM_RECORDS if p == part],
+                             [mode, mode])
+
     def test_unknown_mode_and_short_block(self) -> None:
         self.assertIn("알 수 없음 (mode 7)", motor_ram_lines(bytes([0, 7] + [0] * 30))[0])
         self.assertIn("해석 못 함", motor_ram_lines(bytes(8))[0])
+
+
+class GripSidesTest(unittest.TestCase):
+    def test_verdicts(self) -> None:
+        self.assertTrue(grip_sides_verdict({0x00: 1, 0x01: 2, 0x02: 3}).startswith("그립 좌우를 고름"))
+        self.assertTrue(grip_sides_verdict({0x00: 3, 0x01: 3, 0x02: 3}).startswith("그립과 상관없음"))
+        self.assertTrue(grip_sides_verdict({0x00: 0, 0x01: 3, 0x02: 3}).startswith("예상과 다른"))
+        self.assertTrue(grip_sides_verdict({0x00: 1, 0x01: 2, 0x02: 1}).startswith("다시 측정"))
+        self.assertTrue(grip_sides_verdict({0x00: 1, 0x02: 3}).startswith("0x00과 0x01을"))
+
+
+class TriggerSideCheckTest(unittest.TestCase):
+    def test_every_segment_moves(self) -> None:
+        plan = side_plan(200, random.Random(1))
+        self.assertTrue(all(a != b for a, b in zip(plan, plan[1:])))
+        self.assertEqual(set(plan), {"L", "R", "B"})
+
+    def test_one_unbroken_tone_on_each_segments_side(self) -> None:
+        render = side_renderer(["L", "R", "B"], 100.0, 20.0, segment_s=0.016)  # two blocks a segment
+        blocks = [render(n * SUBFRAMES) for n in range(7)]
+        self.assertEqual([b.side for b in blocks[:6]], [Route.LEFT] * 2 + [Route.RIGHT] * 2 + [Route.BOTH] * 2)
+        self.assertIsNone(blocks[6])
+        self.assertTrue(all(b.route == Route.BOTH and any(b.trigger) for b in blocks[:6]))
+
+    def test_verdicts(self) -> None:
+        plan = ["L", "R", "B", "L", "R"]
+        self.assertTrue(side_verdict([(plan, "LRBLR")], [0]).startswith("중간에 바꿔도 그대로 따라감. 바뀔 때 딸깍·끊김 없음"))
+        self.assertIn("첫 구간만 틀림", side_verdict([(plan, "BRBLR")], [0]))
+        self.assertIn("5구간 중 2구간", side_verdict([(plan, "LRBRL")], [1]))
+        self.assertIn("조용할 때만", side_verdict([(plan, "LRBLR")], [0, 2]))
 
 
 class ReportRateTest(unittest.TestCase):

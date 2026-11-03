@@ -184,8 +184,9 @@ class Runner:
         levels = self.synth.levels
         self.max_accel = max(self.max_accel, levels.max_accel)
         levels.max_accel = 0.0
-        stamp = time.strftime("%H:%M:%S")
-        self.events.extend(f"{stamp} {event}" for event in levels.events)
+        if levels.events:
+            stamp = time.strftime("%H:%M:%S")
+            self.events.extend(f"{stamp} {event}" for event in levels.events)
         preview = self.preview
         playing = preview.name if preview is not None else ""
         if preview is not None:  # the drive renders on underneath, so it carries on where it was

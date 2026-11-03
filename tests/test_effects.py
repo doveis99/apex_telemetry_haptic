@@ -11,9 +11,9 @@ import unittest
 from unittest import mock
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE
-from effects import (AMT, BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RIDE_MAX, BUMP_RATTLE_S, CAB_FAR_SIDE, CEILING, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
-                     CONVERTER, Gains, NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface,
-                     surface_of)
+from effects import (AMT, BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RATTLE_S, BUMP_RIDE_MAX, CAB_FAR_SIDE,
+                     CEILING, CONVERTER, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer, Gains,
+                     NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
 _render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise

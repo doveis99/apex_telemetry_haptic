@@ -105,7 +105,6 @@ def motor_enable_reports(trigger_mode: int = DEFAULT_TRIGGER_MODE,
     )
 
 
-MOTOR_ENABLE = motor_enable_reports()
 MOTOR_DISABLE = (
     build_command(CMD_MOTOR_ROUTE, bytes([0x01, 0x02, 0x00])),
     build_command(CMD_MOTOR_ROUTE, bytes([0x01, 0x12, 0x00])),

@@ -12,10 +12,13 @@ The trigger channel is a single waveform routed to left, right or both.
 
 from __future__ import annotations
 
+import ctypes
 import time
+from contextlib import contextmanager
+from ctypes import wintypes
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Callable, Sequence
+from typing import Callable, Iterator, Sequence
 
 import hid
 
@@ -61,6 +64,12 @@ ENABLE_DELAY = 0.094
 # hiccup cannot be felt, and rarely while vibrating.
 REASSERT_IDLE_S = 1.0
 REASSERT_ACTIVE_S = 4.0
+# The stream runs at Windows' time-critical thread priority. At normal priority it waits
+# its turn with the game's own threads: with every core of an 8-core Ryzen kept busy at
+# normal priority, through the window and a pad that discards its reports (2026-11-03),
+# 6.8% of 7,800 blocks went out over 1 ms late, the worst 9 ms. Time-critical, 7 of 17,000
+# did, the worst 6 ms. A block takes about 0.15 ms to make: the game gives up 2% of a core.
+THREAD_PRIORITY_TIME_CRITICAL = 15
 
 
 class Route(IntEnum):
@@ -266,10 +275,29 @@ def find_path() -> bytes:
     raise DeviceUnavailable(t("컨트롤러 없음 (유선/2.4G 동글 연결, 전원 확인)"))
 
 
+@contextmanager
+def _time_critical() -> Iterator[None]:
+    """Run the calling thread at THREAD_PRIORITY_TIME_CRITICAL, then at its own priority again."""
+    try:
+        kernel32 = ctypes.WinDLL("kernel32")
+        kernel32.GetCurrentThread.restype = wintypes.HANDLE
+        kernel32.GetThreadPriority.argtypes = (wintypes.HANDLE,)
+        kernel32.SetThreadPriority.argtypes = (wintypes.HANDLE, ctypes.c_int)
+        thread = kernel32.GetCurrentThread()  # a handle to whichever thread uses it
+        before = kernel32.GetThreadPriority(thread)
+        raised = bool(kernel32.SetThreadPriority(thread, THREAD_PRIORITY_TIME_CRITICAL))
+    except (AttributeError, OSError):  # not on Windows: the stream runs as it is
+        raised = False
+    try:
+        yield
+    finally:
+        if raised:
+            kernel32.SetThreadPriority(thread, before)
+
+
 def _steam_overlay_loaded() -> bool:
     """True inside a process Steam injected its overlay into (see app.launch)."""
     try:
-        import ctypes
         get_module = ctypes.windll.kernel32.GetModuleHandleW
         get_module.restype = ctypes.c_void_p
         return bool(get_module("gameoverlayrenderer64.dll"))
@@ -441,33 +469,34 @@ class Apex6:
         start = time.perf_counter()
         deadline = start
         last_reassert = start
-        while max_seconds is None or deadline - start < max_seconds:
-            block = render(sample_index)
-            if block is None:
-                break
-            now = time.perf_counter()
-            lateness = (now - deadline) * 1000.0
-            stats.max_lateness_ms = max(stats.max_lateness_ms, lateness)
-            if lateness > period * 1000.0:
-                stats.late_frames += 1
-                deadline = now  # resync instead of bursting to catch up
-            # Every block goes out, silence too. ASB thinned a run of silence to
-            # a keepalive every ~48 ms to spare the 2.4 GHz link, but the pad
-            # then plays whatever comes next without slack: wired, a 250 Hz tone
-            # after 0.4 s of thinned silence came out low and pulsing, with no
-            # late frame on this side; after silence sent every 8 ms it did not.
-            self.write_block(block)
-            write_ms = (time.perf_counter() - now) * 1000.0
-            stats.total_write_ms += write_ms
-            stats.max_write_ms = max(stats.max_write_ms, write_ms)
-            stats.frames += 1
-            silent_streak = silent_streak + 1 if block.is_silent() else 0
-            if now - last_reassert >= (REASSERT_IDLE_S if silent_streak else REASSERT_ACTIVE_S):
-                self.reassert()
-                last_reassert = now
-            sample_index += SUBFRAMES
-            deadline += period
-            remaining = deadline - time.perf_counter()
-            if remaining > 0:
-                time.sleep(remaining)
+        with _time_critical():
+            while max_seconds is None or deadline - start < max_seconds:
+                block = render(sample_index)
+                if block is None:
+                    break
+                now = time.perf_counter()
+                lateness = (now - deadline) * 1000.0
+                stats.max_lateness_ms = max(stats.max_lateness_ms, lateness)
+                if lateness > period * 1000.0:
+                    stats.late_frames += 1
+                    deadline = now  # resync instead of bursting to catch up
+                # Every block goes out, silence too. ASB thinned a run of silence to
+                # a keepalive every ~48 ms to spare the 2.4 GHz link, but the pad
+                # then plays whatever comes next without slack: wired, a 250 Hz tone
+                # after 0.4 s of thinned silence came out low and pulsing, with no
+                # late frame on this side; after silence sent every 8 ms it did not.
+                self.write_block(block)
+                write_ms = (time.perf_counter() - now) * 1000.0
+                stats.total_write_ms += write_ms
+                stats.max_write_ms = max(stats.max_write_ms, write_ms)
+                stats.frames += 1
+                silent_streak = silent_streak + 1 if block.is_silent() else 0
+                if now - last_reassert >= (REASSERT_IDLE_S if silent_streak else REASSERT_ACTIVE_S):
+                    self.reassert()
+                    last_reassert = now
+                sample_index += SUBFRAMES
+                deadline += period
+                remaining = deadline - time.perf_counter()
+                if remaining > 0:
+                    time.sleep(remaining)
         return stats

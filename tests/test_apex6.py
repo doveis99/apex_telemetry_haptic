@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import ctypes
 import unittest
+from ctypes import wintypes
 from unittest import mock
 
 from apex6 import (CMD_MOTOR_ROUTE, CMD_RAM_READ, ENABLE_DELAY, FRAME_PERIOD, MAGIC, RAM_MOTOR, SILENT_REPORT,
-                   SUBFRAMES, Apex6, Block, _inline_command, _ram_chunk, build_command, build_realtime,
-                   motor_enable_reports)
+                   SUBFRAMES, THREAD_PRIORITY_TIME_CRITICAL, Apex6, Block, _inline_command, _ram_chunk,
+                   build_command, build_realtime, motor_enable_reports)
 
 
 class FakeDevice:
@@ -40,6 +42,21 @@ class StreamTest(unittest.TestCase):
             stats = pad.stream(lambda first: Block() if first < 10 * SUBFRAMES else None, period=0.002)
         self.assertEqual((stats.frames, stats.late_frames), (10, 0))
         self.assertAlmostEqual(clock.now, 0.02)
+
+    def test_the_stream_runs_time_critical_and_lets_it_go(self) -> None:
+        kernel32 = ctypes.WinDLL("kernel32")
+        kernel32.GetCurrentThread.restype = wintypes.HANDLE
+        kernel32.GetThreadPriority.argtypes = (wintypes.HANDLE,)
+
+        def priority() -> int:
+            return kernel32.GetThreadPriority(kernel32.GetCurrentThread())
+
+        before, during = priority(), []
+        pad = Apex6.__new__(Apex6)
+        pad._dev, pad._enabled, pad._trigger_mode, pad._trigger_target = FakeDevice(), True, 0x02, 0x12
+        pad.stream(lambda first: during.append(priority()) or (Block() if first < 3 * SUBFRAMES else None))
+        self.assertEqual(set(during), {THREAD_PRIORITY_TIME_CRITICAL})
+        self.assertEqual(priority(), before)
 
 
 class EnableTest(unittest.TestCase):

@@ -11,7 +11,7 @@ Examples:
   python tone.py trigger-ram                 motor RAM after enabling each trigger target, no vibration
   python tone.py grip-target                 the same for the grip frame's target, then where a grip tone lands
   python tone.py grip-ram                    motor RAM after enabling each grip frame target, no vibration
-  python tone.py trigger-side                blind check that one tone follows its side as it moves mid-stream
+  python tone.py trigger-side                blind check that one tone follows its side as it moves, from the pad
   python tone.py report-rate                 blind check whether reports sent faster than 8 ms raise the 1 kHz rate
   python tone.py report-model                blind X/Y check: are those reports played faster, or cut off at 1 kHz
   python tone.py calibrate                  match each frequency's strength by feel, for the synth's eq
@@ -568,12 +568,25 @@ def run_target_check(pad: Apex6, field: str, targets: list[int], route: str, fre
 # (Block.side), the 0x53 frames going out just before the first block on the
 # new side. Here one tone plays on while it moves every SIDE_SEGMENT_S to a
 # side picked at random, never the same twice in a row; the player names the
-# sides in the order felt, then says whether the moves clicked or dropped out.
+# sides in the order felt, as they come or after, then says whether the moves
+# clicked or dropped out.
+# All of it from the pad: with both index fingers on the triggers the thumbs
+# are free, while a hand going to the keyboard leaves the side it judges
+# (felt on the first run). The D-pad names the sides, ← left, → right, ↑ both,
+# ↓ takes the last back; A starts and says "no click", Y "a click", X plays it
+# again from the start, B stops. The keyboard does the same with arrows or
+# l r b, Backspace, Enter, 0 / 1, x and q.
 SIDE_NAMES = {"L": Route.LEFT, "R": Route.RIGHT, "B": Route.BOTH}
 SIDE_LABELS = {"L": "왼쪽", "R": "오른쪽", "B": "양쪽"}
 SIDE_SEGMENT_S = 0.8
 SIDE_SEGMENTS = 5
-CLICKS = {0: "없음", 1: "약간", 2: "뚜렷"}
+CLICKS = {0: "없음", 1: "있음"}
+UNDO, START, CLICK, REPLAY, STOP = "undo", "start", "click", "replay", "stop"
+SIDE_PAD = ((0x0004, "L"), (0x0008, "R"), (0x0001, "B"), (0x0002, UNDO),
+            (0x1000, START), (0x8000, CLICK), (0x4000, REPLAY), (0x2000, STOP))  # XInput wButtons bits
+SIDE_KEYS = {"l": "L", "r": "R", "b": "B", "\x08": UNDO, "\r": START, "0": START, "1": CLICK, "x": REPLAY,
+             "q": STOP, "\x1b": STOP}
+SIDE_ARROWS = {"K": "L", "M": "R", "H": "B", "P": UNDO}
 
 
 def side_plan(segments: int, rng) -> list[str]:
@@ -608,65 +621,122 @@ def side_verdict(trials: list[tuple[list[str], str]], clicks: list[int]) -> str:
         follows = "첫 구간만 틀림: 시작할 때 늦게 바뀜"
     else:
         follows = f"{total}구간 중 {wrong}구간이 다르게 느껴짐: 중간에 바꾸면 늦거나 안 바뀌는 듯"
-    worst = max(clicks, default=0)
-    clicked = {0: "바뀔 때 딸깍·끊김 없음", 1: "바뀔 때 약간 딸깍·끊김",
-               2: "바뀔 때 딸깍·끊김이 뚜렷: 조용할 때만 바꾸게 해야 함"}[worst]
+    clicked = ("바뀔 때 딸깍·끊김 있음: 조용할 때만 바꾸게 해야 할 수 있음" if any(clicks)
+               else "바뀔 때 딸깍·끊김 없음")
     return f"{follows}. {clicked}"
 
 
-def _ask_sides(count: int, replay) -> str:
-    while True:
-        answer = input(f"  느낀 순서를 L(왼쪽)/R(오른쪽)/B(양쪽) {count}글자로 (예: LRBLR) / r 다시: ").strip().upper()
-        if len(answer) == count and set(answer) <= set(SIDE_NAMES):
-            return answer
-        if answer == "R":  # never a whole answer: there is more than one segment
-            replay()
+def name_side(named: list[str], event: str | None, count: int) -> None:
+    """Take one press into the sides named so far: a side adds itself until there are count, UNDO drops the last."""
+    if event in SIDE_NAMES and len(named) < count:
+        named.append(event)
+    elif event == UNDO and named:
+        named.pop()
 
 
-def _ask_click(replay) -> int:
+def _side_event(buttons) -> str | None:
+    """The next press on the pad or a key in the console, as a SIDE_PAD name; never blocks."""
+    pressed = buttons.pressed()
+    return next((name for mask, name in SIDE_PAD if pressed & mask), None) or _console_event(SIDE_KEYS, SIDE_ARROWS)
+
+
+def _wait_event(buttons, *wanted: str) -> str:
+    import time
+
+    while (event := _side_event(buttons)) not in wanted:
+        time.sleep(0.01)
+    return event
+
+
+def _hear_sides(pad: Apex6, buttons, plan: list[str], freq: float, amp: float) -> tuple[str, int] | None:
+    """Play the plan and take the sides as they are named, while it plays or after.
+
+    Returns the sides and how often it was played again, or None when stopped.
+    """
+    replays = 0
     while True:
-        answer = input("  바뀔 때 딸깍 소리나 끊김은? 0 없음 / 1 약간 / 2 뚜렷 / r 다시: ").strip().lower()
-        if answer.isdigit() and int(answer) in CLICKS:
-            return int(answer)
-        if answer == "r":
-            replay()
+        named: list[str] = []
+        heard: list[str] = []  # REPLAY or STOP, pressed while it played
+        tone = side_renderer(plan, freq, amp)
+
+        def render(first: int, tone=tone, named=named, heard=heard) -> Block | None:
+            if not heard:
+                event = _side_event(buttons)
+                if event in (REPLAY, STOP):
+                    heard.append(event)
+                name_side(named, event, len(plan))
+            return None if heard else tone(first)
+
+        pad.stream(render)
+        while not heard and len(named) < len(plan):
+            event = _wait_event(buttons, *SIDE_NAMES, UNDO, REPLAY, STOP)
+            if event in (REPLAY, STOP):
+                heard.append(event)
+            name_side(named, event, len(plan))
+        if not heard:
+            return "".join(named), replays
+        if heard[0] == STOP:
+            return None
+        replays += 1
+        print("  처음부터 다시")
 
 
 def run_side_check(pad: Apex6, freq: float, amp: float, trials: int) -> None:
     import random
     from datetime import datetime
 
+    import calibrate
     from version import __version__
 
     info = pad.info
+    buttons = calibrate.PadButtons()
     print(f"펌웨어: {_firmware_text(info)}")
-    print("\n양손 검지를 양쪽 트리거에 가볍게 올려 두세요. 컨트롤러는 평소처럼 잡아도 됩니다.")
+    print("\n패드를 양손으로 평소처럼 잡고 검지는 양쪽 트리거에 가볍게 올려 두세요. 진행은 모두 패드로 합니다.")
     print(f"톤 하나가 끊기지 않고 {SIDE_SEGMENT_S:g}초마다 왼쪽·오른쪽·양쪽 중 한 곳으로 옮겨 가며 "
-          f"{SIDE_SEGMENTS}구간 울립니다. 느낀 순서를 적어 주세요.\n")
+          f"{SIDE_SEGMENTS}구간 울립니다.")
+    print("  느낀 곳을 차례로, 울리는 동안 바로 눌러도 됩니다: 십자키 ← 왼쪽 / → 오른쪽 / ↑ 양쪽 / ↓ 하나 지우기")
+    print("  A 시작 / X 처음부터 다시 / B 그만. 다 누르면 바뀔 때 딸깍·끊김이 A 없음 / Y 있음")
+    print("  키보드: Enter 시작, ← → ↑ 또는 L R B, Backspace, x 다시, 0 없음 / 1 있음, q 그만")
+    if not buttons.connected:
+        print("  (XInput 패드가 안 보여 키보드로만 받습니다)")
     rng = random.Random()
     results: list[tuple[list[str], str]] = []
     clicks: list[int] = []
+    replays: list[int] = []
     for number in range(1, trials + 1):
         plan = side_plan(SIDE_SEGMENTS, rng)
-        input(f"[{number}/{trials}] Enter를 누르면 울립니다...")
-
-        def play(plan=plan) -> None:
+        print(f"\n[{number}/{trials}] A를 누르면 울립니다")
+        if _wait_event(buttons, START, STOP) == STOP:
+            break
+        heard = _hear_sides(pad, buttons, plan, freq, amp)
+        if heard is None:
+            break
+        named, again = heard
+        print("  " + " → ".join(SIDE_LABELS[side] for side in named))
+        print("  바뀔 때 딸깍·끊김이 있었나요? A 없음 / Y 있음 / X 다시 듣기")
+        while (event := _wait_event(buttons, START, CLICK, REPLAY, STOP)) == REPLAY:
             pad.stream(side_renderer(plan, freq, amp))
-
-        play()
-        results.append((plan, _ask_sides(len(plan), play)))
-        clicks.append(_ask_click(play))
+            again += 1
+        if event == STOP:
+            break
+        results.append((plan, named))
+        clicks.append(int(event == CLICK))
+        replays.append(again)
+    if not results:
+        print("그만둡니다.")
+        return
 
     lines = [
         f"트리거 좌우 전환 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
         *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
         f"톤: {freq:g} Hz, {amp:g}%, {SIDE_SEGMENT_S:g}초씩 {SIDE_SEGMENTS}구간, 스트리밍 중에 0x53으로 쪽을 바꿈",
+        f"답: {'패드 버튼' if buttons.connected else '키보드'}",
         "",
     ]
-    for number, ((plan, named), click) in enumerate(zip(results, clicks), start=1):
+    for number, ((plan, named), click, again) in enumerate(zip(results, clicks, replays), start=1):
         marks = " ".join(f"{SIDE_LABELS[sent]}{'' if sent == felt else f'(→{SIDE_LABELS[felt]})'}"
                          for sent, felt in zip(plan, named))
-        lines.append(f"{number}회: {marks}  / 딸깍·끊김 {CLICKS[click]}")
+        lines.append(f"{number}회: {marks}  / 딸깍·끊김 {CLICKS[click]} / 다시 듣기 {again}번")
     lines += ["", f"-> {side_verdict(results, clicks)}"]
     _save_report("trigger-side", lines)
 
@@ -964,15 +1034,20 @@ CAL_KEYS = {"1": "first", "2": "second", "r": "replay", "q": "cancel", "\x1b": "
 CAL_ARROWS = {"K": "first", "M": "second"}
 
 
-def _console_key() -> str | None:
-    """A key waiting in the console, as a calibration answer; never blocks."""
+def _console_event(keys: dict[str, str], arrows: dict[str, str]) -> str | None:
+    """A key waiting in the console, named by keys (or arrows, by the code after the prefix); never blocks."""
     import msvcrt
     if not msvcrt.kbhit():
         return None
     key = msvcrt.getwch()
     if key in ("\x00", "\xe0"):
-        return CAL_ARROWS.get(msvcrt.getwch())
-    return CAL_KEYS.get(key.lower())
+        return arrows.get(msvcrt.getwch())
+    return keys.get(key.lower())
+
+
+def _console_key() -> str | None:
+    """A key waiting in the console, as a calibration answer; never blocks."""
+    return _console_event(CAL_KEYS, CAL_ARROWS)
 
 
 def run_calibrate(pad: Apex6, channels: list[str], amp: float, seconds: float) -> None:

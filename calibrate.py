@@ -228,7 +228,12 @@ class PadButtons:
         self.connected = connected
         return buttons
 
-    def poll(self) -> str | None:
+    def pressed(self) -> int:
+        """Buttons gone down since the last call, as XInput's wButtons bits."""
         buttons = self._buttons()
         pressed, self._held = buttons & ~self._held, buttons
+        return pressed
+
+    def poll(self) -> str | None:
+        pressed = self.pressed()
         return next((answer for mask, answer in self.MAP if pressed & mask), None)

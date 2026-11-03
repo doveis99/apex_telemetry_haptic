@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import random
 import unittest
+from unittest import mock
 
 from apex6 import SUBFRAMES, Route, _parse_device_info
-from tone import (BYTE_FIELDS, MAX_SAMPLE, RAM_AREA_SIZE, RAM_RECORDS, SPLIT_FINGERS, SPLIT_ROUTES,
-                  grip_sides_verdict, mode_verdict, model_renderer, model_summary, model_verdict, modes_verdict,
-                  motor_ram_lines, pulsed_tone, ram_changes, ram_record_name, ram_state, ram_target_verdict,
-                  rate_summary, rate_verdict, side_plan, side_renderer, side_verdict, split_renderer, split_verdict,
-                  tap_renderer, tap_spacing)
+from tone import (BYTE_FIELDS, MAX_SAMPLE, RAM_AREA_SIZE, RAM_RECORDS, SPLIT_FINGERS, SPLIT_ROUTES, UNDO,
+                  _hear_sides, grip_sides_verdict, mode_verdict, model_renderer, model_summary, model_verdict,
+                  modes_verdict, motor_ram_lines, name_side, pulsed_tone, ram_changes, ram_record_name, ram_state,
+                  ram_target_verdict, rate_summary, rate_verdict, side_plan, side_renderer, side_verdict,
+                  run_side_check, split_renderer, split_verdict, tap_renderer, tap_spacing)
 
 # Motor RAM from the first trigger-target run (fw 9.0.5.5): Space Station's
 # trigger vibration on for both triggers, before and after our default enable.
@@ -193,8 +194,84 @@ class TriggerSideCheckTest(unittest.TestCase):
         plan = ["L", "R", "B", "L", "R"]
         self.assertTrue(side_verdict([(plan, "LRBLR")], [0]).startswith("중간에 바꿔도 그대로 따라감. 바뀔 때 딸깍·끊김 없음"))
         self.assertIn("첫 구간만 틀림", side_verdict([(plan, "BRBLR")], [0]))
-        self.assertIn("5구간 중 2구간", side_verdict([(plan, "LRBRL")], [1]))
-        self.assertIn("조용할 때만", side_verdict([(plan, "LRBLR")], [0, 2]))
+        self.assertIn("5구간 중 2구간", side_verdict([(plan, "LRBRL")], [0]))
+        self.assertIn("조용할 때만", side_verdict([(plan, "LRBLR"), (plan, "LRBLR")], [0, 1]))
+
+    def test_presses_name_sides_up_to_the_count(self) -> None:
+        named: list[str] = []
+        for event in ("L", None, "R", UNDO, UNDO, UNDO, "B", "L", "R", "start"):
+            name_side(named, event, 3)
+        self.assertEqual(named, ["B", "L", "R"])
+        name_side(named, "L", 3)
+        self.assertEqual(named, ["B", "L", "R"])
+
+
+DPAD = {"L": 0x0004, "R": 0x0008, "B": 0x0001, UNDO: 0x0002, "A": 0x1000, "Y": 0x8000, "X": 0x4000,
+        "B button": 0x2000}
+
+
+class FakeButtons:
+    """Hands out one scripted press per poll, then nothing."""
+
+    connected = True
+
+    def __init__(self, *presses: str) -> None:
+        self.presses = [DPAD[p] if p else 0 for p in presses]
+
+    def pressed(self) -> int:
+        return self.presses.pop(0) if self.presses else 0
+
+
+class FakePad:
+    def __init__(self) -> None:
+        self.plays = 0
+
+    def stream(self, render) -> None:
+        self.plays += 1
+        first = 0
+        while render(first) is not None:
+            first += SUBFRAMES
+
+
+def short_tone(plan, freq, amp):  # three blocks instead of four seconds
+    return side_renderer(plan, freq, amp, segment_s=3 * SUBFRAMES / 1000 / len(plan))
+
+
+@mock.patch("tone._console_event", lambda keys, arrows: None)
+@mock.patch("tone.side_renderer", short_tone)
+class HearSidesTest(unittest.TestCase):
+    PLAN = ["L", "R", "B", "L", "R"]
+
+    def test_sides_named_while_it_plays_and_after(self) -> None:
+        # three while it plays (one taken back), the rest once it has stopped
+        buttons = FakeButtons("L", "B", UNDO, "R", "B", "L", "R")
+        self.assertEqual(_hear_sides(FakePad(), buttons, self.PLAN, 100.0, 20.0), ("LRBLR", 0))
+
+    def test_x_plays_it_again_from_the_start(self) -> None:
+        pad = FakePad()
+        buttons = FakeButtons("L", "X", "L", "R", "B", "L", "R")
+        self.assertEqual(_hear_sides(pad, buttons, self.PLAN, 100.0, 20.0), ("LRBLR", 1))
+        self.assertEqual(pad.plays, 2)
+
+    def test_b_stops(self) -> None:
+        self.assertIsNone(_hear_sides(FakePad(), FakeButtons("L", None, None, None, "B button"), self.PLAN, 100.0, 20.0))
+
+    def test_the_whole_check_runs_from_the_pad(self) -> None:
+        pad = FakePad()
+        pad.info = _parse_device_info(INFO_REPLY)
+        # A starts, four sides while it plays, one after, Y: it clicked; the second trial X replays the click question
+        buttons = FakeButtons("A", "L", "R", "B", "L", "R", "Y", "A", "B", "L", "B", "L", "B", "X", "A")
+        with mock.patch("calibrate.PadButtons", lambda: buttons), mock.patch("tone._save_report") as save, \
+                mock.patch("builtins.print"):
+            run_side_check(pad, 100.0, 20.0, trials=2)
+        name, lines = save.call_args.args
+        self.assertEqual(name, "trigger-side")
+        trials = [line for line in lines if line[1:].startswith("회:")]
+        self.assertEqual(len(trials), 2)
+        self.assertIn("딸깍·끊김 있음 / 다시 듣기 0번", trials[0])
+        self.assertIn("딸깍·끊김 없음 / 다시 듣기 1번", trials[1])
+        self.assertEqual(pad.plays, 3)
+        self.assertIn("답: 패드 버튼", lines)
 
 
 class ReportRateTest(unittest.TestCase):

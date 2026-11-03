@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import bisect
 import cmath
+import functools
 import math
 import random
 from dataclasses import dataclass, field, replace
@@ -336,6 +337,7 @@ SHIFTER_HITS = (((0.0, 140.0, 1.0, 0.005),  # the knob
                  (0.18, 170.0, 0.133, 0.005), (0.18, 170.0, 0.08, 0.06)))
 
 
+@functools.lru_cache(maxsize=256)  # the game names a few dozen substances
 def surface_of(name: str) -> Surface | None:
     """The texture of a substance; None for no ground at all."""
     name = name.lower()
@@ -353,12 +355,17 @@ _BLENDED = ("pitch", "stones", "crunch", "q", "swell", "swell_hz", "seam_share")
 def side_surface(wheels: list[Wheel]) -> Surface:
     """One side's mix of surfaces: mean strength, the rest weighted by strength. Seams are not
     averaged: a wheel on planks beside one on asphalt drums at the planks' spacing, softer."""
-    found = [s for s in (surface_of(w.substance) for w in wheels) if s is not None]
+    return _side_surface(tuple(w.substance for w in wheels))
+
+
+@functools.lru_cache(maxsize=256)  # each side's substances, which change a few times a minute
+def _side_surface(substances: tuple[str, ...]) -> Surface:
+    found = [s for s in map(surface_of, substances) if s is not None]
     total = sum(s.level for s in found)
     if not total:
         return Surface(0.0, DEFAULT_SURFACE.pitch)
     seamed = max(found, key=lambda s: s.level * s.seam_share)
-    return Surface(total / len(wheels), seams=seamed.seams, seam_hz=seamed.seam_hz, seam_q=seamed.seam_q,
+    return Surface(total / len(substances), seams=seamed.seams, seam_hz=seamed.seam_hz, seam_q=seamed.seam_q,
                    **{name: sum(s.level * getattr(s, name) for s in found) / total for name in _BLENDED})
 
 
@@ -486,6 +493,10 @@ class Gains:
 
 
 FLAT = (1.0, 1.0)
+# Every block looks up the eq of each effect sounding, once per burst too: a sixth of the
+# synth's time on the scripted drive. Bursts keep their frequency, so most lookups repeat;
+# the continuous effects' follow the revs and the speed and are cleared out now and then.
+PAIR_CACHE = 512
 
 
 class ResonanceCut:
@@ -581,6 +592,7 @@ class Equalizer:
         self.resonances = {channel: self._resonance(self.points[channel]) for channel in self.CHANNELS}
         # stateless copies for their magnitudes
         self.shapes = {channel: ResonanceCut(*found) if found else None for channel, found in self.resonances.items()}
+        self._pairs: dict[float, tuple[float, float]] = {}  # pair() by frequency (PAIR_CACHE)
 
     def _resonance(self, points: list[tuple[float, float]]) -> tuple[float, float, float] | None:
         """(Hz, dB, Q) of the resonance a curve shows: its lowest point against the median of the
@@ -631,8 +643,13 @@ class Equalizer:
         """(grip, trigger) gain for a vibration at freq, ahead of its channel's ResonanceCut."""
         if self.flat:
             return FLAT
-        return tuple(self.gain(channel, freq) / (shape.magnitude(freq) if shape else 1.0)
-                     for channel, shape in self.shapes.items())
+        found = self._pairs.get(freq)
+        if found is None:
+            if len(self._pairs) >= PAIR_CACHE:
+                self._pairs.clear()
+            found = self._pairs[freq] = tuple(self.gain(channel, freq) / (shape.magnitude(freq) if shape else 1.0)
+                                              for channel, shape in self.shapes.items())
+        return found
 
 
 def route_of(gains: Gains, name: str) -> str:

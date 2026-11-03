@@ -150,7 +150,8 @@ SCRIPTS: dict[str, tuple[Script, float]] = {
     "bumps": (_bumps, 3.2),
     "rumble": (_rumble, 3.0),
     "wheelspin": (_wheelspin, 2.2),
-    "gear": (lambda t, _: _frame(t, gear=8 + sum(t >= at for at in (0.3, 0.9, 1.5))), 2.0),
+    # pulling up through the gears, which a torque converter's push follows
+    "gear": (lambda t, _: _frame(t, throttle=0.7, gear=8 + sum(t >= at for at in (0.3, 0.9, 1.5))), 2.0),
     "retarder": (_retarder, 4.0),
     "impact": (_impact, 1.0),
     "trigger": (_trigger, 3.3),

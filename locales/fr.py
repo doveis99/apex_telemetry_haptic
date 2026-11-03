@@ -113,6 +113,9 @@ MESSAGES = {
     "요철 감지 기준": "Seuil des bosses",
     "충돌 감지 기준": "Seuil de choc",
     "엔진 기통 수": "Cylindres",
+    "변속기": "Boîte de vitesses",
+    "AMT·수동": "AMT / manuelle",
+    "토크컨버터": "Convertisseur",
     "이벤트": "Événements",
     "호환되는 텔레메트리 플러그인이 없습니다 → '텔레메트리 플러그인'": "Aucun plugin de télémétrie compatible → « Plugin de télémétrie »",
     "바뀐 설정을 저장할까요?": "Enregistrer les réglages modifiés ?",
@@ -165,19 +168,15 @@ MESSAGES = {
          "et le gravier, la terre et la neige ajoutent le claquement des cailloux. Sur route dégradée, la cabine "
          "brinquebale. Plus on va vite, plus c'est serré, et les roues gauches et droites jouent séparément."),
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다. 흙길처럼 캐빈이 크게 출렁이면 양쪽 그립에 낮은 '쿵'이 더해집니다.":
-        ("Un choc dans la poignée du côté de la roue quand la suspension bouge brusquement (nids-de-poule, bordures, "
-         "joints) : un petit joint est un tapotement bref et aigu, un gros nid-de-poule un coup sourd et lourd, et "
-         "après un gros choc la cabine claque un instant. Réglez la sensibilité avec « Seuil des bosses ». "
-         "Quand la cabine tangue, comme sur une piste en terre, un coup sourd s'ajoute sur les deux poignées."),
+        "Un choc dans la poignée du côté de la roue quand la suspension bouge brusquement (nids-de-poule, bordures, joints) : un petit joint est un tapotement bref et aigu, un gros nid-de-poule un coup sourd et lourd, et après un gros choc la cabine claque un instant. Réglez la sensibilité avec « Seuil des bosses ». Quand la cabine tangue, comme sur une piste en terre, un coup sourd s'ajoute sur les deux poignées.",
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("Un brrrr dans la poignée du côté qui roule sur une bande rugueuse de ligne centrale ou "
          "d'accotement. Détectée via le revêtement signalé par le jeu ; plus on va vite, plus c'est fin."),
     "엑셀을 밟는데 구동 바퀴가 트럭보다 빨리 헛돌면(얼음, 눈, 진흙, 급출발) 양쪽 그립에 거칠게 긁히는 진동을 냅니다. 브레이크로 바퀴가 잠기는 휠락은 '엑셀/브레이크'에서 냅니다.":
         ("Un raclement rugueux dans les deux poignées quand les roues motrices tournent plus vite que le camion "
          "n'avance à l'accélération (glace, neige, boue, départ brutal). Le blocage au freinage est dans « Accél./frein »."),
-    "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다.":
-        ("Un « clac » à chaque changement de rapport : la vibration de conduite s'interrompt un instant, puis le "
-         "rapport s'enclenche fermement. Marche aussi en boîte automatique."),
+    "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다. '변속기'를 토크컨버터로 두면 '철컥' 대신 부드럽게 '쿵' 밀어 줍니다.":
+        "Un « clac » à chaque changement de rapport : la vibration de conduite s'interrompt un instant, puis le rapport s'enclenche fermement. Marche aussi en boîte automatique. Avec « Boîte de vitesses » sur Convertisseur, une poussée douce remplace le « clac ».",
     "리타더 단계에 비례하는 웅웅거림으로, 빠를수록 음이 높아집니다(40~65Hz). 엔진 브레이크는 엔진 점화 박자에 맞춰 '다다닥' 노크하고, 엑셀을 밟으면 멈춥니다.":
         "Un bourdonnement proportionnel au cran du ralentisseur, plus aigu avec la vitesse (40–65 Hz). Le frein moteur cogne au rythme de l'allumage et s'arrête dès que vous accélérez.",
     "가속도가 순간적으로 크게 튀면(충돌, 큰 충격) 강한 50Hz 펄스를 냅니다. 기준은 '충돌 감지 기준'에서 정합니다.":
@@ -244,6 +243,8 @@ MESSAGES = {
     "엔진 진동 주파수 계산에 씁니다. ATS 순정 트럭은 대부분 직렬 6기통이고, ETS2의 Scania V8 같은 트럭은 8로 두세요. 텔레메트리에는 기통 수가 없습니다.":
         ("Sert à calculer la fréquence de vibration du moteur. La plupart des camions d'origine d'ATS ont un six "
          "cylindres en ligne ; réglez 8 pour des camions comme le Scania V8 d'ETS2. La télémétrie ne l'indique pas."),
+    "변속할 때의 느낌입니다. AMT·수동은 레버가 빠지고 다음 기어가 '철컥' 들어갑니다(이튼 풀러, DT12 같은 변속기). 토크컨버터는 동력이 끊기지 않고 다음 기어가 물리며 부드럽게 '쿵' 밀어 줍니다(앨리슨). 엑셀을 깊이 밟을수록 단단하고, 발을 떼고 변속하면 거의 없습니다. 텔레메트리에는 변속기 종류가 없습니다.":
+        "Ce qu'on ressent à chaque changement de rapport. AMT / manuelle : le levier quitte le rapport et le suivant entre avec un « clac » (boîtes comme Eaton Fuller ou DT12). Convertisseur (de couple) : la traction ne se coupe jamais et le rapport suivant prend avec une poussée douce (Allison). Plus l'accélérateur est enfoncé, plus elle est ferme ; pied levé, on la sent à peine. La télémétrie n'indique pas la boîte.",
     "이 효과의 진동이 갈 곳: 그립(파랑), 트리거(주황), 둘 다(보라). 꺼진 효과에서 위치를 누르면 그 위치로 다시 켜집니다.":
         ("Où cet effet vibre : poignée (bleu), gâchette (orange) ou les deux (violet). Choisir une sortie sur un "
          "effet désactivé le réactive à cet endroit."),
@@ -378,8 +379,8 @@ MESSAGES = {
     "패드 {buttons}": "Manette {buttons}",
     "키보드 {keys}": "Clavier {keys}",
     "프리셋": "Préréglages",
-    "프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수를 통째로 따로 둡니다. 트럭과 트립 모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.":
-        "Chaque préréglage garde ses propres intensités, seuils, interrupteurs, sorties et nombre de cylindres. Cliquez dessus quand vous changez de véhicule, par exemple entre votre camion et la voiture du mode Trip. Il s'applique tout de suite, même en roulant, et reste au prochain lancement.",
+    "프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수, 변속기를 통째로 따로 둡니다. 트럭과 트립 모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.":
+        "Chaque préréglage garde ses propres intensités, seuils, interrupteurs, sorties, nombre de cylindres et boîte de vitesses. Cliquez dessus quand vous changez de véhicule, par exemple entre votre camion et la voiture du mode Trip. Il s'applique tout de suite, même en roulant, et reste au prochain lancement.",
     "이 프리셋으로 바꿉니다. 오른쪽 클릭: 이름 바꾸기, 삭제": "Passe à ce préréglage. Clic droit : renommer, supprimer",
     "없음": "Aucun",
     "＋ 지금 설정으로 새 프리셋": "＋ Nouveau depuis l'actuel",

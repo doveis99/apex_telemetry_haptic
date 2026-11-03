@@ -111,6 +111,9 @@ MESSAGES = {
     "요철 감지 기준": "Bump threshold",
     "충돌 감지 기준": "Impact threshold",
     "엔진 기통 수": "Engine cylinders",
+    "변속기": "Gearbox",
+    "AMT·수동": "AMT / manual",
+    "토크컨버터": "Torque converter",
     "이벤트": "Events",
     "호환되는 텔레메트리 플러그인이 없습니다 → '텔레메트리 플러그인'": "No compatible telemetry plugin → 'Telemetry plugin'",
     "바뀐 설정을 저장할까요?": "Save the changed settings?",
@@ -162,19 +165,15 @@ MESSAGES = {
          "rough roads the cab rattles. The faster you go, the denser it gets, and the left and right wheels play "
          "separately."),
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다. 흙길처럼 캐빈이 크게 출렁이면 양쪽 그립에 낮은 '쿵'이 더해집니다.":
-        ("A hit on that wheel's grip when the suspension moves suddenly (potholes, kerbs, joints): a small joint is "
-         "a short, high tap, a big pothole a low, heavy thud, and after a big hit the cab rattles for a moment. Set "
-         "the sensitivity with 'Bump threshold'. "
-         "When the cab lurches, as on a dirt road, a low thud comes on both grips too."),
+        "A hit on that wheel's grip when the suspension moves suddenly (potholes, kerbs, joints): a small joint is a short, high tap, a big pothole a low, heavy thud, and after a big hit the cab rattles for a moment. Set the sensitivity with 'Bump threshold'. When the cab lurches, as on a dirt road, a low thud comes on both grips too.",
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("A brrrr in the grip on the side that runs onto a centre-line or shoulder rumble strip. "
          "Detected from the road surface the game reports; the faster you go, the finer it gets."),
     "엑셀을 밟는데 구동 바퀴가 트럭보다 빨리 헛돌면(얼음, 눈, 진흙, 급출발) 양쪽 그립에 거칠게 긁히는 진동을 냅니다. 브레이크로 바퀴가 잠기는 휠락은 '엑셀/브레이크'에서 냅니다.":
         ("A rough grinding in both grips when the driven wheels spin faster than the truck moves under "
          "throttle (ice, snow, mud, a hard launch). Wheels locking under braking are on 'Throttle/brake'."),
-    "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다.":
-        ("A 'clunk' on every gear change: the driving vibration drops out briefly, then the gear bites firmly. "
-         "Works with automatic gearboxes too."),
+    "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다. '변속기'를 토크컨버터로 두면 '철컥' 대신 부드럽게 '쿵' 밀어 줍니다.":
+        "A 'clunk' on every gear change: the driving vibration drops out briefly, then the gear bites firmly. Works with automatic gearboxes too. Set 'Gearbox' to Torque converter for a soft push instead of the 'clunk'.",
     "리타더 단계에 비례하는 웅웅거림으로, 빠를수록 음이 높아집니다(40~65Hz). 엔진 브레이크는 엔진 점화 박자에 맞춰 '다다닥' 노크하고, 엑셀을 밟으면 멈춥니다.":
         "A hum in proportion to the retarder stage that rises in pitch with speed (40–65 Hz). The engine brake knocks at the engine's firing rate and stops when you press the throttle.",
     "가속도가 순간적으로 크게 튀면(충돌, 큰 충격) 강한 50Hz 펄스를 냅니다. 기준은 '충돌 감지 기준'에서 정합니다.":
@@ -238,6 +237,8 @@ MESSAGES = {
     "엔진 진동 주파수 계산에 씁니다. ATS 순정 트럭은 대부분 직렬 6기통이고, ETS2의 Scania V8 같은 트럭은 8로 두세요. 텔레메트리에는 기통 수가 없습니다.":
         ("Used to compute the engine vibration frequency. Most stock ATS trucks are inline sixes; set 8 for trucks "
          "like the ETS2 Scania V8. The telemetry does not report it."),
+    "변속할 때의 느낌입니다. AMT·수동은 레버가 빠지고 다음 기어가 '철컥' 들어갑니다(이튼 풀러, DT12 같은 변속기). 토크컨버터는 동력이 끊기지 않고 다음 기어가 물리며 부드럽게 '쿵' 밀어 줍니다(앨리슨). 엑셀을 깊이 밟을수록 단단하고, 발을 떼고 변속하면 거의 없습니다. 텔레메트리에는 변속기 종류가 없습니다.":
+        "How a gear change feels. AMT / manual: the lever leaves the gear and the next one goes in with a 'clack' (gearboxes like the Eaton Fuller or DT12). Torque converter: the drive never lets go, and the next gear takes hold with a soft push (Allison). The deeper the throttle, the firmer it is; shifting with your foot off, it is barely there. The telemetry does not report the gearbox.",
     "이 효과의 진동이 갈 곳: 그립(파랑), 트리거(주황), 둘 다(보라). 꺼진 효과에서 위치를 누르면 그 위치로 다시 켜집니다.":
         ("Where this effect vibrates: grip (blue), trigger (orange) or both (purple). Picking one on an effect that "
          "is off turns it back on there."),
@@ -367,8 +368,8 @@ MESSAGES = {
     "패드 {buttons}": "Pad {buttons}",
     "키보드 {keys}": "Keyboard {keys}",
     "프리셋": "Presets",
-    "프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수를 통째로 따로 둡니다. 트럭과 트립 모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.":
-        "Each preset keeps its own full set of levels, thresholds, on/off switches, outputs and cylinder count. Click one when you change vehicles, such as your truck and the car of Trip mode. It takes effect at once, even mid-drive, and carries over to the next start.",
+    "프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수, 변속기를 통째로 따로 둡니다. 트럭과 트립 모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.":
+        "Each preset keeps its own full set of levels, thresholds, on/off switches, outputs, cylinder count and gearbox. Click one when you change vehicles, such as your truck and the car of Trip mode. It takes effect at once, even mid-drive, and carries over to the next start.",
     "이 프리셋으로 바꿉니다. 오른쪽 클릭: 이름 바꾸기, 삭제": "Switches to this preset. Right-click: rename, delete",
     "없음": "None",
     "＋ 지금 설정으로 새 프리셋": "＋ New preset from current",

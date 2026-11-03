@@ -10,7 +10,7 @@ from unittest import mock
 
 import gui
 import settings
-from effects import Gains
+from effects import AMT, CONVERTER, Gains
 
 
 class PresetTest(unittest.TestCase):
@@ -67,6 +67,15 @@ class PresetTest(unittest.TestCase):
         self.assertEqual(app.gains.engine, 0.3)
         self.assertEqual(settings.load_presets()["Truck"].engine, 0.5)
         self.assertEqual(settings.load_app_options().preset, "Car")
+
+    def test_each_preset_brings_its_gearbox(self) -> None:
+        app = self.open("Truck", Truck=Gains(), Bus=Gains(gearbox=CONVERTER))
+        self.assertEqual((app.gains.gearbox, app.gearbox_picker.value), (AMT, AMT))
+        app._switch_preset("Bus")
+        self.assertEqual((app.gains.gearbox, app.gearbox_picker.value), (CONVERTER, CONVERTER))
+        app._set_gearbox(AMT)  # picked by hand, then saved into the preset in use
+        app.save()
+        self.assertEqual((settings.load_gains().gearbox, settings.load_presets()["Bus"].gearbox), (AMT, AMT))
 
     def test_renaming_onto_the_preset_in_use_loads_what_it_now_holds(self) -> None:
         app = self.open("Car", Truck=Gains(engine=0.1), Car=Gains(engine=0.3))

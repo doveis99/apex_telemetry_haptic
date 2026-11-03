@@ -112,6 +112,9 @@ MESSAGES = {
     "요철 감지 기준": "Limite de buracos",
     "충돌 감지 기준": "Limite de impacto",
     "엔진 기통 수": "Cilindros",
+    "변속기": "Caixa de câmbio",
+    "AMT·수동": "AMT / manual",
+    "토크컨버터": "Conversor",
     "이벤트": "Eventos",
     "호환되는 텔레메트리 플러그인이 없습니다 → '텔레메트리 플러그인'": "Nenhum plugin de telemetria compatível → \"Plugin de telemetria\"",
     "바뀐 설정을 저장할까요?": "Salvar as configurações alteradas?",
@@ -163,19 +166,15 @@ MESSAGES = {
          "e a neve somam o estalo de pedrinhas soltas. Em estradas ruins a cabine chacoalha. Quanto mais rápido, "
          "mais denso, e as rodas esquerdas e direitas vão separadas."),
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다. 흙길처럼 캐빈이 크게 출렁이면 양쪽 그립에 낮은 '쿵'이 더해집니다.":
-        ("Uma pancada na pegada do lado da roda quando a suspensão se move de repente (buracos, meios-fios, juntas): "
-         "uma junta pequena é um toque curto e agudo, um buraco grande um baque grave e pesado, e depois de uma "
-         "pancada forte a cabine chacoalha por um instante. A sensibilidade fica em 'Limite de buracos'. "
-         "Quando a cabine balança forte, como numa estrada de terra, um baque grave vem nos dois punhos."),
+        "Uma pancada na pegada do lado da roda quando a suspensão se move de repente (buracos, meios-fios, juntas): uma junta pequena é um toque curto e agudo, um buraco grande um baque grave e pesado, e depois de uma pancada forte a cabine chacoalha por um instante. A sensibilidade fica em 'Limite de buracos'. Quando a cabine balança forte, como numa estrada de terra, um baque grave vem nos dois punhos.",
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("Um brrrr na empunhadura do lado que passa sobre uma faixa sonora da linha central ou do "
          "acostamento. Detectada pela superfície que o jogo informa; quanto mais rápido, mais fino."),
     "엑셀을 밟는데 구동 바퀴가 트럭보다 빨리 헛돌면(얼음, 눈, 진흙, 급출발) 양쪽 그립에 거칠게 긁히는 진동을 냅니다. 브레이크로 바퀴가 잠기는 휠락은 '엑셀/브레이크'에서 냅니다.":
         ("Um raspar áspero nas duas empunhaduras quando as rodas de tração giram mais rápido do que o caminhão "
          "anda ao acelerar (gelo, neve, lama, arrancada forte). O travamento na frenagem fica em \"Acelerador/freio\"."),
-    "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다.":
-        ("Um \"clac\" a cada troca: a vibração de rodagem some por um instante e depois a marcha engata firme. "
-         "Também funciona com câmbio automático."),
+    "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다. '변속기'를 토크컨버터로 두면 '철컥' 대신 부드럽게 '쿵' 밀어 줍니다.":
+        "Um \"clac\" a cada troca: a vibração de rodagem some por um instante e depois a marcha engata firme. Também funciona com câmbio automático. Com \"Caixa de câmbio\" em Conversor, um empurrão suave substitui o \"clac\".",
     "리타더 단계에 비례하는 웅웅거림으로, 빠를수록 음이 높아집니다(40~65Hz). 엔진 브레이크는 엔진 점화 박자에 맞춰 '다다닥' 노크하고, 엑셀을 밟으면 멈춥니다.":
         "Um zumbido proporcional ao estágio do retarder que fica mais agudo com a velocidade (40–65 Hz). O freio motor bate no ritmo de ignição do motor e para ao acelerar.",
     "가속도가 순간적으로 크게 튀면(충돌, 큰 충격) 강한 50Hz 펄스를 냅니다. 기준은 '충돌 감지 기준'에서 정합니다.":
@@ -239,6 +238,8 @@ MESSAGES = {
     "엔진 진동 주파수 계산에 씁니다. ATS 순정 트럭은 대부분 직렬 6기통이고, ETS2의 Scania V8 같은 트럭은 8로 두세요. 텔레메트리에는 기통 수가 없습니다.":
         ("Usado para calcular a frequência de vibração do motor. A maioria dos caminhões originais do ATS tem seis "
          "em linha; use 8 em caminhões como o Scania V8 do ETS2. A telemetria não informa isso."),
+    "변속할 때의 느낌입니다. AMT·수동은 레버가 빠지고 다음 기어가 '철컥' 들어갑니다(이튼 풀러, DT12 같은 변속기). 토크컨버터는 동력이 끊기지 않고 다음 기어가 물리며 부드럽게 '쿵' 밀어 줍니다(앨리슨). 엑셀을 깊이 밟을수록 단단하고, 발을 떼고 변속하면 거의 없습니다. 텔레메트리에는 변속기 종류가 없습니다.":
+        "Como se sente uma troca de marcha. AMT / manual: a alavanca sai da marcha e a próxima entra com um \"clac\" (caixas como Eaton Fuller ou DT12). Conversor (de torque): a tração nunca é cortada e a próxima marcha engata com um empurrão suave (Allison). Quanto mais fundo o acelerador, mais firme; sem acelerar quase não se sente. A telemetria não informa a caixa de câmbio.",
     "이 효과의 진동이 갈 곳: 그립(파랑), 트리거(주황), 둘 다(보라). 꺼진 효과에서 위치를 누르면 그 위치로 다시 켜집니다.":
         ("Onde este efeito vibra: empunhadura (azul), gatilho (laranja) ou ambos (roxo). Escolher um num efeito "
          "desligado o liga de novo ali."),
@@ -371,8 +372,8 @@ MESSAGES = {
     "패드 {buttons}": "Controle {buttons}",
     "키보드 {keys}": "Teclado {keys}",
     "프리셋": "Predefinições",
-    "프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수를 통째로 따로 둡니다. 트럭과 트립 모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.":
-        "Cada predefinição guarda suas próprias intensidades, limites, chaves, saídas e número de cilindros. Clique nela ao trocar de veículo, como entre o seu caminhão e o carro do modo Trip. Aplica-se na hora, mesmo dirigindo, e continua na próxima inicialização.",
+    "프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수, 변속기를 통째로 따로 둡니다. 트럭과 트립 모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.":
+        "Cada predefinição guarda suas próprias intensidades, limites, chaves, saídas, número de cilindros e caixa de câmbio. Clique nela ao trocar de veículo, como entre o seu caminhão e o carro do modo Trip. Aplica-se na hora, mesmo dirigindo, e continua na próxima inicialização.",
     "이 프리셋으로 바꿉니다. 오른쪽 클릭: 이름 바꾸기, 삭제": "Muda para esta predefinição. Clique direito: renomear, excluir",
     "없음": "Nenhuma",
     "＋ 지금 설정으로 새 프리셋": "＋ Nova com as atuais",

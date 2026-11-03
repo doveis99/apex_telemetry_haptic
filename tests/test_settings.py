@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from effects import DEFAULT_ROUTES, Gains
+from effects import AMT, CONVERTER, DEFAULT_ROUTES, Gains
 from settings import (AppOptions, delete_preset, load_app_options, load_eq, load_gains, load_presets,
                       save_app_options, save_eq, save_gains, save_preset)
 
@@ -71,6 +71,14 @@ class SettingsTest(unittest.TestCase):
         delete_preset("Truck", self.path)
         delete_preset("Bus", self.path)  # never there
         self.assertEqual(list(load_presets(self.path)), ["Car"])
+
+    def test_the_gearbox_is_kept_with_the_gains_and_in_each_preset(self) -> None:
+        save_gains(Gains(gearbox=CONVERTER), self.path)
+        save_preset("Bus", Gains(gearbox=CONVERTER), self.path)
+        save_preset("Truck", Gains(), self.path)
+        self.assertEqual(load_gains(self.path).gearbox, CONVERTER)
+        self.assertEqual({name: p.gearbox for name, p in load_presets(self.path).items()},
+                         {"Bus": CONVERTER, "Truck": AMT})
 
     def test_hand_edited_presets_fall_back_like_the_gains(self) -> None:
         self.path.write_text(json.dumps({"presets": {"Car": {"engine": "loud", "road": 0.2}, "Bus": [1]}}),

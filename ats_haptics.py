@@ -26,7 +26,7 @@ from typing import Callable
 
 from apex6 import FRAME_PERIOD, MAX_SAMPLE, Apex6, Block, DeviceUnavailable, StreamStats
 from blocklog import BlockLog
-from effects import Equalizer, Gains, Synth, effective_gains
+from effects import GEARBOXES, Equalizer, Gains, Synth, effective_gains
 from gamewatch import GameWatcher
 from i18n import set_language, system_language, t
 from preview import Preview
@@ -298,6 +298,8 @@ def parse_args(defaults: Gains) -> argparse.Namespace:
     parser.add_argument("--throttle-pulse", type=float, default=defaults.throttle_pulse,
                         help="engine-rate pulse depth of the throttle trigger, 0..1")
     parser.add_argument("--cylinders", type=int, default=defaults.cylinders)
+    parser.add_argument("--gearbox", choices=GEARBOXES, default=defaults.gearbox,
+                        help="how a shift feels: amt (lever knock and clack) or converter (a soft push)")
     return parser.parse_args()
 
 
@@ -307,7 +309,7 @@ def main() -> None:
     args = parse_args(gains)
     gains.master = args.gain
     for name in ("grip_level", "trigger_level", "engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarder",
-                 "impact", "trigger", "throttle_pulse", "cylinders"):
+                 "impact", "trigger", "throttle_pulse", "cylinders", "gearbox"):
         setattr(gains, name, getattr(args, name))
     runner = Runner(gains, simulate=args.simulate, seconds=args.seconds, log_blocks=args.log_blocks,
                     sim_fps=args.sim_fps or None, eq=Equalizer.for_player(load_eq()), scenario=args.scenario,

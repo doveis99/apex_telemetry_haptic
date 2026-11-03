@@ -88,7 +88,7 @@ The switch on the left turns each effect on or off. An effect that is off is gre
 | **Bumps** | 100% (0–200) | Grip on the wheel's side | A hit when the suspension moves suddenly (potholes, kerbs, joints). Shaped after recorded bumps, it follows the size of the hit: a small joint is a short, high tap (65 Hz, 0.025 s), a big pothole a low, heavy thud (40 Hz, 0.06 s), and after a big hit the cab rattles softly for about 0.3 s. Left wheels go to the left grip, right wheels to the right grip. Trailer wheels follow at half strength and a little higher (+10 Hz). A suspension reading the game sends for a single frame and takes back on the next is not a bump, so bumps land one frame late (about 17 ms at 60 fps). When the cab lurches on its mounts, as on a dirt road (tilt acceleration from 0.14 rad/s²), a low thud (55–40 Hz) comes on both grips too. |
 | **Rumble strips** | 80% (0–200) | Grip on the wheel's side | A "brrrrt" when you drive onto a centre-line or shoulder rumble strip. It is detected from the per-wheel surface the game reports (`rumble_stripe`), so it works even when the suspension barely moves. The frequency follows the groove spacing (about 30 cm) and speed: about 83 Hz at 90 km/h. As in recorded rumble strips it is close to a pure tone, with every other groove landing harder. Trailer wheels on the strip alone give half strength. |
 | **Wheelspin** | 70% (0–200) | Both grips | A rough, grinding 45 Hz when the driven wheels clearly turn faster than the truck under throttle (ice, snow, mud, hard launches), chattering at 13 Hz like a tyre gripping and slipping. Wheels locked by braking are handled by **Throttle/brake**. |
-| **Gear shift** | 60% (0–200) | Both grips | A "clunk" on every gear change, shaped after real Eaton Fuller shift recordings: a soft knock as the lever leaves the gear (the driving vibration dips from here), then, 0.14 s after the change, a crisp 140 Hz clack as the next gear goes in, with a short ring from the gearbox. It keeps the recordings' timing. Works with automatic gearboxes too. |
+| **Gear shift** | 60% (0–200) | Both grips | A "clunk" on every gear change, shaped after real Eaton Fuller shift recordings: a soft knock as the lever leaves the gear (the driving vibration dips from here), then, 0.14 s after the change, a crisp 140 Hz clack as the next gear goes in, with a short ring from the gearbox. It keeps the recordings' timing. Works with automatic gearboxes too. Set **Gearbox** to Torque converter for a soft push instead (see **Gearbox** below). |
 | **Retarder** | 30% (0–200) | Both grips | A hum proportional to the retarder stage that rises in pitch with speed (40 Hz standing, 65 Hz from 90 km/h) and fades at low speed. The engine brake is a knock at the engine's firing rate (rpm ÷ 20 for six cylinders), stronger at higher rpm and gone while you press the throttle. |
 | **Impact** | 100% (0–200) | Both grips | A strong 50 Hz pulse when acceleration jumps sharply (collisions, big hits). The threshold is set under [Detection](#detection). |
 | **Throttle/brake** | 20% (0–100) | Trigger | Follows the pedal you are pressing. On the throttle, 100 Hz that grows with pedal travel. On the brake, a 110 Hz pulse chopped at 12 Hz when the wheels lock; without lock, a light vibration proportional to speed and braking. |
@@ -119,6 +119,7 @@ All event effects range from 0 to 200%. Air brake, turn signals and game alerts 
 | **Bump threshold** | 20 cm/s (5–100) | A bump pulse fires when the suspension suddenly moves faster than this. Lower reacts to small bumps, higher only to big hits. If the truck rides rough, the threshold rises above this by itself. |
 | **Impact threshold** | 12 m/s² (4–40) | An impact pulse fires when acceleration changes by more than this from one game frame to the next. Keep it well above the **Peak accel.** you see under [Telemetry](#telemetry) in normal driving. |
 | **Engine cylinders** | 6 (4–12) | Used for the engine vibration frequency; 8 also gives it a V8's lumpy beat. Most stock ATS trucks have an inline six; set 8 for trucks such as the ETS2 Scania V8. Telemetry does not report the cylinder count, so it is set by hand. |
+| **Gearbox** | AMT / manual | How a gear change feels. **AMT / manual** is the clack above (gearboxes such as the Eaton Fuller or DT12). With a **Torque converter** (Allison) the drive never lets go as the next gear takes hold, so there is no lever and no clack: a rounded 45 Hz push, at its height 0.06 s in and gone within 0.4 s, and the driving vibration does not dip. The deeper the throttle, the firmer it is (4.5 times as strong floored as with your foot off); shifting off the throttle, it is barely there. No recording of one was available, so this feel is reasoned rather than measured. Telemetry does not report the gearbox, so it is set by hand. |
 
 ### Telemetry
 
@@ -138,7 +139,7 @@ Gear shifts, impacts, floored pedals, trailer, parking brake, turn signals, engi
 
 ### Presets
 
-The **Presets** row under the output controls switches the whole tuning in one click. Each preset keeps its own levels, thresholds, on/off states, outputs and cylinder count. Use them when you change vehicles, such as your truck and the car of Trip mode.
+The **Presets** row under the output controls switches the whole tuning in one click. Each preset keeps its own levels, thresholds, on/off states, outputs, cylinder count and gearbox. Use them when you change vehicles, such as your truck and the car of Trip mode.
 
 - **＋ New preset from current**: keeps the current settings (unsaved changes included) under a name and switches to that preset.
 - **A preset button**: switches to it at once, even mid-drive, and the next start opens with it too. The preset in use is lit blue. With unsaved changes you are asked whether to save them first.
@@ -261,7 +262,7 @@ When the window opens it checks GitHub for the latest release. If there is a new
 ## Known limitations
 
 - There is only one trigger channel, so it vibrates **both triggers together** with no left/right distinction. The grips are independent. Verified on controller firmware 9.0.5.5 with `tone.py split` (a blind check against a reference tone): routing to the left or right, or alternating every block, felt the same on both triggers. Flydigi Space Station and X-Haptics also treat the triggers as a single part.
-- Telemetry carries no engine cylinder count, wiper speed and the like, so those effects are set by hand or left out.
+- Telemetry carries no engine cylinder count, gearbox type, wiper speed and the like, so those effects are set by hand or left out.
 - Based on unofficial reverse engineering; controller firmware updates may change the behaviour.
 
 ## Running from source and building

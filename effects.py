@@ -304,6 +304,20 @@ SHIFT_HITS = ((0.02, 0.19, 0.16),  # the lever out of gear and across
               (0.14, 0.95, 0.005),  # the clack
               (0.14, 0.43, 0.08))  # its ring
 SHIFT_COOLDOWN = 0.15  # s
+# A torque converter's gearbox (an Allison) shifts under power instead: one clutch hands
+# the drive to the next with no lever and no break in the pull, and the converter cushions
+# it. What reaches the cab is a soft push as the next gear takes hold, firmer the harder the
+# engine pulls, next to nothing coasting. No recording of one exists here: the stock game
+# gives the Allison no shift sound, and the only Allison clips (a traffic bus's) are its
+# whine. So this is reasoned, not measured: a rounded swell at the cab sway's pitch, at its
+# height 60 ms in and 20 dB down by 0.4 s, and the bed does not duck under it, as the drive
+# never lets go. Telemetry does not say which gearbox the truck has (Gains.gearbox).
+AMT, CONVERTER = "amt", "converter"  # automated or manual; torque converter
+GEARBOXES = (AMT, CONVERTER)
+CONVERTER_SHIFT_HZ = CAB_SWAY_HZ
+# strength at gear gain 1, coasting and at full throttle; the swell's height is 2/3 of it
+CONVERTER_SHIFT = (0.2, 0.9)
+CONVERTER_SHIFT_ATTACK, CONVERTER_SHIFT_DECAY = 0.06, 0.15  # s
 # Range selector and splitter, after the Zeemods clips the game plays when one is
 # flipped: the knob clicks at once (the range's near 140 Hz, the splitter's a low
 # 60 Hz thock 16 ms in, both 10 dB down within 5 ms), then the gearbox's air shift
@@ -444,6 +458,8 @@ class Gains:
     # (under 60% of itself for 86% of the drive) and the trigger 2.5 dB; 0.4 takes them 3.9 and 1.6.
     steady_fade: float = 0.6
     cylinders: int = 6
+    # how a gear change feels: AMT (the lever's knock and the clack) or CONVERTER (a soft push)
+    gearbox: str = AMT
     # m/s of sudden suspension travel; 0.2 brings a 60 fps game's short joints, which a
     # frame can straddle, close to what a continuous clock sees at 0.25
     bump_threshold: float = 0.2
@@ -853,11 +869,13 @@ class Burst:
 
     phase 0.25 starts at the crest instead of zero: a hard edge, not a swell.
     attack_s ramps the envelope in, for sounds that swell, like venting air.
+    ducks=False leaves the continuous effects alone while it plays.
     """
 
     def __init__(self, freq: float, amplitude: float, decay_s: float, delay_s: float = 0.0,
-                 phase: float = 0.0, attack_s: float = 0.0) -> None:
+                 phase: float = 0.0, attack_s: float = 0.0, ducks: bool = True) -> None:
         self.freq, self.amplitude, self.decay_s, self.attack_s = freq, amplitude, decay_s, attack_s
+        self.ducks = ducks
         self.age = -delay_s
         self.phase = phase
 
@@ -1182,10 +1200,17 @@ class Synth:
             self.prev_gear = frame.gear
             return
         if frame.gear != self.prev_gear and frame.gear != 0 and self.gear_cooldown == 0.0:
-            # The recorded shift on its own timeline (SHIFT_HITS); the bed ducks
-            # under the lever's knock and again just ahead of the clack.
-            for delay, strength, decay in SHIFT_HITS:
-                self._both("gear", Burst(SHIFT_HZ, strength * self.g.gear, decay, delay_s=delay, phase=0.25))
+            if self.g.gearbox == CONVERTER:
+                # A powershift (CONVERTER_SHIFT): pushed as hard as the engine pulls.
+                coasting, floored = CONVERTER_SHIFT
+                strength = coasting + (floored - coasting) * min(1.0, max(0.0, frame.game_throttle))
+                self._both("gear", Burst(CONVERTER_SHIFT_HZ, strength * self.g.gear, CONVERTER_SHIFT_DECAY,
+                                         attack_s=CONVERTER_SHIFT_ATTACK, ducks=False))
+            else:
+                # The recorded shift on its own timeline (SHIFT_HITS); the bed ducks
+                # under the lever's knock and again just ahead of the clack.
+                for delay, strength, decay in SHIFT_HITS:
+                    self._both("gear", Burst(SHIFT_HZ, strength * self.g.gear, decay, delay_s=delay, phase=0.25))
             self.gear_cooldown = SHIFT_COOLDOWN
             self.levels.events.append(t("변속 {gear}단", gear=frame.gear))
         if frame.gear != 0:
@@ -1623,7 +1648,7 @@ class Synth:
                 _mix(out, routes["bumps"], wl * c, wr * c, 0.7 * (wl + wr) * c, eq_sway)
             drive = [0.0, 0.0, 0.0]
             for (effect, side, burst), burst_eq in zip(self.bursts, eq_bursts):
-                if effect not in DUCK_EXEMPT:
+                if effect not in DUCK_EXEMPT and burst.ducks:
                     d = burst.level
                     _mix(drive, routes[effect], 0.0 if side == "R" else d, 0.0 if side == "L" else d, d)
                 b = burst.next()

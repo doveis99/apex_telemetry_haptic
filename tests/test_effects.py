@@ -11,8 +11,9 @@ import unittest
 from unittest import mock
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE
-from effects import (BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RIDE_MAX, BUMP_RATTLE_S, CAB_FAR_SIDE, CEILING, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
-                     Gains, NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface, surface_of)
+from effects import (AMT, BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RIDE_MAX, BUMP_RATTLE_S, CAB_FAR_SIDE, CEILING, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
+                     CONVERTER, Gains, NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface,
+                     surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
 _render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise
@@ -81,6 +82,39 @@ class GearTest(unittest.TestCase):
         edge = rms(samples[clack:clack + 20])
         self.assertGreater(rms(samples[clack + 50:clack + 70]), 0.25 * edge)  # it rings on, not just a click
         self.assertLess(rms(samples[clack + 200:clack + 220]), 0.1 * edge)  # and is 20 dB down by 0.2 s
+
+    def converter_shift(self, throttle: float) -> list[float]:
+        """The left grip from a shift up through a torque converter, alone, one sample per ms."""
+        s, samples = Synth(effective_gains(Gains(gearbox=CONVERTER, disabled=[
+            name for name in TOGGLEABLE if name != "gear"]))), []
+        s.render(frame(gear=7, game_throttle=throttle, user_throttle=throttle))
+        for _ in range(60):
+            samples.extend(s.render(frame(gear=8, game_throttle=throttle, user_throttle=throttle)).left_grip)
+        return samples
+
+    def test_a_torque_converter_pushes_softly_without_the_clack(self) -> None:
+        samples = self.converter_shift(0.7)
+        height = max(range(len(samples)), key=lambda n: abs(samples[n]))
+        self.assertAlmostEqual(height, 60, delta=8)  # a swell, not an edge
+        self.assertLess(max(abs(x) for x in samples[:15]), 0.4 * abs(samples[height]))
+        self.assertLess(tone_level(samples, 140.0), 0.1 * tone_level(samples, 45.0))  # no clack in it
+        self.assertLess(rms(samples[420:440]), 0.1 * rms(samples[50:70]))  # 20 dB down by 0.42 s
+
+    def test_the_converter_push_follows_the_throttle(self) -> None:
+        self.assertGreater(rms(self.converter_shift(1.0)), 3.0 * rms(self.converter_shift(0.0)))
+
+    def test_the_converter_push_leaves_the_driving_vibration_alone(self) -> None:
+        for gearbox in (AMT, CONVERTER):
+            with self.subTest(gearbox):
+                s, deepest = Synth(effective_gains(Gains(gearbox=gearbox))), 0.0
+                s.render(frame(gear=7))
+                for _ in range(50):
+                    s.render(frame(gear=8))
+                    deepest = max(deepest, s.duck[0], s.duck[1])
+                if gearbox == AMT:
+                    self.assertGreater(deepest, 0.3)  # the drive breaks off for the lever
+                else:
+                    self.assertEqual(deepest, 0.0)  # and never does through a converter
 
 
 class ResumeTest(unittest.TestCase):

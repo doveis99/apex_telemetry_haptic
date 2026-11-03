@@ -43,7 +43,8 @@ from blocklog import LOG_DIR
 from errorlog import log_exception
 from i18n import N_, t
 from version import __version__
-from effects import BOTH, DEFAULT_ROUTES, GRIP, TOGGLEABLE, TRIGGER, Equalizer, Gains, route_of
+from effects import (AMT, BOTH, CONVERTER, DEFAULT_ROUTES, GEARBOXES, GRIP, TOGGLEABLE, TRIGGER, Equalizer, Gains,
+                     route_of)
 from gamewatch import GameWatcher
 from preview import ROAD_SURFACES, SURFACE_STEP_S, Player, Preview
 from scenarios import SCENARIOS
@@ -123,7 +124,8 @@ SLIDER_TIPS = {
                  "게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다."),
     "wheelspin": N_("엑셀을 밟는데 구동 바퀴가 트럭보다 빨리 헛돌면(얼음, 눈, 진흙, 급출발) 양쪽 그립에 거칠게 긁히는 "
                     "진동을 냅니다. 브레이크로 바퀴가 잠기는 휠락은 '엑셀/브레이크'에서 냅니다."),
-    "gear": N_("기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다."),
+    "gear": N_("기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다. "
+               "'변속기'를 토크컨버터로 두면 '철컥' 대신 부드럽게 '쿵' 밀어 줍니다."),
     "retarder": N_("리타더 단계에 비례하는 웅웅거림으로, 빠를수록 음이 높아집니다(40~65Hz). "
                      "엔진 브레이크는 엔진 점화 박자에 맞춰 '다다닥' 노크하고, 엑셀을 밟으면 멈춥니다."),
     "impact": N_("가속도가 순간적으로 크게 튀면(충돌, 큰 충격) 강한 50Hz 펄스를 냅니다. "
@@ -160,6 +162,8 @@ SLIDER_TIPS = {
 METER_LABELS = (N_("왼쪽 그립"), N_("오른쪽 그립"), N_("트리거"))
 CYLINDERS_LABEL = N_("엔진 기통 수")
 CYLINDERS_RANGE = (4, 12)
+GEARBOX_LABEL = N_("변속기")
+GEARBOX_OPTIONS = ((AMT, N_("AMT·수동")), (CONVERTER, N_("토크컨버터")))
 # where an effect vibrates; each choice has its colour, which its slider takes too
 ROUTE_OPTIONS = ((GRIP, N_("그립"), GRIP_COLOR), (TRIGGER, N_("트리거"), TRIGGER_COLOR),
                  (BOTH, N_("둘 다"), BOTH_COLOR))
@@ -221,7 +225,8 @@ class App:
         # Label columns fit the longest name in this language, the same in every card.
         names = [spec[1] for spec in OUTPUT_SLIDERS + EFFECT_SLIDERS + EVENT_SLIDERS + THRESHOLD_SLIDERS]
         measure = tkfont.Font(font=font()).measure
-        self.label_width = max(measure(t(name)) for name in names + list(METER_LABELS) + [CYLINDERS_LABEL]) + px(12)
+        names += list(METER_LABELS) + [CYLINDERS_LABEL, GEARBOX_LABEL]
+        self.label_width = max(measure(t(name)) for name in names) + px(12)
         root.columnconfigure(0, weight=1)
         root.columnconfigure(1, weight=1)
 
@@ -398,6 +403,17 @@ class App:
         # text left unusable shows the count in use again
         spinbox.bind("<FocusOut>", lambda _: self.cylinders.set(self.gains.cylinders))
         tip(spinbox, cylinders_tip).grid(row=len(THRESHOLD_SLIDERS), column=2, sticky="w", padx=px(6), pady=(px(4), 0))
+        gearbox_tip = t("변속할 때의 느낌입니다. AMT·수동은 레버가 빠지고 다음 기어가 '철컥' 들어갑니다(이튼 풀러, "
+                        "DT12 같은 변속기). 토크컨버터는 동력이 끊기지 않고 다음 기어가 물리며 부드럽게 '쿵' 밀어 줍니다"
+                        "(앨리슨). 엑셀을 깊이 밟을수록 단단하고, 발을 떼고 변속하면 거의 없습니다. "
+                        "텔레메트리에는 변속기 종류가 없습니다.")
+        tip(tk.Label(thresholds, text=t(GEARBOX_LABEL), bg=CARD, fg=TEXT, anchor="w"), gearbox_tip).grid(
+            row=len(THRESHOLD_SLIDERS) + 1, column=1, sticky="w")
+        self.gearbox_picker = Segmented(thresholds, [(value, t(text), ACCENT) for value, text in GEARBOX_OPTIONS],
+                                        self._set_gearbox)
+        self.gearbox_picker.set(self.gains.gearbox if self.gains.gearbox in GEARBOXES else AMT)
+        tip(self.gearbox_picker, gearbox_tip).grid(row=len(THRESHOLD_SLIDERS) + 1, column=2, columnspan=2,
+                                                   sticky="w", padx=px(6), pady=(px(6), px(2)))
 
         log = card(right, t("이벤트"))
         log.outer.pack(fill="both", expand=True, pady=(px(12), 0))
@@ -659,6 +675,12 @@ class App:
             self.gains.cylinders = value
             self._changed()
 
+    def _set_gearbox(self, gearbox: str) -> None:
+        self.gearbox_picker.set(gearbox)
+        if gearbox != self.gains.gearbox:
+            self.gains.gearbox = gearbox
+            self._changed()
+
     def save(self) -> None:
         save_gains(self.gains)
         preset = self._active_preset()
@@ -673,7 +695,7 @@ class App:
         self._apply(Gains())
 
     def _apply(self, gains: Gains) -> None:
-        """Set every slider, switch, route and the cylinder count to these gains; saving stays separate."""
+        """Set every slider, switch, route, cylinder count and gearbox to these gains; saving stays separate."""
         for key, (var, _, scale, _) in self.slider_vars.items():
             var.set(getattr(gains, key) * scale)
             self._on_slider(key)
@@ -684,6 +706,7 @@ class App:
         for key in self.route_pickers:
             self._show_effect(key)
         self.cylinders.set(gains.cylinders)  # traced
+        self._set_gearbox(gains.gearbox if gains.gearbox in GEARBOXES else AMT)
         self._changed()
 
     # -- presets ----------------------------------------------------------------
@@ -697,8 +720,8 @@ class App:
         bar = self.preset_bar
         for child in bar.winfo_children():
             child.destroy()
-        bar_tip = t("프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수를 통째로 따로 둡니다. 트럭과 트립 모드의 "
-                    "승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.")
+        bar_tip = t("프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수, 변속기를 통째로 따로 둡니다. 트럭과 트립 "
+                    "모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.")
         tip(tk.Label(bar, text=t("프리셋"), bg=BG, fg=MUTED, font=font(9)), bar_tip).pack(side="left", padx=(0, px(8)))
         active = self._active_preset()
         names = sorted(load_presets(), key=str.casefold)

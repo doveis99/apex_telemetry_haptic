@@ -111,6 +111,9 @@ MESSAGES = {
     "요철 감지 기준": "Próg nierówności",
     "충돌 감지 기준": "Próg uderzenia",
     "엔진 기통 수": "Liczba cylindrów",
+    "변속기": "Skrzynia biegów",
+    "AMT·수동": "AMT / manualna",
+    "토크컨버터": "Hydrokinetyczna",
     "이벤트": "Zdarzenia",
     "호환되는 텔레메트리 플러그인이 없습니다 → '텔레메트리 플러그인'": "Brak zgodnej wtyczki telemetrii → „Wtyczka telemetrii”",
     "바뀐 설정을 저장할까요?": "Zapisać zmienione ustawienia?",
@@ -160,19 +163,15 @@ MESSAGES = {
          "buczy, trawa i ziemia powoli falują, a żwir, ziemia i śnieg dokładają stukot luźnych kamyków. Na "
          "wyboistej drodze kabina klekocze. Im szybciej, tym gęściej, a lewe i prawe koła grają osobno."),
     "포트홀, 연석, 이음매처럼 서스펜션이 갑자기 움직이면 그 바퀴 쪽 그립에 충격을 냅니다. 작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. 민감도는 '요철 감지 기준'에서 정합니다. 흙길처럼 캐빈이 크게 출렁이면 양쪽 그립에 낮은 '쿵'이 더해집니다.":
-        ("Uderzenie w uchwyt po stronie koła, gdy zawieszenie nagle pracuje (dziury, krawężniki, łączenia): małe "
-         "łączenie to krótkie, wysokie stuknięcie, duża dziura to niski, ciężki łomot, a po mocnym uderzeniu kabina "
-         "przez chwilę grzechocze. Czułość ustawia się w 'Próg nierówności'. "
-         "Gdy kabina mocno się kołysze, jak na drodze gruntowej, na obu uchwytach dochodzi niskie uderzenie."),
+        "Uderzenie w uchwyt po stronie koła, gdy zawieszenie nagle pracuje (dziury, krawężniki, łączenia): małe łączenie to krótkie, wysokie stuknięcie, duża dziura to niski, ciężki łomot, a po mocnym uderzeniu kabina przez chwilę grzechocze. Czułość ustawia się w 'Próg nierówności'. Gdy kabina mocno się kołysze, jak na drodze gruntowej, na obu uchwytach dochodzi niskie uderzenie.",
     "중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. 게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다.":
         ("Brrrr w uchwycie po stronie, która najedzie na pas wibracyjny przy linii środkowej lub "
          "poboczu. Wykrywane z nawierzchni podawanej przez grę; im szybciej, tym drobniej."),
     "엑셀을 밟는데 구동 바퀴가 트럭보다 빨리 헛돌면(얼음, 눈, 진흙, 급출발) 양쪽 그립에 거칠게 긁히는 진동을 냅니다. 브레이크로 바퀴가 잠기는 휠락은 '엑셀/브레이크'에서 냅니다.":
         ("Szorstkie tarcie w obu uchwytach, gdy koła napędowe przy gazie kręcą się szybciej, niż jedzie "
          "ciężarówka (lód, śnieg, błoto, ostry start). Blokowanie kół przy hamowaniu jest w „Gaz/hamulec”."),
-    "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다.":
-        ("„Klik” przy każdej zmianie biegu: wibracja jazdy na chwilę znika, a potem bieg mocno wskakuje. Działa też "
-         "z automatem."),
+    "기어가 바뀔 때 '철컥'. 주행 진동이 잠깐 비었다가 단단하게 맞물리는 느낌입니다. 자동 변속기도 동작합니다. '변속기'를 토크컨버터로 두면 '철컥' 대신 부드럽게 '쿵' 밀어 줍니다.":
+        "„Klik” przy każdej zmianie biegu: wibracja jazdy na chwilę znika, a potem bieg mocno wskakuje. Działa też z automatem. Gdy „Skrzynia biegów” jest ustawiona na Hydrokinetyczna, zamiast „kliku” przychodzi miękkie pchnięcie.",
     "리타더 단계에 비례하는 웅웅거림으로, 빠를수록 음이 높아집니다(40~65Hz). 엔진 브레이크는 엔진 점화 박자에 맞춰 '다다닥' 노크하고, 엑셀을 밟으면 멈춥니다.":
         "Buczenie proporcjonalne do stopnia retardera, coraz wyższe wraz z prędkością (40–65 Hz). Hamulec silnikowy stuka w rytmie zapłonu silnika i milknie po wciśnięciu gazu.",
     "가속도가 순간적으로 크게 튀면(충돌, 큰 충격) 강한 50Hz 펄스를 냅니다. 기준은 '충돌 감지 기준'에서 정합니다.":
@@ -234,6 +233,8 @@ MESSAGES = {
     "엔진 진동 주파수 계산에 씁니다. ATS 순정 트럭은 대부분 직렬 6기통이고, ETS2의 Scania V8 같은 트럭은 8로 두세요. 텔레메트리에는 기통 수가 없습니다.":
         ("Służy do obliczania częstotliwości wibracji silnika. Większość seryjnych ciężarówek w ATS ma rzędową "
          "szóstkę; dla ciężarówek jak Scania V8 w ETS2 ustaw 8. Telemetria tego nie podaje."),
+    "변속할 때의 느낌입니다. AMT·수동은 레버가 빠지고 다음 기어가 '철컥' 들어갑니다(이튼 풀러, DT12 같은 변속기). 토크컨버터는 동력이 끊기지 않고 다음 기어가 물리며 부드럽게 '쿵' 밀어 줍니다(앨리슨). 엑셀을 깊이 밟을수록 단단하고, 발을 떼고 변속하면 거의 없습니다. 텔레메트리에는 변속기 종류가 없습니다.":
+        "Jak odczuwa się zmianę biegu. AMT / manualna: dźwignia wychodzi z biegu, a następny wchodzi z „klikiem” (skrzynie jak Eaton Fuller czy DT12). Hydrokinetyczna: napęd nigdy się nie urywa, następny bieg łapie z miękkim pchnięciem (Allison). Im głębiej wciśnięty gaz, tym mocniej; bez gazu prawie nic. Telemetria nie podaje rodzaju skrzyni.",
     "이 효과의 진동이 갈 곳: 그립(파랑), 트리거(주황), 둘 다(보라). 꺼진 효과에서 위치를 누르면 그 위치로 다시 켜집니다.":
         ("Gdzie działa ten efekt: uchwyt (niebieski), spust (pomarańczowy) lub oba (fioletowy). Wybranie miejsca "
          "przy wyłączonym efekcie włącza go tam ponownie."),
@@ -364,8 +365,8 @@ MESSAGES = {
     "패드 {buttons}": "Pad {buttons}",
     "키보드 {keys}": "Klawiatura {keys}",
     "프리셋": "Presety",
-    "프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수를 통째로 따로 둡니다. 트럭과 트립 모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.":
-        "Każdy preset ma własne siły, progi, przełączniki, wyjścia i liczbę cylindrów. Kliknij go przy zmianie pojazdu, np. między ciężarówką a samochodem w trybie Trip. Działa od razu, także w trakcie jazdy, i zostaje przy następnym uruchomieniu.",
+    "프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수, 변속기를 통째로 따로 둡니다. 트럭과 트립 모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.":
+        "Każdy preset ma własne siły, progi, przełączniki, wyjścia, liczbę cylindrów i skrzynię biegów. Kliknij go przy zmianie pojazdu, np. między ciężarówką a samochodem w trybie Trip. Działa od razu, także w trakcie jazdy, i zostaje przy następnym uruchomieniu.",
     "이 프리셋으로 바꿉니다. 오른쪽 클릭: 이름 바꾸기, 삭제": "Przełącza na ten preset. Prawy klik: zmień nazwę, usuń",
     "없음": "Brak",
     "＋ 지금 설정으로 새 프리셋": "＋ Nowy z obecnych",

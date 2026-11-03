@@ -228,15 +228,27 @@ BUMP_RIDE_MAX = 0.5  # m/s, as high as it goes
 # tells a dirt road from pavement far better than the wheels do: in a 10 min drive without a
 # trailer (2026-11-02) its square had a median 30-100 times as large on dirt, and passed 0.02
 # (rad/s^2)^2 74 times a minute on dirt at 10-20 km/h but 18 times in 6 min of pavement, nearly
-# all at one kerb. ZAF's cab rattle follows the same square. So each lurch past CAB_JOLT knocks
-# low on both grips, the harder the larger, and the cab rattles (Texture) on whichever is the
-# larger of the wheels' roughness and the cab's own shaking.
-CAB_JOLT = 0.14  # rad/s^2 of tilt acceleration (0.02 squared) from which the cab lurches
-CAB_JOLT_FULL = 0.6  # where a lurch knocks at full strength: the dirt road's 99th percentile
-CAB_JOLT_FLOOR = 0.25  # strength of the smallest lurch, so it is felt
-CAB_JOLT_GAP = 0.15  # s before the cab lurches again
-CAB_JOLT_HZ = (55.0, 40.0)  # smallest and largest lurch: the heavy cab knocks lower than a wheel
-CAB_JOLT_DECAY = (0.04, 0.08)  # s
+# all at one kerb. ZAF's cab rattle follows the same square. So the cab sways (CAB_SWAY_*) as it
+# moves, and it rattles (Texture) on whichever is the larger of the wheels' roughness and the
+# cab's own shaking.
+# The cab rocks on its mounts: on dirt (two drives, 2026-11-02) half the tilt acceleration's
+# power lay below 2 Hz, peaking at 1.8-2.1 Hz, and after a lurch it swung back and forth twice
+# within 0.5 s, settling in 0.16 s (median; 0.35 s at the 90th percentile). A knock struck once
+# cannot follow that, and band noise like the cab's recorded boom (2026-11-03: 26-62 Hz,
+# swelling for 0.10-0.15 s) felt grainy in the hand, its strength wobbling about 40% at random.
+# So one smooth tone follows the tilt acceleration frame by frame. It starts above pavement's
+# own shaking (99th percentile 0.05 rad/s^2, where dirt's median is 0.05-0.06), is at a lurch
+# (0.14, where a knock used to strike) as strong as the smallest knock was, and is full at the
+# dirt road's 99th percentile.
+CAB_SWAY_HZ = 45.0  # near the recorded boom's loudest pitch (41.5-47 Hz), where the grips still answer
+CAB_SWAY = ((0.06, 0.0), (0.14, 0.25), (0.6, 1.0))  # rad/s^2 of tilt acceleration, and strength
+CAB_SWAY_TAU = 0.025  # s: smooths the game's frame steps (18 ms), not the 2 Hz swing
+# The sway is a roll: in the same drives 94-98% of the tilt acceleration at a lurch was about
+# the roll axis, and it was positive when the left wheels had sprung more than the right (86-95%
+# of the lurches where they differed most; a larger deflection is a compressed spring). So the
+# tone leans to the side the roll pushes, the far grip getting CAB_FAR_SIDE of it, and crosses
+# over as the cab rocks back; a pitch lands on both alike.
+CAB_FAR_SIDE = 0.5
 CAB_RATTLE = (0.003, 0.05)  # (rad/s^2)^2 of shaking where the cab's rattle starts (pavement's 99th percentile) and is full
 CAB_SETTLE_TAU = 0.25  # s for the shaking the rattle follows to die away
 # The lurches alone left the road's own strength alike: in a 40 min drive (2026-11-02) the
@@ -964,7 +976,7 @@ class Synth:
         # previous-block state
         self.prev_amp = {"engine": 0.0, "road_l": 0.0, "road_r": 0.0, "rumble_l": 0.0, "rumble_r": 0.0,
                          "spin": 0.0, "retarder": 0.0, "jake": 0.0, "trigger": 0.0, "squeal": 0.0,
-                         "harsh": 0.0}
+                         "harsh": 0.0, "sway_l": 0.0, "sway_r": 0.0}
         self.prev_state: dict[str, object] = {}
         self.blinker_idle = 0.0
         self.brake_held = self.brake_peak = 0.0  # how long and how hard the service brake has been held
@@ -992,8 +1004,10 @@ class Synth:
         self.gear_cooldown = 0.0
         self.prev_accel: tuple[float, float, float] | None = None
         self.impact_cooldown = 0.0
-        # (rad/s^2)^2 the cab has been shaking, whether it is past CAB_JOLT, s before it may lurch again
-        self.cab_shake, self.cab_above, self.cab_wait = 0.0, False, 0.0
+        self.cab_shake = 0.0  # (rad/s^2)^2 the cab has been shaking
+        self.cab_sway = (0.0, 0.0)  # left, right: the sway's strength the last frame asked for
+        self.sway = [0.0, 0.0]  # and where it has got to, smoothed over CAB_SWAY_TAU
+        self.sway_osc = Oscillator()
         self.lock_phase = 0.0  # of the ABS-like chop, per sample
         self.was_locked = False
         self.steady_ref: dict[str, float] = {}
@@ -1019,7 +1033,7 @@ class Synth:
         self.repeat_dt = 0.0
         self.leap_held = []
         self.prev_accel = None
-        self.cab_shake, self.cab_above, self.cab_wait = 0.0, False, 0.0
+        self.cab_shake, self.cab_sway = 0.0, (0.0, 0.0)
         self.prev_gear = None
         self.prev_state = {key: value for key, value in self.prev_state.items() if key == "game_events"}
         # coming back is a change too: the beds start in full and settle again
@@ -1201,22 +1215,17 @@ class Synth:
         return math.sqrt(min(high, max(low, self.roughness[side] / self.rough_avg[side])))
 
     def _cab_event(self, frame: Frame, dt: float) -> None:
-        """The cab lurching on its mounts (CAB_JOLT), and how much it has been shaking (CAB_RATTLE)."""
+        """How the cab sways on its mounts now, each side (CAB_SWAY), and how much it has been shaking (CAB_RATTLE)."""
         square = sum(a * a for a in frame.cabin_accel)
-        self.cab_wait = max(0.0, self.cab_wait - dt)
         if square > self.cab_shake or not dt:
             self.cab_shake = square
         else:
             self.cab_shake += (square - self.cab_shake) * (1.0 - math.exp(-dt / CAB_SETTLE_TAU))
-        lurch = math.sqrt(square)
-        if dt and lurch > CAB_JOLT and not self.cab_above and not self.cab_wait:
-            size = min(1.0, (lurch - CAB_JOLT) / (CAB_JOLT_FULL - CAB_JOLT))
-            strength = (CAB_JOLT_FLOOR + (1.0 - CAB_JOLT_FLOOR) * size) * self.g.bumps
-            freq = CAB_JOLT_HZ[0] + (CAB_JOLT_HZ[1] - CAB_JOLT_HZ[0]) * size
-            decay = CAB_JOLT_DECAY[0] + (CAB_JOLT_DECAY[1] - CAB_JOLT_DECAY[0]) * size
-            self._both("bumps", Burst(freq, strength, decay, phase=0.25))
-            self.cab_wait = CAB_JOLT_GAP
-        self.cab_above = lurch > CAB_JOLT
+        tilt = math.sqrt(square)
+        strength = _ramp(tilt, CAB_SWAY) * self.g.bumps
+        lean = frame.cabin_accel[2] / tilt if tilt else 0.0  # the roll's share, positive pushing left
+        far = 1.0 - abs(lean) * (1.0 - CAB_FAR_SIDE)
+        self.cab_sway = (strength * (1.0 if lean >= 0 else far), strength * (far if lean >= 0 else 1.0))
 
     def _changed(self, key: str, value: object) -> bool:
         """True when value differs from the last frame's (never on the first frame)."""
@@ -1525,13 +1534,19 @@ class Synth:
         if lock > 0 and not self.was_locked:
             self.lock_phase = 0.0  # the warning starts with a pulse, not up to half a cycle late
         self.was_locked = lock > 0
+        sway_k = 1.0 - math.exp(-DT / CAB_SWAY_TAU)
+        for side, want in enumerate(self.cab_sway if live else (0.0, 0.0)):
+            self.sway[side] += (want - self.sway[side]) * sway_k
+            if not want and self.sway[side] < 1e-4:
+                self.sway[side] = 0.0
+        sway_l, sway_r = self.sway
         routes = {name: route_of(g, name) for name in TOGGLEABLE}
         # each vibration scaled for how strongly each motor gives back its frequency
         eq = self.eq.pair
         eq_engine, eq_retarder, eq_rumble = eq(engine_freq), eq(retarder_freq), eq(rumble_freq)
         eq_rumble_half = eq(rumble_freq / 2)
         eq_road = (eq(self.texture[0].pitch), eq(self.texture[1].pitch))
-        eq_spin, eq_squeal = eq(self.spin_noise.filter.center), eq(Squeal.HZ)
+        eq_spin, eq_squeal, eq_sway = eq(self.spin_noise.filter.center), eq(Squeal.HZ), eq(CAB_SWAY_HZ)
         eq_trigger = eq(110.0 if trigger_mode == "brake" and lock > 0 else 100.0)
         eq_bursts = [eq(burst.freq) for _, _, burst in self.bursts]
         trigger, left, right = [], [], []
@@ -1549,6 +1564,8 @@ class Synth:
             eh = p["harsh"] + (engine_harsh - p["harsh"]) * k
             tr = p["trigger"] + (trigger_amp - p["trigger"]) * k
             sq = p["squeal"] + (squeal_amp - p["squeal"]) * k
+            wl = p["sway_l"] + (sway_l - p["sway_l"]) * k
+            wr = p["sway_r"] + (sway_r - p["sway_r"]) * k
 
             out = [0.0, 0.0, 0.0]  # left grip, right grip, trigger: events
             bed = [0.0, 0.0, 0.0]  # continuous effects, ducked under the events
@@ -1600,6 +1617,10 @@ class Synth:
                 _mix(out, routes["squeal"], squeal, squeal, squeal, eq_squeal)
             else:
                 self.squeal.restart()
+            if wl or wr:
+                # one cab, one tone: the same swing on both grips, leaning as the cab does
+                c = self.sway_osc.next(CAB_SWAY_HZ)
+                _mix(out, routes["bumps"], wl * c, wr * c, 0.7 * (wl + wr) * c, eq_sway)
             drive = [0.0, 0.0, 0.0]
             for (effect, side, burst), burst_eq in zip(self.bursts, eq_bursts):
                 if effect not in DUCK_EXEMPT:
@@ -1622,7 +1643,8 @@ class Synth:
             trigger.append(self._out(out[2], self.g.trigger_level, CEILING["trigger"]))
         self.prev_amp = {"engine": engine_amp, "road_l": road_l, "road_r": road_r,
                          "rumble_l": rumble_l, "rumble_r": rumble_r, "spin": spin_amp, "retarder": retarder_amp,
-                         "jake": jake_amp, "trigger": trigger_amp, "squeal": squeal_amp, "harsh": engine_harsh}
+                         "jake": jake_amp, "trigger": trigger_amp, "squeal": squeal_amp, "harsh": engine_harsh,
+                         "sway_l": sway_l, "sway_r": sway_r}
         self.bursts = [entry for entry in self.bursts if not entry[2].done]
 
         lv = self.levels
@@ -1679,3 +1701,13 @@ def _mix(out: list[float], route: str, left: float, right: float, trigger: float
         out[1] += right * eq[0]
     if route != GRIP:
         out[2] += trigger * eq[1]
+
+
+def _ramp(x: float, points: tuple[tuple[float, float], ...]) -> float:
+    """Straight lines through (x, y) points: the first y below them, the last above."""
+    if x <= points[0][0]:
+        return points[0][1]
+    for (x0, y0), (x1, y1) in zip(points, points[1:]):
+        if x <= x1:
+            return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+    return points[-1][1]

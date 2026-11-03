@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE
-from effects import (BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RIDE_MAX, BUMP_RATTLE_S, CEILING, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
+from effects import (BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RIDE_MAX, BUMP_RATTLE_S, CAB_FAR_SIDE, CEILING, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer,
                      Gains, NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface, surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
@@ -245,20 +245,58 @@ class BumpTest(unittest.TestCase):
         self.assertAlmostEqual(rough.bump_bursts[0][1].amplitude, calm.bump_bursts[0][1].amplitude, places=2)
 
     @staticmethod
-    def lurches(accels: list[float]) -> list[Burst]:
-        """The cab's knocks as its tilt acceleration (about the roll axis) runs through accels, a frame a block."""
-        s, found = synth(), []
+    def sway(accels: list[float | tuple[float, float, float]], s: Synth | None = None) -> Synth:
+        """The synth after the cab's tilt acceleration ran through accels, a frame a block:
+        about the roll axis, or as pitch, yaw and roll."""
+        s = s or synth()
         for n, accel in enumerate(accels):
-            s.render(frame(deflection=0.02 + 0.0001 * (n % 2), cabin_accel=(0.0, 0.0, accel)))
-            found += [b for effect, where, b in s.bursts if effect == "bumps" and where == "C" and b not in found]
-        return found
+            s.render(frame(deflection=0.02 + 0.0001 * (n % 2),
+                           cabin_accel=accel if isinstance(accel, tuple) else (0.0, 0.0, accel)))
+        return s
 
-    def test_the_cab_lurching_knocks_on_both_grips(self) -> None:
-        self.assertEqual(self.lurches([0.0] * 10 + [0.05, -0.05] * 20), [])  # pavement's own shaking
-        small, big = self.lurches([0.0] * 10 + [0.2] + [0.0] * 10), self.lurches([0.0] * 10 + [0.7] + [0.0] * 10)
-        self.assertEqual((len(small), len(big)), (1, 1))
-        self.assertLess(small[0].amplitude, big[0].amplitude)
-        self.assertLess(big[0].freq, small[0].freq)  # the heavier lurch knocks lower
+    def test_the_cab_sways_past_pavements_own_shaking(self) -> None:
+        self.assertEqual(self.sway([0.05, -0.05] * 20).sway, [0.0, 0.0])
+        lurch, top = self.sway([0.14] * 30).sway[0], self.sway([0.6] * 30).sway[0]
+        self.assertAlmostEqual(lurch, 0.25, places=2)  # as strong as the smallest knock was
+        self.assertAlmostEqual(top, 1.0, places=2)
+        self.assertEqual(self.sway([0.0] * 10 + [0.6, 0.6] + [0.0] * 40).sway, [0.0, 0.0])  # and settles with it
+
+    def test_the_cab_sways_to_the_side_it_rolls(self) -> None:
+        s = self.sway([0.4] * 30)  # rolled positive: the left wheels sprang
+        self.assertAlmostEqual(s.sway[1], CAB_FAR_SIDE * s.sway[0], places=3)
+        self.sway([-0.4] * 30, s)  # and back as the cab rocks
+        self.assertAlmostEqual(s.sway[0], CAB_FAR_SIDE * s.sway[1], places=3)
+        pitch = self.sway([(0.4, 0.0, 0.0)] * 30).sway
+        self.assertAlmostEqual(pitch[0], pitch[1])
+
+    def test_the_sway_follows_a_rocking_cab_smoothly(self) -> None:
+        # a 2 Hz rock, read at the game's ~55 frames a second: each swing one swell, no steps
+        s, left, right = synth(), [], []
+        for n in range(125):
+            accel = 0.4 * math.sin(TAU * 2.0 * round(n * DT / 0.018) * 0.018)
+            s.render(frame(deflection=0.02 + 0.0001 * (n % 2), cabin_accel=(0.0, 0.0, accel)))
+            left.append(s.sway[0])
+            right.append(s.sway[1])
+        self.assertGreater(max(left[:31]), 1.5 * max(right[:31]))  # the first quarter second leans left
+        self.assertGreater(max(right[31:63]), 1.5 * max(left[31:63]))  # the next one right
+        self.assertLess(max(abs(b - a) for a, b in zip(left, left[1:])), 0.15)  # a block moves it a little at a time
+
+    def test_the_sway_stops_with_the_telemetry(self) -> None:
+        s = self.sway([0.6] * 30)
+        for _ in range(40):
+            s.render(None)
+        self.assertEqual(s.sway, [0.0, 0.0])
+
+    def test_the_swaying_cab_vibrates_the_grips(self) -> None:
+        def grips(accel: float) -> tuple[float, float]:
+            s = synth()
+            with mock.patch("effects.Texture.next", return_value=0.0):  # the road would shake the grips too
+                for n in range(30):
+                    block = s.render(frame(deflection=0.02 + 0.0001 * (n % 2), cabin_accel=(0.0, 0.0, accel)))
+            return max(map(abs, block.left_grip)), max(map(abs, block.right_grip))
+        still, (left, right) = grips(0.0), grips(0.6)
+        self.assertGreater(left, still[0] + 20)
+        self.assertGreater(left, right)
 
     def test_a_shaking_cab_raises_the_road(self) -> None:
         def road(accel: float) -> float:
@@ -286,9 +324,6 @@ class BumpTest(unittest.TestCase):
         with mock.patch("effects.DETAIL_RANGE", (1.0, 1.0)):
             level_only = self.patch()
         self.assertGreater(self.patch(), 1.1 * level_only)  # the patch felt against the road around it
-
-    def test_the_cab_lurches_once_while_it_swings(self) -> None:
-        self.assertEqual(len(self.lurches([0.0] * 10 + [0.3, 0.4, -0.3, 0.3, 0.0])), 1)  # within CAB_JOLT_GAP
 
     def test_the_ride_is_kept_while_parked_and_starts_over_in_another_truck(self) -> None:
         s = synth()

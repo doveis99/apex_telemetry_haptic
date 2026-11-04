@@ -15,12 +15,14 @@ Examples:
   python tone.py report-rate                 blind check whether reports sent faster than 8 ms raise the 1 kHz rate
   python tone.py report-model                blind X/Y check: are those reports played faster, or cut off at 1 kHz
   python tone.py calibrate                  match each frequency's strength by feel, for the synth's eq
+  python tone.py pad-sound                  sines and taps to record with a microphone: what the pad sounds like
 """
 
 from __future__ import annotations
 
 import argparse
 import math
+from pathlib import Path
 
 from apex6 import (DEFAULT_TRIGGER_MODE, DEFAULT_TRIGGER_SIDE, DEFAULT_TRIGGER_TARGET, FRAME_PERIOD, MAX_SAMPLE,
                    RAM_MOTOR, SAMPLE_RATE, SUBFRAMES, Apex6, Block, Route)
@@ -1015,6 +1017,156 @@ def run_model_check(pad: Apex6, periods_ms: list[float], trials: int, freq: floa
     _save_report("report-model", lines)
 
 
+# What the pad sounds like, for a microphone rather than the hands. A voice coil is a small
+# speaker and the shell radiates it; DualSense haptics use that sound on purpose, sampled at
+# 3 kHz. The APEX plays 1 kHz samples, so all we can place is below 500 Hz. The recording shows
+# how loud each frequency is in the air, what harmonics the shell adds (rattle), and the images
+# of each tone around 1, 2, 3 kHz: their size says whether the pad holds each sample (images
+# about f/(1000-f) of the tone), joins them in straight lines (about the square of that) or
+# filters them (none), which is how a sharp tap will sound above 500 Hz. Nothing is rated by
+# feel; a recorder sits in front of the pad and analysis is offline.
+SOUND_FREQS = (60.0, 100.0, 150.0, 200.0, 250.0, 300.0, 350.0, 400.0, 450.0, 490.0)
+SOUND_LEAD_MS = 2000      # silence first: the room's noise floor
+SOUND_SYNC_FREQ = 250.0   # a short, loud burst the analysis aligns the timeline on
+SOUND_SYNC_MS = 300
+SOUND_TONE_MS = 1500
+SOUND_GAP_MS = 700
+SOUND_TAPS = 6
+SOUND_TAP_SPACING_MS = 400
+SOUND_AMP = 50.0
+SOUND_TAP_AMP = 100.0
+
+
+def sound_plan(freqs=SOUND_FREQS, taps: int = SOUND_TAPS) -> list[dict]:
+    """The recording's timeline: segments with kind, start and length in samples (= ms)."""
+    plan = [{"kind": "silence", "start": 0, "length": SOUND_LEAD_MS}]
+    at = SOUND_LEAD_MS
+
+    def add(kind: str, length: int, gap: int, **extra) -> None:
+        nonlocal at
+        plan.append({"kind": kind, "start": at, "length": length, **extra})
+        at += length + gap
+
+    add("sync", SOUND_SYNC_MS, 1000, freq=SOUND_SYNC_FREQ)
+    for freq in freqs:
+        add("sine", SOUND_TONE_MS, SOUND_GAP_MS, freq=freq)
+    # one sample at full strength: the sharpest thing the protocol can send
+    add("impulse", taps * SOUND_TAP_SPACING_MS, SOUND_GAP_MS, taps=taps, spacing=SOUND_TAP_SPACING_MS)
+    # report-rate's click, half a report up and half down
+    add("click", taps * SOUND_TAP_SPACING_MS, 1000, taps=taps, spacing=SOUND_TAP_SPACING_MS)
+    plan.append({"kind": "end", "start": at, "length": 0})
+    return plan
+
+
+def sound_sample(segment: dict, n: int, amp_percent: float, tap_amp_percent: float) -> float:
+    """Sample n (counted from the segment's start) of one segment."""
+    kind = segment["kind"]
+    if kind in ("sine", "sync"):
+        peak = MAX_SAMPLE * (90.0 if kind == "sync" else amp_percent) / 100.0
+        fade = FADE_SECONDS * SAMPLE_RATE
+        envelope = min(1.0, n / fade, (segment["length"] - n) / fade)
+        return math.sin(2 * math.pi * segment["freq"] * n / SAMPLE_RATE) * peak * envelope
+    if kind in ("impulse", "click"):
+        tap, offset = divmod(n, segment["spacing"])
+        peak = MAX_SAMPLE * tap_amp_percent / 100.0
+        start = segment["spacing"] // 2  # each tap in the middle of its slot
+        if kind == "impulse":
+            return peak if offset == start else 0.0
+        if start <= offset < start + SUBFRAMES:
+            return peak if offset < start + SUBFRAMES // 2 else -peak
+    return 0.0
+
+
+def sound_renderer(plan: list[dict], target: str, amp_percent: float, tap_amp_percent: float):
+    use_trigger, use_left, use_right, route = TARGETS[target]
+    total = plan[-1]["start"]
+    amp_percent = max(0.0, min(100.0, amp_percent))
+    tap_amp_percent = max(0.0, min(100.0, tap_amp_percent))
+
+    def sample(t: int) -> float:
+        for segment in plan:
+            if segment["start"] <= t < segment["start"] + segment["length"]:
+                return sound_sample(segment, t - segment["start"], amp_percent, tap_amp_percent)
+        return 0.0
+
+    def render(first: int) -> Block | None:
+        if first >= total:
+            return None
+        samples = [sample(t) for t in range(first, first + SUBFRAMES)]
+        silent = [0.0] * SUBFRAMES
+        return Block(trigger=samples if use_trigger else silent,
+                     left_grip=samples if use_left else silent,
+                     right_grip=samples if use_right else silent,
+                     route=route if use_trigger else Route.MUTE)
+
+    return render
+
+
+# Recordings go next to the code, in the git-ignored sample folder, not to the log folder.
+SOUND_OUT = Path(__file__).with_name("sound sample") / "pad-sound"
+RECORD_SETTLE_S = 1.0  # ffmpeg takes a moment to open the input
+RECORD_TAIL_S = 1.0
+
+
+def ffmpeg_record_command(device: str, path: Path) -> list[str]:
+    """ffmpeg recording a DirectShow input at 48 kHz, 24-bit, every channel kept."""
+    return ["ffmpeg", "-hide_banner", "-v", "error", "-y", "-f", "dshow", "-sample_rate", "48000",
+            "-i", f"audio={device}", "-c:a", "pcm_s24le", str(path)]
+
+
+def run_sound(pad: Apex6, target: str, amp: float, tap_amp: float, device: str | None,
+              out: Path = SOUND_OUT) -> None:
+    import calibrate
+    import json
+    import subprocess
+    import time
+    from datetime import datetime
+
+    plan = sound_plan()
+    seconds = plan[-1]["start"] / SAMPLE_RATE
+    buttons = calibrate.PadButtons()
+    print("패드 소리 녹음 (진동이 아니라 귀로 듣는 소리를 마이크로 잽니다)")
+    print(f"  대상 {target}, 사인 {amp:g}%, 탭 {tap_amp:g}%, 약 {seconds:.0f}초\n")
+    print("1. 게임과 음악을 끄고 조용한 곳에서, 플레이할 때처럼 패드를 쥐세요.")
+    if device:
+        print(f"2. 마이크({device})를 패드 앞 30 cm쯤에 두세요. 녹음은 이 프로그램이 합니다.")
+    else:
+        print("2. 녹음기를 패드 앞 30 cm쯤에 고정하고 (잡음 제거/자동 음량은 가능하면 끄기) 녹음을 시작하세요.")
+    print("3. 패드 A (또는 Enter)를 누르면 시작합니다. 재생 중에는 손을 움직이거나 말하지 마세요. B / q 취소.")
+    if _wait_event(buttons, START, STOP) == STOP:
+        return
+    stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
+    out.mkdir(parents=True, exist_ok=True)
+    wav = out / f"pad-sound-{stamp}.wav"
+    recorder = None
+    if device:
+        recorder = subprocess.Popen(ffmpeg_record_command(device, wav), stdin=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+        time.sleep(RECORD_SETTLE_S)
+        if recorder.poll() is not None:
+            print(f"녹음을 시작하지 못했습니다: {recorder.stderr.read().decode(errors='replace').strip()}")
+            return
+    try:
+        stats = pad.stream(sound_renderer(plan, target, amp, tap_amp))
+        print(f"  {stats.summary()}")
+        if recorder:
+            time.sleep(RECORD_TAIL_S)
+    finally:
+        if recorder:
+            recorder.communicate(b"q", timeout=10)  # ffmpeg's own stop key closes the file cleanly
+    info = pad.info
+    path = out / f"pad-sound-{stamp}.json"
+    path.write_text(json.dumps({
+        "target": target, "amp": amp, "tap_amp": tap_amp, "sample_rate": SAMPLE_RATE,
+        "max_sample": MAX_SAMPLE, "plan": plan, "late_blocks": stats.summary(),
+        "connection_mode": info.connection_mode, "firmware": info.firmware,
+        "device": device, "recording": wav.name if device else None,
+    }, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"\n끝. 타임라인: {path}")
+    if device:
+        print(f"녹음: {wav}")
+
+
 def _save_report(name: str, lines: list[str]) -> None:
     from datetime import datetime
 
@@ -1182,6 +1334,13 @@ def main() -> None:
     report_model.add_argument("--amp", type=float, default=MODEL_AMP)
     report_model.add_argument("--seconds", type=float, default=MODEL_SECONDS)
 
+    sound = sub.add_parser("pad-sound", help="sines and taps to record with a microphone: what the pad sounds like")
+    sound.add_argument("--target", choices=TARGETS, default="grips")
+    sound.add_argument("--amp", type=float, default=SOUND_AMP, help="sine strength in percent")
+    sound.add_argument("--tap-amp", type=float, default=SOUND_TAP_AMP, help="tap strength in percent")
+    sound.add_argument("--record", metavar="DEVICE",
+                       help="record it through ffmpeg from this DirectShow input (ffmpeg -list_devices true -f dshow -i x)")
+
     from calibrate import AMP, SECONDS
     cal = sub.add_parser("calibrate", help="match each frequency's strength by feel, for the synth's eq")
     cal.add_argument("--channel", choices=("grip", "trigger", "both"), default="both")
@@ -1244,6 +1403,9 @@ def main() -> None:
             if args.trials < 1:
                 parser.error("--trials needs at least 1")
             run_model_check(pad, periods, args.trials, args.freq, args.amp, args.seconds)
+            return
+        if args.command == "pad-sound":
+            run_sound(pad, args.target, args.amp, args.tap_amp, args.record)
             return
         if args.command == "calibrate":
             channels = ["grip", "trigger"] if args.channel == "both" else [args.channel]

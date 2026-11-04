@@ -417,5 +417,73 @@ class DeviceInfoTest(unittest.TestCase):
         self.assertEqual(_parse_device_info(list(reply)).firmware["dongle"], "0.4.9.1")
 
 
+class PadSoundTest(unittest.TestCase):
+    def render_all(self, target: str = "grips") -> list:
+        from tone import sound_plan, sound_renderer
+        render = sound_renderer(sound_plan(), target, 50.0, 100.0)
+        blocks, first = [], 0
+        while (block := render(first)) is not None:
+            blocks.append(block)
+            first += SUBFRAMES
+        return blocks
+
+    def test_plan_segments_follow_in_order(self) -> None:
+        from tone import SOUND_FREQS, sound_plan
+        plan = sound_plan()
+        for before, after in zip(plan, plan[1:]):
+            self.assertGreaterEqual(after["start"], before["start"] + before["length"])
+        self.assertEqual([s["freq"] for s in plan if s["kind"] == "sine"], list(SOUND_FREQS))
+        self.assertEqual(plan[-1]["kind"], "end")
+
+    def test_stream_covers_the_timeline_then_stops(self) -> None:
+        from tone import sound_plan
+        blocks = self.render_all()
+        self.assertEqual(len(blocks), -(-sound_plan()[-1]["start"] // SUBFRAMES))
+
+    def test_lead_is_silent_and_grips_get_the_same_samples(self) -> None:
+        from tone import SOUND_LEAD_MS
+        blocks = self.render_all()
+        lead = [x for b in blocks[:SOUND_LEAD_MS // SUBFRAMES] for x in b.left_grip]
+        self.assertTrue(all(x == 0.0 for x in lead))
+        for block in blocks:
+            self.assertEqual(block.left_grip, block.right_grip)
+            self.assertEqual(block.route, Route.MUTE)
+
+    def test_impulses_are_single_full_samples(self) -> None:
+        from tone import sound_plan
+        plan = sound_plan()
+        impulse = next(s for s in plan if s["kind"] == "impulse")
+        samples = [x for b in self.render_all() for x in b.left_grip]
+        part = samples[impulse["start"]:impulse["start"] + impulse["length"]]
+        hits = [i for i, x in enumerate(part) if x]
+        self.assertEqual(len(hits), impulse["taps"])
+        self.assertTrue(all(part[i] == MAX_SAMPLE for i in hits))
+        self.assertEqual({b - a for a, b in zip(hits, hits[1:])}, {impulse["spacing"]})
+
+    def test_sine_reaches_its_amplitude_and_fades_in(self) -> None:
+        from tone import sound_plan
+        segment = next(s for s in sound_plan() if s["kind"] == "sine")
+        samples = [x for b in self.render_all() for x in b.left_grip]
+        part = samples[segment["start"]:segment["start"] + segment["length"]]
+        self.assertEqual(part[0], 0.0)
+        self.assertAlmostEqual(max(part), MAX_SAMPLE * 0.5, delta=0.5)
+
+    def test_trigger_target_uses_the_trigger_channel(self) -> None:
+        blocks = self.render_all("triggers")
+        self.assertTrue(any(any(b.trigger) for b in blocks))
+        self.assertFalse(any(any(b.left_grip) for b in blocks))
+        self.assertEqual(blocks[0].route, Route.BOTH)
+
+    def test_record_command_keeps_every_channel_at_48k(self) -> None:
+        from pathlib import Path
+
+        from tone import ffmpeg_record_command
+        cmd = ffmpeg_record_command("Analogue 1/2(Audient iD14)", Path("x.wav"))
+        self.assertEqual(cmd[cmd.index("-i") + 1], "audio=Analogue 1/2(Audient iD14)")
+        self.assertEqual(cmd[cmd.index("-sample_rate") + 1], "48000")
+        self.assertNotIn("-ac", cmd)
+        self.assertEqual(cmd[-1], "x.wav")
+
+
 if __name__ == "__main__":
     unittest.main()

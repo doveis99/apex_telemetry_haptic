@@ -13,7 +13,8 @@ from unittest import mock
 from apex6 import MAX_SAMPLE, SAMPLE_RATE, Route
 from effects import (AMT, BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RATTLE_S, BUMP_RIDE_MAX, CAB_FAR_SIDE,
                      CEILING, CONVERTER, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer, Gains,
-                     NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface, surface_of)
+                     LowPass, NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface,
+                     surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
 _render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise
@@ -901,9 +902,12 @@ class SurfaceTest(unittest.TestCase):
         return sum((x - mean) ** 4 for x in samples) / len(samples) / var ** 2
 
     def test_hard_surfaces_feel_finer_than_soft_ones(self) -> None:
-        ice, asphalt, snow = (self.crossings(self.road(name)) for name in ("ice", "road", "snow"))
-        self.assertGreater(ice, asphalt)
-        self.assertGreater(asphalt, snow)
+        # asphalt and snow cross about as often (286 and 285 a second before the bed's low-pass,
+        # 269 and 270 after): what tells them apart is snow's stones, not the pitch
+        ice, asphalt, snow, gravel, dirt = (self.crossings(self.road(name))
+                                            for name in ("ice", "road", "snow", "gravel", "dirt"))
+        self.assertGreater(ice, max(asphalt, snow))
+        self.assertGreater(min(asphalt, snow), max(gravel, dirt))
 
     def test_texture_rises_with_speed(self) -> None:
         self.assertGreater(self.crossings(self.road("road", 25.0)), 1.2 * self.crossings(self.road("road", 3.0)))
@@ -1189,6 +1193,67 @@ class FrameRateTest(unittest.TestCase):
         s.render(frame(deflection=0.04, accel=(3.0, 0.0, -20.0), render_time=int(1e6 / 60)))  # and they work again
         s.render(frame(deflection=0.0398, accel=(3.0, 0.0, -20.0), render_time=int(2e6 / 60)))
         self.assertIn("bumps", effects_of(s))
+
+
+def band_share(samples: list[float], low: float, high: float) -> float:
+    """Share of the samples' energy between low and high Hz (a DFT over those bins, Hann window
+    so the strong low band does not leak into them)."""
+    n = len(samples)
+    samples = [x * (0.5 - 0.5 * math.cos(2 * math.pi * i / n)) for i, x in enumerate(samples)]
+    total = sum(x * x for x in samples) * n / 2
+    power = 0.0
+    for k in range(math.ceil(low * n / SAMPLE_RATE), math.floor(high * n / SAMPLE_RATE) + 1):
+        z = sum(x * cmath.exp(-2j * math.pi * k * i / n) for i, x in enumerate(samples))
+        power += abs(z) ** 2
+    return power / total
+
+
+def bed_filter(on: bool):
+    """As it is, or with the bed's low-pass (and its make-up) taken out."""
+    import contextlib
+    if on:
+        return contextlib.nullcontext()
+    return mock.patch.multiple(LowPass, next=lambda self, x: x, magnitude=lambda self, f: 1.0)
+
+
+class BedLowPassTest(unittest.TestCase):
+    def test_passes_the_effects_and_shuts_the_band_that_beats(self) -> None:
+        lp = LowPass()
+        loss = {f: -20.0 * math.log10(lp.magnitude(f)) for f in (45.0, 100.0, 190.0, 250.0, 450.0, 490.0)}
+        self.assertLess(loss[190.0], 0.5)
+        self.assertLess(loss[250.0], 1.5)
+        self.assertGreater(loss[450.0], 25.0)
+        self.assertGreater(loss[490.0], 45.0)
+
+    def test_silence_stays_exact(self) -> None:
+        lp = LowPass()
+        lp.next(1.0)
+        tail = [lp.next(0.0) for _ in range(200)]
+        self.assertEqual(tail[-1], 0.0)
+
+    def test_steady_effects_keep_their_strength(self) -> None:
+        s = synth()
+        for freq in (45.0, 100.0, 250.0):
+            gains = s._bed_pair(freq)
+            self.assertAlmostEqual(gains[0] * s._bed_shape.magnitude(freq), s.eq.pair(freq)[0])
+
+    def test_road_bed_has_next_to_nothing_where_the_images_beat(self) -> None:
+        def road(filtered: bool) -> list[float]:
+            with bed_filter(filtered):
+                return SurfaceTest().road("road", 25.0)[:1000]
+        before, after = band_share(road(False), 450.0, 500.0), band_share(road(True), 450.0, 500.0)
+        self.assertGreater(before, 100 * after)  # 5e-4 of the road's energy came to 8e-7
+        self.assertLess(after, 1e-5)
+
+    def test_events_keep_their_edges(self) -> None:
+        def shift(filtered: bool) -> list[float]:
+            with bed_filter(filtered):
+                s, samples = only("gear"), []
+                s.render(frame(gear=7))
+                for _ in range(40):
+                    samples.extend(s.render(frame(gear=8)).left_grip)
+                return samples
+        self.assertEqual(shift(True), shift(False))
 
 
 if __name__ == "__main__":

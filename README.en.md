@@ -262,6 +262,7 @@ When the window opens it checks GitHub for the latest release. If there is a new
 ## Known limitations
 
 - The trigger gets one vibration at a time, so the left and right triggers cannot play different vibrations at once: one plays alone, or both play the same. Which side plays is picked with the controller's motor setup command, verified on controller firmware 9.0.6.8 with blind checks (`tone.py grip-target`, `tone.py trigger-side`); older firmware is untested. The grips are independent.
+- The controller plays its 1 kHz samples as steps, with nothing smoothing them, so every vibration comes with a 0.5–3 kHz buzz you can hear; that cannot be removed. The continuous effects (engine, road, rumble, wheelspin, retarder, trigger) are filtered above 300 Hz, which takes out the 300–500 Hz they put out that the ear hears and the hand barely feels, and the rough beat near 490 Hz. Each is lifted back at its own frequency, so its strength stays the same. Short effects are not filtered, so they stop sharply.
 - Telemetry carries no engine cylinder count, gearbox type, wiper speed and the like, so those effects are set by hand or left out.
 - Based on unofficial reverse engineering; controller firmware updates may change the behaviour.
 

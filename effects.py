@@ -536,6 +536,47 @@ class ResonanceCut:
         return y
 
 
+# The pad holds each 1 kHz sample and has no filter after it, and its shell radiates
+# 300-500 Hz toward the player clearly (tone.py pad-sound, 2026-11-04/05): a steady tone
+# there is heard more than felt, and at 450-500 Hz it beats with its own image at 1000-f
+# (490 Hz against 510: a 20 Hz roughness). None of the steady effects means anything up
+# there; what they put there is the skirts of the road's, the retarder's and the wheelspin's
+# noise (alone on the scenarios 2.7, 2.0 and 1.0% of their energy at 300-450 Hz; all the grips
+# together 0.8-3.3%, and 0.1-0.2% at 450-500). So the continuous effects (the bed) go through
+# a low-pass at BED_LOWPASS_HZ, whose bilinear form at 1 kHz has its null at 500 Hz: -0.3 dB
+# at 190, -1.1 at 250, -14 at 400, -26 at 450. The bed's eq makes up what it takes at each
+# effect's own frequency (Synth._bed_pair), as for the ResonanceCut, so a steady tone feels as
+# before. The events keep their edges: a short knock's sound above 500 Hz is the crisp tick
+# it makes.
+BED_LOWPASS_HZ = 300.0
+BED_LOWPASS_Q = 1.0 / math.sqrt(2.0)  # Butterworth: flat up to the corner, no peak
+
+
+class LowPass:
+    """A 2nd-order low-pass (RBJ biquad), for the bed."""
+
+    def __init__(self, corner: float = BED_LOWPASS_HZ, q: float = BED_LOWPASS_Q) -> None:
+        w = TAU * corner / SAMPLE_RATE
+        alpha = math.sin(w) / (2.0 * q)
+        cos = math.cos(w)
+        a0 = 1.0 + alpha
+        self.b0 = self.b2 = (1.0 - cos) / 2.0 / a0
+        self.b1 = (1.0 - cos) / a0
+        self.a1, self.a2 = -2.0 * cos / a0, (1.0 - alpha) / a0
+        self.x1 = self.x2 = self.y1 = self.y2 = 0.0
+
+    def magnitude(self, freq: float) -> float:
+        z = cmath.exp(-1j * TAU * freq / SAMPLE_RATE)
+        return abs((self.b0 + self.b1 * z + self.b2 * z * z) / (1.0 + self.a1 * z + self.a2 * z * z))
+
+    def next(self, x: float) -> float:
+        y = self.b0 * x + self.b1 * self.x1 + self.b2 * self.x2 - self.a1 * self.y1 - self.a2 * self.y2
+        if not x and not self.x1 and abs(y) < 1e-6 and abs(self.y1) < 1e-6:
+            y = 0.0  # rung out: back to exact silence, which mutes the trigger route
+        self.x2, self.x1, self.y2, self.y1 = self.x1, x, self.y1, y
+        return y
+
+
 class Equalizer:
     """How much more drive each frequency needs to feel as strong as the reference, per output.
 
@@ -994,6 +1035,9 @@ class Synth:
         self.g = gains
         self.eq = eq or Equalizer()
         self.cuts = (self.eq.cut("grip"), self.eq.cut("grip"), self.eq.cut("trigger"))  # left, right, trigger
+        self.bed_filters = (LowPass(), LowPass(), LowPass())  # left, right, trigger (BED_LOWPASS_HZ)
+        self._bed_shape = LowPass()  # a stateless copy for its magnitudes
+        self._bed_pairs: dict[float, tuple[float, float]] = {}  # _bed_pair() by frequency (PAIR_CACHE)
         self.engine_osc = Oscillator()
         # each cylinder's own share of the idle's unevenness, the same every cycle
         self.cylinder_offsets = [random.Random(11 + n).uniform(-1.0, 1.0) for n in range(12)]
@@ -1583,12 +1627,12 @@ class Synth:
         sway_l, sway_r = self.sway
         routes = {name: route_of(g, name) for name in TOGGLEABLE}
         # each vibration scaled for how strongly each motor gives back its frequency
-        eq = self.eq.pair
-        eq_engine, eq_retarder, eq_rumble = eq(engine_freq), eq(retarder_freq), eq(rumble_freq)
-        eq_rumble_half = eq(rumble_freq / 2)
-        eq_road = (eq(self.texture[0].pitch), eq(self.texture[1].pitch))
-        eq_spin, eq_squeal, eq_sway = eq(self.spin_noise.filter.center), eq(Squeal.HZ), eq(CAB_SWAY_HZ)
-        eq_trigger = eq(110.0 if trigger_mode == "brake" and lock > 0 else 100.0)
+        eq, bed_eq = self.eq.pair, self._bed_pair  # the bed's also makes up its low-pass
+        eq_engine, eq_retarder, eq_rumble = bed_eq(engine_freq), bed_eq(retarder_freq), bed_eq(rumble_freq)
+        eq_rumble_half = bed_eq(rumble_freq / 2)
+        eq_road = (bed_eq(self.texture[0].pitch), bed_eq(self.texture[1].pitch))
+        eq_spin, eq_squeal, eq_sway = bed_eq(self.spin_noise.filter.center), eq(Squeal.HZ), eq(CAB_SWAY_HZ)
+        eq_trigger = bed_eq(110.0 if trigger_mode == "brake" and lock > 0 else 100.0)
         eq_bursts = [eq(burst.freq) for _, _, burst in self.bursts]
         trigger, left, right = [], [], []
         heard: set[int] = set()  # the TRIGGER_SLOTS something played in
@@ -1682,7 +1726,7 @@ class Synth:
                     self.duck[i] += (target - self.duck[i]) * DUCK_ATTACK
                 else:
                     self.duck[i] = max(target, self.duck[i] * DUCK_RELEASE)
-                out[i] += bed[i] * (1.0 - self.duck[i])
+                out[i] += self.bed_filters[i].next(bed[i]) * (1.0 - self.duck[i])
                 if cut:
                     out[i] = cut.next(out[i])
 
@@ -1748,6 +1792,16 @@ class Synth:
         else:
             imbalance = ENGINE_IMBALANCE * uneven * offset
         self.firing_gain = (1.0 + imbalance) * (1.0 + ENGINE_JITTER * self.rng.uniform(-1.0, 1.0))
+
+    def _bed_pair(self, freq: float) -> tuple[float, float]:
+        """(grip, trigger) gain for a continuous effect at freq: its eq, and what the bed's low-pass takes there."""
+        found = self._bed_pairs.get(freq)
+        if found is None:
+            if len(self._bed_pairs) >= PAIR_CACHE:
+                self._bed_pairs.clear()
+            lost = self._bed_shape.magnitude(freq)
+            found = self._bed_pairs[freq] = tuple(gain / lost for gain in self.eq.pair(freq))
+        return found
 
     def _out(self, x: float, channel_level: float, ceiling: float) -> float:
         # Soft limit so stacked effects saturate smoothly instead of clipping:

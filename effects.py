@@ -382,6 +382,11 @@ DUCK_EXEMPT = ("bumps", "air_brake")
 # nothing below 100 Hz, so the thump is a soft one.
 AIR_BRAKE_THUMP = 0.25  # at gain 1, of the hiss's 0.5
 AIR_BRAKE_HISS_DECAY = 0.105  # s: 20 dB down 0.24 s after it peaks
+# The hiss is something the driver hears, and the pad's shell sends 300-450 Hz to the player
+# clearly, cleanly while it plays softly (pad-sound, 2026-11-05: grips as sent up to 20%), so
+# it hisses there, from the pad itself, rather than low where it was half felt: -2.4 dB at
+# 300 Hz and -9 at 440, -26 at 490 where a steady sound would beat with its image.
+AIR_BRAKE_HISS_HZ, AIR_BRAKE_HISS_Q = 350.0, 1.2
 # A pedal hitting the floor knocks once on the trigger. At 0.8 it reached 90-112 of 112
 # there, four or five times the trigger's own bed, and was felt as a jolt.
 PEDAL_FLOOR = 0.4
@@ -392,6 +397,15 @@ AIR_BRAKE_ON, AIR_BRAKE_OFF = 0.1, 0.03  # pedal travel that holds it, and that 
 # One pack clicks as hard when the lamp goes off, the other 20 dB softer.
 BLINKER_HZ = 190.0
 BLINKER_DECAY = 0.003  # s
+# What the driver hears of the cab's clicks lies mostly above 500 Hz (the relay, the
+# selector's knob, the gearbox's clack, the fifth wheel's knocks), where the pad cannot place
+# a sound but makes one of its own: it holds each sample, so a single strong sample is heard
+# as a tick at 0.5-4 kHz and is barely felt (pad-sound, 2026-11-04/05: 14-19 dB over a noisy
+# room at 0.5-4 kHz, at or under it below 250 Hz). So each of those clicks opens with one
+# (Tick), TICK_SHARE of the click's own strength, ahead of the motor eq: the hand keeps the
+# body it had, and the ear gets the click from the hand.
+TICK_SHARE = 1.0
+TICK_EDGE = 0.005  # s: hits that decay this fast are the clicks' edges; slower ones are rings and thumps
 # Coupling a trailer, after Sound Fixes Pack's 11 coupling clips: not one thump but
 # the fifth wheel clattering for about 0.6 s, a knock every 20-40 ms (median 30),
 # mostly 7 dB under the loudest, which lands anywhere up to 0.45 s in (median 0.29).
@@ -1008,12 +1022,36 @@ class NoiseBurst(Burst):
     """Decaying band-limited noise: air hiss, cranking."""
 
     def __init__(self, center: float, amplitude: float, decay_s: float, delay_s: float = 0.0,
-                 attack_s: float = 0.0) -> None:
+                 attack_s: float = 0.0, q: float = 0.8) -> None:
         super().__init__(center, amplitude, decay_s, delay_s, attack_s=attack_s)
-        self.noise = BandNoise(center, 0.8, seed=random.randrange(1 << 30))
+        self.noise = BandNoise(center, q, seed=random.randrange(1 << 30))
 
     def _carrier(self) -> float:
         return self.noise.next()
+
+
+class Tick(Burst):
+    """One sample at the given strength: the click the pad makes of it (TICK_SHARE).
+
+    Its frequency is 0, so the motor eq leaves it as it is, and it never ducks the bed.
+    """
+
+    def __init__(self, amplitude: float, delay_s: float = 0.0) -> None:
+        super().__init__(0.0, amplitude, 1.0 / SAMPLE_RATE, delay_s, ducks=False)
+        self.fired = False
+
+    def next(self) -> float:
+        if self.age < 0:
+            self.age += 1.0 / SAMPLE_RATE
+            return 0.0
+        value = 0.0 if self.fired else self.amplitude
+        self.fired = True
+        self.age += 1.0 / SAMPLE_RATE
+        return value
+
+    @property
+    def done(self) -> bool:
+        return self.fired
 
 
 @dataclass
@@ -1275,6 +1313,8 @@ class Synth:
                 # under the lever's knock and again just ahead of the clack.
                 for delay, strength, decay in SHIFT_HITS:
                     self._both("gear", Burst(SHIFT_HZ, strength * self.g.gear, decay, delay_s=delay, phase=0.25))
+                    if decay <= TICK_EDGE:  # the clack's edge
+                        self._both("gear", Tick(TICK_SHARE * strength * self.g.gear, delay_s=delay))
             self.gear_cooldown = SHIFT_COOLDOWN
             self.levels.events.append(t("변속 {gear}단", gear=frame.gear))
         if frame.gear != 0:
@@ -1363,7 +1403,8 @@ class Synth:
             if self.brake_held >= AIR_BRAKE_HOLD and g.air_brake and frame.air_pressure > 30.0:
                 s = g.air_brake * (0.4 + 0.6 * self.brake_peak)
                 self._both("air_brake", Burst(50.0, AIR_BRAKE_THUMP * s, 0.03, phase=0.25))
-                self._both("air_brake", NoiseBurst(250.0, 0.5 * s, AIR_BRAKE_HISS_DECAY, delay_s=0.01, attack_s=0.04))
+                self._both("air_brake", NoiseBurst(AIR_BRAKE_HISS_HZ, 0.5 * s, AIR_BRAKE_HISS_DECAY, delay_s=0.01,
+                                                   attack_s=0.04, q=AIR_BRAKE_HISS_Q))
             self.brake_held = self.brake_peak = 0.0
 
         # The lamp flag toggles with every flash; the relay clicks on both edges.
@@ -1371,8 +1412,9 @@ class Synth:
         for key, on, side in (("blinker_l", frame.blinker_left, "L"),
                               ("blinker_r", frame.blinker_right, "R")):
             if self._changed(key, on) and g.blinker:
-                self.bursts.append(("blinker", side, Burst(BLINKER_HZ, (1.0 if on else 0.7) * g.blinker, BLINKER_DECAY,
-                                                           phase=0.25)))
+                strength = (1.0 if on else 0.7) * g.blinker
+                self.bursts.append(("blinker", side, Burst(BLINKER_HZ, strength, BLINKER_DECAY, phase=0.25)))
+                self.bursts.append(("blinker", side, Tick(TICK_SHARE * strength)))
                 if self.blinker_idle > 1.5:
                     log.append(t("방향지시등 좌") if key == "blinker_l" else t("방향지시등 우"))
                 self.blinker_idle = 0.0
@@ -1396,6 +1438,8 @@ class Synth:
             if self._changed(f"shifter_{i}", toggle) and g.shifter:
                 for delay, freq, strength, decay in SHIFTER_HITS[min(i, 1)]:
                     self._both("shifter", Burst(freq, strength * g.shifter, decay, delay_s=delay, phase=0.25))
+                    if decay <= TICK_EDGE:  # the knob, and each clack's edge
+                        self._both("shifter", Tick(TICK_SHARE * strength * g.shifter, delay_s=delay))
                 log.append(t("레인지 셀렉터") if i == 0 else t("스플리터"))
 
         previous = self.prev_state.get("game_events", frozenset())
@@ -1420,6 +1464,7 @@ class Synth:
             level = COUPLE_LOUDEST if at == loudest else COUPLE_LOUDEST * self.rng.uniform(*COUPLE_KNOCKS)
             self._both("trailer", Burst(self.rng.uniform(*COUPLE_HZ), level * strength, COUPLE_DECAY, delay_s=at,
                                         phase=0.25))
+            self._both("trailer", Tick(TICK_SHARE * level * strength, delay_s=at))
 
     def _firings(self, firings: tuple[tuple[float, float], ...], peak: float, start: float = 0.0) -> None:
         """The engine's firings as it starts or stops: (s, dB against peak) each."""

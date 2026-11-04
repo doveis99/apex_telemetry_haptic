@@ -13,7 +13,7 @@ from unittest import mock
 from apex6 import MAX_SAMPLE, SAMPLE_RATE, Route
 from effects import (AMT, BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RATTLE_S, BUMP_RIDE_MAX, CAB_FAR_SIDE,
                      CEILING, CONVERTER, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer, Gains,
-                     LowPass, NoiseBurst, ResonanceCut, Synth, Texture, effective_gains, side_surface,
+                     LowPass, NoiseBurst, ResonanceCut, Synth, Texture, Tick, effective_gains, side_surface,
                      surface_of)
 from telemetry import Frame, SimulatedTelemetry, Wheel
 
@@ -826,7 +826,10 @@ class EqualizerTest(unittest.TestCase):
 
         flat, default = left(None), left(Equalizer.for_player({}))
         self.assertLess(abs(math.log(rms(default) / rms(flat))), math.log(1.25))  # within 2 dB
-        self.assertLess(sum(abs(x) > 0.9 * MAX_SAMPLE for x in default) / len(default), 0.01)  # rarely limited
+        # rarely limited: vibration held at the limit, not the one-sample ticks (TICK_SHARE) on a clack's crest
+        loud = [abs(x) > 0.9 * MAX_SAMPLE for x in default]
+        held = sum(here and (before or after) for before, here, after in zip([False] + loud, loud, loud[1:] + [False]))
+        self.assertLess(held / len(default), 0.01)
 
     def synths(self, effect: str) -> tuple[Synth, Synth]:
         gains = Gains(steady_fade=0.0, disabled=[name for name in TOGGLEABLE if name != effect])
@@ -1254,6 +1257,71 @@ class BedLowPassTest(unittest.TestCase):
                     samples.extend(s.render(frame(gear=8)).left_grip)
                 return samples
         self.assertEqual(shift(True), shift(False))
+
+
+class TickTest(unittest.TestCase):
+    @staticmethod
+    def ticks(effect: str, before: dict, after: dict) -> list[float]:
+        """The delay of every tick the change makes, as each is made (one at once has played by the block's end)."""
+        made: list[float] = []
+
+        class Recorded(Tick):
+            def __init__(self, amplitude: float, delay_s: float = 0.0) -> None:
+                super().__init__(amplitude, delay_s)
+                made.append(delay_s)
+
+        with mock.patch("effects.Tick", Recorded):
+            s = only(effect)
+            s.render(frame(**before))
+            s.render(frame(**after))
+        return made
+
+    def test_a_tick_is_one_sample(self) -> None:
+        tick = Tick(0.5, delay_s=0.003)
+        samples = [tick.next() for _ in range(10)]
+        self.assertEqual(samples, [0.0, 0.0, 0.0, 0.5] + [0.0] * 6)
+        self.assertTrue(tick.done)
+        self.assertFalse(tick.ducks)
+
+    def test_the_motor_eq_leaves_it_alone(self) -> None:
+        grip, trigger = Equalizer.for_player({}).pair(0.0)
+        self.assertAlmostEqual(grip, 1.0)
+        self.assertAlmostEqual(trigger, 1.0)
+
+    def test_the_clicks_open_with_one(self) -> None:
+        self.assertEqual(len(self.ticks("blinker", {"blinker_left": False}, {"blinker_left": True})), 1)
+        self.assertEqual(self.ticks("gear", {"gear": 7}, {"gear": 8}), [0.14])  # the clack
+        self.assertEqual(self.ticks("shifter", {"shifter_toggle": (False, False)},
+                                    {"shifter_toggle": (True, False)}), [0.0, 0.13, 0.17])  # knob, two clacks
+        self.assertEqual(self.ticks("shifter", {"shifter_toggle": (False, False)},
+                                    {"shifter_toggle": (False, True)}), [0.016, 0.12, 0.18])
+        coupled = self.ticks("trailer", {}, {"trailer_attached": True})
+        self.assertGreaterEqual(len(coupled), 15)  # one with every knock of the clatter
+
+    def test_felt_thumps_get_none(self) -> None:
+        self.assertEqual(self.ticks("park_brake", {"park_brake": False}, {"park_brake": True}), [])
+        self.assertEqual(self.ticks("trailer", {"trailer_attached": True}, {"trailer_attached": False}), [])
+
+    def test_a_tick_stands_out_above_the_click_it_opens(self) -> None:
+        def flash(share: float) -> list[float]:
+            with mock.patch("effects.TICK_SHARE", share):
+                return EventShapeTest.event("blinker", 4, {"blinker_left": False}, {"blinker_left": True})
+        with_tick, without = flash(1.0), flash(0.0)
+        self.assertGreater(with_tick[0] - without[0], 0.25 * MAX_SAMPLE)  # one sample, on the click's crest
+        self.assertEqual(with_tick[1:], without[1:])  # the body after it is as it was
+
+
+class AirBrakeHissTest(unittest.TestCase):
+    def test_it_hisses_where_the_shell_speaks(self) -> None:
+        s, samples = only("air_brake"), []
+        for _ in range(50):
+            s.render(frame(user_brake=0.9, user_throttle=0.0))
+        for _ in range(40):
+            samples.extend(s.render(frame(user_brake=0.0, user_throttle=0.0)).left_grip)
+        hiss = samples[60:316]  # past the valve's 50 Hz thump
+        self.assertGreater(band_share(hiss, 280.0, 450.0), 0.6)
+        self.assertLess(band_share(hiss, 0.0, 200.0), 0.1)
+        self.assertLess(band_share(hiss, 470.0, 500.0), 0.01)
 
 
 if __name__ == "__main__":

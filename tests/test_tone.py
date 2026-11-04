@@ -420,7 +420,7 @@ class DeviceInfoTest(unittest.TestCase):
 class PadSoundTest(unittest.TestCase):
     def render_all(self, target: str = "grips") -> list:
         from tone import sound_plan, sound_renderer
-        render = sound_renderer(sound_plan(), target, 50.0, 100.0)
+        render = sound_renderer(sound_plan(), target, 100.0)
         blocks, first = [], 0
         while (block := render(first)) is not None:
             blocks.append(block)
@@ -428,12 +428,24 @@ class PadSoundTest(unittest.TestCase):
         return blocks
 
     def test_plan_segments_follow_in_order(self) -> None:
-        from tone import SOUND_FREQS, sound_plan
+        from tone import SOUND_AMPS, SOUND_FREQS, sound_plan
         plan = sound_plan()
         for before, after in zip(plan, plan[1:]):
             self.assertGreaterEqual(after["start"], before["start"] + before["length"])
-        self.assertEqual([s["freq"] for s in plan if s["kind"] == "sine"], list(SOUND_FREQS))
+        # every frequency at the quietest strength, then every one at the next
+        self.assertEqual([(s["amp"], s["freq"]) for s in plan if s["kind"] == "sine"],
+                         [(amp, freq) for amp in SOUND_AMPS for freq in SOUND_FREQS])
         self.assertEqual(plan[-1]["kind"], "end")
+
+    def test_amp_list_parses_and_rejects_nonsense(self) -> None:
+        import argparse
+
+        from tone import _percent_list
+        self.assertEqual(_percent_list("20"), (20.0,))
+        self.assertEqual(_percent_list("10, 35,75"), (10.0, 35.0, 75.0))
+        for bad in ("", "x", "0", "120"):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                _percent_list(bad)
 
     def test_stream_covers_the_timeline_then_stops(self) -> None:
         from tone import sound_plan
@@ -460,13 +472,13 @@ class PadSoundTest(unittest.TestCase):
         self.assertTrue(all(part[i] == MAX_SAMPLE for i in hits))
         self.assertEqual({b - a for a, b in zip(hits, hits[1:])}, {impulse["spacing"]})
 
-    def test_sine_reaches_its_amplitude_and_fades_in(self) -> None:
+    def test_each_sine_reaches_its_own_amplitude_and_fades_in(self) -> None:
         from tone import sound_plan
-        segment = next(s for s in sound_plan() if s["kind"] == "sine")
         samples = [x for b in self.render_all() for x in b.left_grip]
-        part = samples[segment["start"]:segment["start"] + segment["length"]]
-        self.assertEqual(part[0], 0.0)
-        self.assertAlmostEqual(max(part), MAX_SAMPLE * 0.5, delta=0.5)
+        for segment in (s for s in sound_plan() if s["kind"] == "sine" and s["freq"] == 250.0):  # a sample on every crest
+            part = samples[segment["start"]:segment["start"] + segment["length"]]
+            self.assertEqual(part[0], 0.0)
+            self.assertAlmostEqual(max(part), MAX_SAMPLE * segment["amp"] / 100.0, delta=0.5)
 
     def test_trigger_target_uses_the_trigger_channel(self) -> None:
         blocks = self.render_all("triggers")

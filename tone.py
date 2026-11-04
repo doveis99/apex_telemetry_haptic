@@ -1024,21 +1024,32 @@ def run_model_check(pad: Apex6, periods_ms: list[float], trials: int, freq: floa
 # of each tone around 1, 2, 3 kHz: their size says whether the pad holds each sample (images
 # about f/(1000-f) of the tone), joins them in straight lines (about the square of that) or
 # filters them (none), which is how a sharp tap will sound above 500 Hz. Nothing is rated by
-# feel; a recorder sits in front of the pad and analysis is offline.
-SOUND_FREQS = (60.0, 100.0, 150.0, 200.0, 250.0, 300.0, 350.0, 400.0, 450.0, 490.0)
+# feel; a recorder sits in front of the pad and analysis is offline (tools/pad_sound_analyze.py).
+#
+# The sines play at every strength of a ladder in one recording, so one microphone position
+# gives levels that compare: images of a held sample keep their share of the tone at any
+# strength, distortion grows with it, and where it starts to grow, per frequency, is how hard
+# an effect at that pitch can play before it buzzes. The frequencies are the effects' own
+# (cab sway 45, rattle 55, bumps 40-65, firing 80, shifts 140-170, blinker 190) up to the
+# eq's 250 Hz, then the band above it to 490.
+SOUND_FREQS = (40.0, 45.0, 55.0, 65.0, 80.0, 100.0, 140.0, 170.0, 190.0, 200.0, 250.0,
+               300.0, 350.0, 400.0, 450.0, 490.0)
 SOUND_LEAD_MS = 2000      # silence first: the room's noise floor
 SOUND_SYNC_FREQ = 250.0   # a short, loud burst the analysis aligns the timeline on
 SOUND_SYNC_MS = 300
-SOUND_TONE_MS = 1500
-SOUND_GAP_MS = 700
+SOUND_TONE_MS = 1000
+SOUND_GAP_MS = 500
 SOUND_TAPS = 6
 SOUND_TAP_SPACING_MS = 400
-SOUND_AMP = 50.0
+SOUND_AMPS = (10.0, 20.0, 35.0, 50.0, 75.0)  # percent, quietest first
 SOUND_TAP_AMP = 100.0
 
 
-def sound_plan(freqs=SOUND_FREQS, taps: int = SOUND_TAPS) -> list[dict]:
-    """The recording's timeline: segments with kind, start and length in samples (= ms)."""
+def sound_plan(freqs=SOUND_FREQS, amps=SOUND_AMPS, taps: int = SOUND_TAPS) -> list[dict]:
+    """The recording's timeline: segments with kind, start and length in samples (= ms).
+
+    Every sine carries its strength (amp, percent): all frequencies at the first, then all at the next.
+    """
     plan = [{"kind": "silence", "start": 0, "length": SOUND_LEAD_MS}]
     at = SOUND_LEAD_MS
 
@@ -1048,8 +1059,9 @@ def sound_plan(freqs=SOUND_FREQS, taps: int = SOUND_TAPS) -> list[dict]:
         at += length + gap
 
     add("sync", SOUND_SYNC_MS, 1000, freq=SOUND_SYNC_FREQ)
-    for freq in freqs:
-        add("sine", SOUND_TONE_MS, SOUND_GAP_MS, freq=freq)
+    for amp in amps:
+        for freq in freqs:
+            add("sine", SOUND_TONE_MS, SOUND_GAP_MS, freq=freq, amp=amp)
     # one sample at full strength: the sharpest thing the protocol can send
     add("impulse", taps * SOUND_TAP_SPACING_MS, SOUND_GAP_MS, taps=taps, spacing=SOUND_TAP_SPACING_MS)
     # report-rate's click, half a report up and half down
@@ -1058,11 +1070,12 @@ def sound_plan(freqs=SOUND_FREQS, taps: int = SOUND_TAPS) -> list[dict]:
     return plan
 
 
-def sound_sample(segment: dict, n: int, amp_percent: float, tap_amp_percent: float) -> float:
+def sound_sample(segment: dict, n: int, tap_amp_percent: float) -> float:
     """Sample n (counted from the segment's start) of one segment."""
     kind = segment["kind"]
     if kind in ("sine", "sync"):
-        peak = MAX_SAMPLE * (90.0 if kind == "sync" else amp_percent) / 100.0
+        amp = 90.0 if kind == "sync" else max(0.0, min(100.0, segment["amp"]))
+        peak = MAX_SAMPLE * amp / 100.0
         fade = FADE_SECONDS * SAMPLE_RATE
         envelope = min(1.0, n / fade, (segment["length"] - n) / fade)
         return math.sin(2 * math.pi * segment["freq"] * n / SAMPLE_RATE) * peak * envelope
@@ -1077,16 +1090,15 @@ def sound_sample(segment: dict, n: int, amp_percent: float, tap_amp_percent: flo
     return 0.0
 
 
-def sound_renderer(plan: list[dict], target: str, amp_percent: float, tap_amp_percent: float):
+def sound_renderer(plan: list[dict], target: str, tap_amp_percent: float):
     use_trigger, use_left, use_right, route = TARGETS[target]
     total = plan[-1]["start"]
-    amp_percent = max(0.0, min(100.0, amp_percent))
     tap_amp_percent = max(0.0, min(100.0, tap_amp_percent))
 
     def sample(t: int) -> float:
         for segment in plan:
             if segment["start"] <= t < segment["start"] + segment["length"]:
-                return sound_sample(segment, t - segment["start"], amp_percent, tap_amp_percent)
+                return sound_sample(segment, t - segment["start"], tap_amp_percent)
         return 0.0
 
     def render(first: int) -> Block | None:
@@ -1108,13 +1120,24 @@ RECORD_SETTLE_S = 1.0  # ffmpeg takes a moment to open the input
 RECORD_TAIL_S = 1.0
 
 
+def _percent_list(text: str) -> tuple[float, ...]:
+    """"10,20,35" -> (10.0, 20.0, 35.0), for argparse."""
+    try:
+        values = tuple(float(part) for part in text.split(",") if part.strip())
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a list of percentages: {text!r}") from None
+    if not values or not all(0.0 < value <= 100.0 for value in values):
+        raise argparse.ArgumentTypeError(f"percentages must be above 0 and at most 100: {text!r}")
+    return values
+
+
 def ffmpeg_record_command(device: str, path: Path) -> list[str]:
     """ffmpeg recording a DirectShow input at 48 kHz, 24-bit, every channel kept."""
     return ["ffmpeg", "-hide_banner", "-v", "error", "-y", "-f", "dshow", "-sample_rate", "48000",
             "-i", f"audio={device}", "-c:a", "pcm_s24le", str(path)]
 
 
-def run_sound(pad: Apex6, target: str, amp: float, tap_amp: float, device: str | None,
+def run_sound(pad: Apex6, target: str, amps: tuple[float, ...], tap_amp: float, device: str | None,
               out: Path = SOUND_OUT) -> None:
     import calibrate
     import json
@@ -1122,11 +1145,11 @@ def run_sound(pad: Apex6, target: str, amp: float, tap_amp: float, device: str |
     import time
     from datetime import datetime
 
-    plan = sound_plan()
+    plan = sound_plan(amps=amps)
     seconds = plan[-1]["start"] / SAMPLE_RATE
     buttons = calibrate.PadButtons()
     print("패드 소리 녹음 (진동이 아니라 귀로 듣는 소리를 마이크로 잽니다)")
-    print(f"  대상 {target}, 사인 {amp:g}%, 탭 {tap_amp:g}%, 약 {seconds:.0f}초\n")
+    print(f"  대상 {target}, 사인 {'/'.join(f'{amp:g}' for amp in amps)}%, 탭 {tap_amp:g}%, 약 {seconds:.0f}초\n")
     print("1. 게임과 음악을 끄고 조용한 곳에서, 플레이할 때처럼 패드를 쥐세요.")
     if device:
         print(f"2. 마이크({device})를 패드 앞 30 cm쯤에 두세요. 녹음은 이 프로그램이 합니다.")
@@ -1147,7 +1170,7 @@ def run_sound(pad: Apex6, target: str, amp: float, tap_amp: float, device: str |
             print(f"녹음을 시작하지 못했습니다: {recorder.stderr.read().decode(errors='replace').strip()}")
             return
     try:
-        stats = pad.stream(sound_renderer(plan, target, amp, tap_amp))
+        stats = pad.stream(sound_renderer(plan, target, tap_amp))
         print(f"  {stats.summary()}")
         if recorder:
             time.sleep(RECORD_TAIL_S)
@@ -1157,7 +1180,7 @@ def run_sound(pad: Apex6, target: str, amp: float, tap_amp: float, device: str |
     info = pad.info
     path = out / f"pad-sound-{stamp}.json"
     path.write_text(json.dumps({
-        "target": target, "amp": amp, "tap_amp": tap_amp, "sample_rate": SAMPLE_RATE,
+        "target": target, "amps": list(amps), "tap_amp": tap_amp, "sample_rate": SAMPLE_RATE,
         "max_sample": MAX_SAMPLE, "plan": plan, "late_blocks": stats.summary(),
         "connection_mode": info.connection_mode, "firmware": info.firmware,
         "device": device, "recording": wav.name if device else None,
@@ -1336,7 +1359,8 @@ def main() -> None:
 
     sound = sub.add_parser("pad-sound", help="sines and taps to record with a microphone: what the pad sounds like")
     sound.add_argument("--target", choices=TARGETS, default="grips")
-    sound.add_argument("--amp", type=float, default=SOUND_AMP, help="sine strength in percent")
+    sound.add_argument("--amp", type=_percent_list, default=SOUND_AMPS, metavar="P[,P...]",
+                       help="sine strengths in percent, each playing every frequency (default 10,20,35,50,75)")
     sound.add_argument("--tap-amp", type=float, default=SOUND_TAP_AMP, help="tap strength in percent")
     sound.add_argument("--record", metavar="DEVICE",
                        help="record it through ffmpeg from this DirectShow input (ffmpeg -list_devices true -f dshow -i x)")

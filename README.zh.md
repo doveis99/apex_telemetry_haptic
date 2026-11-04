@@ -272,9 +272,11 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # 窗口（或 start_gui.cmd）
 .\.venv\Scripts\python.exe ats_haptics.py --monitor   # 命令行：--simulate, --scenario highway|city|mountain, --exit-with-game, 各效果强度选项
-.\.venv\Scripts\python.exe tone.py probe              # 诊断：probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate
+.\.venv\Scripts\python.exe tone.py probe              # 诊断：probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound
 .\.venv\Scripts\python.exe tone.py trigger-side       # 扳机左右切换盲测（用手柄按键作答），结果保存在 logs\trigger-side-*.txt
 .\.venv\Scripts\python.exe tone.py calibrate          # 与窗口的电机校准相同（控制台），--reset 清除
+.\.venv\Scripts\python.exe tone.py pad-sound --record "<输入设备>"  # 用麦克风录下手柄发出的声音（16 个正弦 × 5 档强度、敲击），保存到 sound sample\pad-sound\
+python tools\pad_sound_analyze.py <录音.wav>         # 分析该录音；tools\synth_bands.py：合成输出各频段占比与强度（tools\requirements.txt）
 powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<版本>.zip（含源码）
 .\.venv\Scripts\python.exe i18n.py                  # 翻译检查：缺失、未使用或 {占位符} 不一致的文本
 .\.venv\Scripts\python.exe -m unittest              # 回归测试（tests\）

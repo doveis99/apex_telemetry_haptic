@@ -270,9 +270,11 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # 창 (또는 start_gui.cmd)
 .\.venv\Scripts\python.exe ats_haptics.py --monitor   # 명령줄: --simulate, --scenario highway|city|mountain, --exit-with-game, 효과별 세기 옵션
-.\.venv\Scripts\python.exe tone.py probe              # 진단: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate
+.\.venv\Scripts\python.exe tone.py probe              # 진단: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound
 .\.venv\Scripts\python.exe tone.py trigger-side       # 트리거 좌우 전환 블라인드 점검(패드 버튼으로 답함), 결과는 logs\trigger-side-*.txt
 .\.venv\Scripts\python.exe tone.py calibrate          # 창의 모터 보정과 같은 측정(콘솔), --reset으로 지움
+.\.venv\Scripts\python.exe tone.py pad-sound --record "<입력 장치>"  # 패드가 내는 소리를 마이크로 녹음(사인 16개 × 세기 5단계, 탭), sound sample\pad-sound\에 저장
+python tools\pad_sound_analyze.py <녹음.wav>         # 그 녹음 분석. tools\synth_bands.py: 합성 출력의 대역별 비중과 세기 (tools\requirements.txt)
 powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<버전>.zip (소스 포함)
 .\.venv\Scripts\python.exe i18n.py                  # 번역 점검: 빠지거나 안 쓰이거나 {자리} 가 다른 문구
 .\.venv\Scripts\python.exe -m unittest              # 회귀 테스트 (tests\)

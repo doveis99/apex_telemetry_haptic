@@ -272,9 +272,11 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # ウィンドウ（または start_gui.cmd）
 .\.venv\Scripts\python.exe ats_haptics.py --monitor   # コマンドライン: --simulate, --scenario highway|city|mountain, --exit-with-game, エフェクトごとの強さ
-.\.venv\Scripts\python.exe tone.py probe              # 診断: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate
+.\.venv\Scripts\python.exe tone.py probe              # 診断: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound
 .\.venv\Scripts\python.exe tone.py trigger-side       # トリガーが左右を切り替えて鳴るかのブラインドチェック（パッドのボタンで答える）、結果は logs\trigger-side-*.txt
 .\.venv\Scripts\python.exe tone.py calibrate          # ウィンドウのモーター補正と同じ測定（コンソール）、--reset で消去
+.\.venv\Scripts\python.exe tone.py pad-sound --record "<入力デバイス>"  # パッドが出す音をマイクで録音（サイン 16 個 × 強さ 5 段階、タップ）、sound sample\pad-sound\ に保存
+python tools\pad_sound_analyze.py <録音.wav>         # その録音を分析。tools\synth_bands.py: 合成出力の帯域ごとの割合と強さ（tools\requirements.txt）
 powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<バージョン>.zip（ソース同梱）
 .\.venv\Scripts\python.exe i18n.py                  # 翻訳チェック: 抜け、未使用、{プレースホルダー} の不一致
 .\.venv\Scripts\python.exe -m unittest              # 回帰テスト（tests\）

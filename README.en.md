@@ -272,9 +272,11 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # window (or start_gui.cmd)
 .\.venv\Scripts\python.exe ats_haptics.py --monitor   # command line: --simulate, --scenario highway|city|mountain, --exit-with-game, per-effect levels
-.\.venv\Scripts\python.exe tone.py probe              # diagnostics: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate
+.\.venv\Scripts\python.exe tone.py probe              # diagnostics: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound
 .\.venv\Scripts\python.exe tone.py trigger-side       # blind check that the trigger follows its side (answered on the pad), results in logs\trigger-side-*.txt
 .\.venv\Scripts\python.exe tone.py calibrate          # the window's motor calibration in a console, --reset clears it
+.\.venv\Scripts\python.exe tone.py pad-sound --record "<input>"  # record the sound the pad makes with a microphone (16 sines at 5 strengths, taps) to sound sample\pad-sound\
+python tools\pad_sound_analyze.py <recording.wav>    # analyse that recording; tools\synth_bands.py: the synth output's bands and strength (tools\requirements.txt)
 powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<version>.zip (source included)
 .\.venv\Scripts\python.exe i18n.py                  # translation check: missing, unused or {placeholder}-mismatched strings
 .\.venv\Scripts\python.exe -m unittest              # regression tests (tests\)

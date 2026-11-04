@@ -332,14 +332,13 @@ class BumpTest(unittest.TestCase):
         self.assertGreater(left, still[0] + 20)
         self.assertGreater(left, right)
 
-    def test_a_shaking_cab_raises_the_road(self) -> None:
-        def road(accel: float) -> float:
+    def test_a_rocking_cab_leaves_the_road_and_its_rattle_alone(self) -> None:
+        def road(accel: float) -> tuple[float, float]:
             s = synth()
             for n in range(100):
                 s.render(frame(deflection=0.02 + 0.0001 * (n % 2), cabin_accel=(0.0, 0.0, accel * (-1) ** n)))
-            return s.levels.road_left
-        self.assertEqual(road(0.03), road(0.0))  # the highway's own shaking
-        self.assertGreater(road(0.12), 1.5 * road(0.0))  # a dirt road's
+            return s.levels.road_left, s.texture[0].rattle.rate
+        self.assertEqual(road(0.38), road(0.0))  # a cab rocking after a kerb only sways
 
     @staticmethod
     def patch() -> float:

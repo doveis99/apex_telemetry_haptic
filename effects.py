@@ -232,8 +232,13 @@ BUMP_RIDE_MAX = 0.5  # m/s, as high as it goes
 # trailer (2026-11-02) its square had a median 30-100 times as large on dirt, and passed 0.02
 # (rad/s^2)^2 74 times a minute on dirt at 10-20 km/h but 18 times in 6 min of pavement, nearly
 # all at one kerb. ZAF's cab rattle follows the same square. So the cab sways (CAB_SWAY_*) as it
-# moves, and it rattles (Texture) on whichever is the larger of the wheels' roughness and the
-# cab's own shaking.
+# moves, and only sways: it used to rattle (Texture) and raise the road as well, but a yard kerb
+# taken at 5-10 km/h (2026-11-04) rocks the cab at 0.2-0.38 rad/s^2, past a dirt road's 90th
+# percentile (0.16-0.2), and for 1-4 s the rattle it drove came out 1.6 times as strong as the
+# sway, the road it raised about as strong again, and the whole felt rough in the hand. The
+# recorded cab's rattle lies 20-35 dB under its boom. Replayed without them, a dirt road's grips
+# came down 12-14%, still above none of the cab at all; the rattle and the road follow the
+# wheels alone.
 # The cab rocks on its mounts: on dirt (two drives, 2026-11-02) half the tilt acceleration's
 # power lay below 2 Hz, peaking at 1.8-2.1 Hz, and after a lurch it swung back and forth twice
 # within 0.5 s, settling in 0.16 s (median; 0.35 s at the 90th percentile). A knock struck once
@@ -252,17 +257,6 @@ CAB_SWAY_TAU = 0.025  # s: smooths the game's frame steps (18 ms), not the 2 Hz 
 # tone leans to the side the roll pushes, the far grip getting CAB_FAR_SIDE of it, and crosses
 # over as the cab rocks back; a pitch lands on both alike.
 CAB_FAR_SIDE = 0.5
-CAB_RATTLE = (0.003, 0.05)  # (rad/s^2)^2 of shaking where the cab's rattle starts (pavement's 99th percentile) and is full
-CAB_SETTLE_TAU = 0.25  # s for the shaking the rattle follows to die away
-# The lurches alone left the road's own strength alike: in a 40 min drive (2026-11-02) the
-# grips' median was 22 of 112 on a dirt road below 30 km/h and on the highway. The cab's
-# shaking (the square above, settling over CAB_SETTLE_TAU) had a median of 0.004-0.01 on that
-# dirt road and 0.0004 on the highway, whose 90th percentile is 0.0014: 0.037 rad/s^2. So the
-# road also grows with the cab's shaking, from CAB_TEXTURE[0] rad/s^2, by its full strength at
-# CAB_TEXTURE[1], where the dirt road shook at 15-30 km/h: replayed, the dirt road's median came
-# to 31-36 against the highway's 21-22, and pavement's moved by less than 1. Full at 0.24, its
-# 90th percentile, it came only to 27-32.
-CAB_TEXTURE = (0.04, 0.12)
 # The game's wheel deflection now and then leaps 25-100 mm for a single frame
 # and is back on the next one, on one wheel, at any speed: in a 49 min drive
 # (2026-10-31) four in five bump knocks came from such a frame, and nearly
@@ -860,7 +854,7 @@ class Texture:
         self.seam_gain = 0.0
         self.pitch = DEFAULT_SURFACE.pitch
 
-    def tune(self, surface: Surface, speed: float, roughness: float, cab_shake: float = 0.0) -> None:
+    def tune(self, surface: Surface, speed: float, roughness: float) -> None:
         pace = min(1.0, speed / 25.0)
         self.pitch = pitch = surface.pitch * (PITCH_STANDING + (1.0 - PITCH_STANDING) * pace)
         self.noise.filter.tune(pitch, surface.q)
@@ -875,9 +869,7 @@ class Texture:
         self.seams.tune(surface.seams, surface.seam_hz, surface.seam_q, speed)
         self.swell.tune(surface.swell, surface.swell_hz)
         low, full = RATTLE_ROUGH
-        cab_low, cab_full = CAB_RATTLE
-        self.rattle.rate = RATTLE_RATE * min(1.0, max(0.0, (roughness - low) / (full - low),
-                                                 (cab_shake - cab_low) / (cab_full - cab_low)))
+        self.rattle.rate = RATTLE_RATE * min(1.0, max(0.0, (roughness - low) / (full - low)))
 
     def next(self) -> float:
         value = (1.0 - self.crunch) * self.hiss * self.noise_gain * self.noise.next()
@@ -1051,7 +1043,6 @@ class Synth:
         self.gear_cooldown = 0.0
         self.prev_accel: tuple[float, float, float] | None = None
         self.impact_cooldown = 0.0
-        self.cab_shake = 0.0  # (rad/s^2)^2 the cab has been shaking
         self.cab_sway = (0.0, 0.0)  # left, right: the sway's strength the last frame asked for
         self.sway = [0.0, 0.0]  # and where it has got to, smoothed over CAB_SWAY_TAU
         self.sway_osc = Oscillator()
@@ -1080,7 +1071,7 @@ class Synth:
         self.repeat_dt = 0.0
         self.leap_held = []
         self.prev_accel = None
-        self.cab_shake, self.cab_sway = 0.0, (0.0, 0.0)
+        self.cab_sway = (0.0, 0.0)
         self.prev_gear = None
         self.prev_state = {key: value for key, value in self.prev_state.items() if key == "game_events"}
         # coming back is a change too: the beds start in full and settle again
@@ -1268,14 +1259,9 @@ class Synth:
         low, high = DETAIL_RANGE
         return math.sqrt(min(high, max(low, self.roughness[side] / self.rough_avg[side])))
 
-    def _cab_event(self, frame: Frame, dt: float) -> None:
-        """How the cab sways on its mounts now, each side (CAB_SWAY), and how much it has been shaking (CAB_RATTLE)."""
-        square = sum(a * a for a in frame.cabin_accel)
-        if square > self.cab_shake or not dt:
-            self.cab_shake = square
-        else:
-            self.cab_shake += (square - self.cab_shake) * (1.0 - math.exp(-dt / CAB_SETTLE_TAU))
-        tilt = math.sqrt(square)
+    def _cab_event(self, frame: Frame) -> None:
+        """How the cab sways on its mounts now, each side (CAB_SWAY)."""
+        tilt = math.sqrt(sum(a * a for a in frame.cabin_accel))
         strength = _ramp(tilt, CAB_SWAY) * self.g.bumps
         lean = frame.cabin_accel[2] / tilt if tilt else 0.0  # the roll's share, positive pushing left
         far = 1.0 - abs(lean) * (1.0 - CAB_FAR_SIDE)
@@ -1485,7 +1471,7 @@ class Synth:
             if dt is not None:  # the same frame read again holds no new movement
                 self._wheel_events(frame, dt)
                 self._impact_event(frame, dt)
-                self._cab_event(frame, dt)
+                self._cab_event(frame)
             self._gear_event(frame)
             self._state_events(frame)
 
@@ -1519,11 +1505,9 @@ class Synth:
             textures = []
             for side, wheels in enumerate(sides):
                 surface = side_surface(wheels)
-                self.texture[side].tune(surface, speed, self.roughness[side], self.cab_shake)
+                self.texture[side].tune(surface, speed, self.roughness[side])
                 rough = self.roughness[side]
-                cab_low, cab_full = CAB_TEXTURE
-                cab = min(1.0, max(0.0, (math.sqrt(self.cab_shake) - cab_low) / (cab_full - cab_low)))
-                texture = min(1.0, surface.level * speed_factor + min(1.0, (rough / ROUGH_FULL) ** ROUGH_POWER) + cab)
+                texture = min(1.0, surface.level * speed_factor + min(1.0, (rough / ROUGH_FULL) ** ROUGH_POWER))
                 # what counts as rougher ground stays in proportion (ROUGH_NOVELTY): squared, the
                 # highway's every jolt took the road out of its fade
                 road_moved = max(road_moved, self._novelty(f"road_{side}", min(1.0, surface.level * speed_factor

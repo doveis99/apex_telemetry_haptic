@@ -16,6 +16,7 @@ Examples:
   python tone.py report-model                blind X/Y check: are those reports played faster, or cut off at 1 kHz
   python tone.py calibrate                  match each frequency's strength by feel, for the synth's eq
   python tone.py pad-sound                  sines and taps to record with a microphone: what the pad sounds like
+  python tone.py strength                   blind check whether grips stronger than 20% feel stronger, or only rougher
 """
 
 from __future__ import annotations
@@ -1190,6 +1191,159 @@ def run_sound(pad: Apex6, target: str, amps: tuple[float, ...], tap_amp: float, 
         print(f"녹음: {wav}")
 
 
+# Strength check, by feel. Recorded in the air (pad-sound ladder, 2026-11-05), the grips play
+# as sent up to 20%; from 35% the tone itself stops growing off resonance (80-490 Hz 5-10 dB
+# short at 35%, 8-17 at 50%) while its odd harmonics grow, and near resonance (40-65 Hz) it
+# keeps up to 35%. The air does not say what the hand feels: calibrate matched the
+# off-resonance tones at 70-100%, so the hand did find more there, or took the buzz for
+# strength. Each trial plays one frequency twice, 20% and stronger, in random order; the
+# player says which was stronger, or neither, and then whether the stronger one shook more or
+# only rougher. 10% against 20% at 140 Hz, where the pad is still linear (+6 dB in the air),
+# is the control: a step the hand should find.
+STRENGTH_BASE = 20.0
+STRENGTH_CASES = ((65.0, 35.0), (65.0, 50.0), (140.0, 35.0), (140.0, 50.0), (200.0, 35.0), (200.0, 50.0))
+STRENGTH_CONTROL = (140.0, 10.0, 20.0)  # freq, weak, strong
+STRENGTH_SECONDS = 0.8
+STRENGTH_TRIALS = 3  # per case
+STRENGTH_PICKS = {"L": "first", "R": "second", "B": "same"}
+STRENGTH_PICK_LABELS = {"L": "첫 번째", "R": "두 번째", "B": "구분 안 됨"}
+STRENGTH_KINDS = {START: "더 크게 떨림", CLICK: "더 거칠게만 (지잉·덜덜)"}
+
+
+def strength_plan(trials: int, rng) -> list[tuple[float, float, float, bool]]:
+    """(freq, weak %, strong %, strong first) for every trial, control included, shuffled."""
+    cases = [(f, STRENGTH_BASE, high) for f, high in STRENGTH_CASES] + [STRENGTH_CONTROL]
+    plan = [(f, low, high, rng.random() < 0.5) for f, low, high in cases for _ in range(trials)]
+    rng.shuffle(plan)
+    return plan
+
+
+def pair_renderer(freq: float, first_amp: float, second_amp: float, seconds: float = STRENGTH_SECONDS):
+    """Two grip tones at one frequency, first_amp then second_amp, REFERENCE_GAP apart."""
+    first = tone_renderer("grips", freq, freq, first_amp, seconds)
+    second = tone_renderer("grips", freq, freq, second_amp, seconds)
+    length = int(seconds * SAMPLE_RATE)
+    start = -(-(length + REFERENCE_GAP) // SUBFRAMES) * SUBFRAMES  # on a block, so blocks stay whole
+    silent = [0.0] * SUBFRAMES
+
+    def render(at: int) -> Block | None:
+        if at < start:
+            return first(at) or Block(trigger=silent, left_grip=silent, right_grip=silent, route=Route.MUTE)
+        return second(at - start)
+
+    return render
+
+
+def strength_verdict(results: list[tuple[float, float, float, str, str | None]]) -> list[str]:
+    """Lines per case from (freq, weak, strong, picked: stronger/weaker/same, kind) of each trial.
+
+    A case counts as felt when the stronger tone was picked in two trials of three or more.
+    """
+    lines = []
+    cases = sorted(dict.fromkeys((f, low, high) for f, low, high, _, _ in results),
+                   key=lambda case: (case == STRENGTH_CONTROL, case))
+    felt: dict[tuple[float, float, float], bool] = {}
+    for case in cases:
+        rows = [(picked, kind) for f, low, high, picked, kind in results if (f, low, high) == case]
+        n = len(rows)
+        right = sum(picked == "stronger" for picked, _ in rows)
+        same = sum(picked == "same" for picked, _ in rows)
+        rough = sum(kind == CLICK for picked, kind in rows if picked == "stronger")
+        felt[case] = right * 3 >= n * 2
+        f, low, high = case
+        control = " (대조)" if case == STRENGTH_CONTROL else ""
+        lines.append(f"{f:4g} Hz {low:g}% vs {high:g}%{control}: 센 쪽 맞힘 {right}/{n}, 구분 안 됨 {same}, "
+                     f"틀림 {n - right - same}" + (f", 맞힌 것 중 거칠게만 {rough}/{right}" if right else ""))
+    lines.append("")
+    if not felt.get(STRENGTH_CONTROL, False):
+        lines.append("-> 대조(10% vs 20%)도 잘 못 맞힘: 이 회차는 판단 근거로 약함. 쥐는 법을 바꾸거나 다시")
+        return lines
+    for f in dict.fromkeys(f for f, _ in STRENGTH_CASES):
+        found = sorted(high for g, low, high in felt if g == f and (g, low, high) != STRENGTH_CONTROL
+                       and felt[(g, low, high)])
+        kinds = [kind for g, low, high, picked, kind in results
+                 if g == f and (g, low, high) != STRENGTH_CONTROL and picked == "stronger"]
+        if not any(g == f for g, _, _ in felt):
+            continue
+        if not found:
+            lines.append(f"-> {f:g} Hz: {STRENGTH_BASE:g}% 위로 올려도 손에서 세지지 않음 (상한 근거)")
+        elif sum(kind == CLICK for kind in kinds) * 2 > len(kinds):
+            lines.append(f"-> {f:g} Hz: {found[0]:g}%부터 다르게 느끼지만 대부분 거칠어진 것 (덜덜거림)")
+        else:
+            lines.append(f"-> {f:g} Hz: {found[0]:g}%부터 손에서도 더 셈")
+    return lines
+
+
+def strength_pick(event: str, strong_first: bool) -> str:
+    """What a press says about the strong tone: "stronger", "weaker" or "same"."""
+    pick = STRENGTH_PICKS[event]
+    if pick == "same":
+        return "same"
+    return "stronger" if (pick == "first") == strong_first else "weaker"
+
+
+def run_strength_check(pad: Apex6, trials: int) -> None:
+    import random
+    from datetime import datetime
+
+    import calibrate
+    from version import __version__
+
+    info = pad.info
+    buttons = calibrate.PadButtons()
+    print(f"펌웨어: {_firmware_text(info)}")
+    print("\n패드를 평소처럼 양손으로 잡으세요. 진행은 모두 패드로 합니다.")
+    print("  패드에서 나는 지잉 소리가 판단에 섞이지 않게, 가능하면 헤드폰으로 잡음이나 음악을 틀어 두세요.")
+    print(f"같은 주파수가 두 번({STRENGTH_SECONDS:g}초씩) 울립니다. 손에 더 세게 느껴진 쪽을 고르세요.")
+    print("  십자키 ← 첫 번째 / → 두 번째 / ↑ 구분 안 됨 (모르겠으면 ↑가 맞는 답입니다)")
+    print("  센 쪽을 골랐으면: A 더 크게 떨림 / Y 더 거칠게만 (지잉·덜덜)")
+    print("  A 시작 / X 다시 듣기 / B 그만")
+    print("  키보드: Enter 시작, ← → ↑, x 다시, 0 크게 / 1 거칠게만, q 그만")
+    if not buttons.connected:
+        print("  (XInput 패드가 안 보여 키보드로만 받습니다)")
+    plan = strength_plan(trials, random.Random())
+    results: list[tuple[float, float, float, str, str | None]] = []
+    replays = 0
+    print(f"\n{len(plan)}번 합니다. A를 누르면 시작합니다")
+    if _wait_event(buttons, START, STOP) == STOP:
+        print("그만둡니다.")
+        return
+    stopped = False
+    for number, (freq, low, high, strong_first) in enumerate(plan, start=1):
+        amps = (high, low) if strong_first else (low, high)
+        print(f"[{number}/{len(plan)}]")
+        pad.stream(pair_renderer(freq, *amps))
+        while (event := _wait_event(buttons, *STRENGTH_PICKS, REPLAY, STOP)) == REPLAY:
+            pad.stream(pair_renderer(freq, *amps))
+            replays += 1
+        if event == STOP:
+            break
+        picked, kind = strength_pick(event, strong_first), None
+        if picked != "same":
+            while (answer := _wait_event(buttons, START, CLICK, REPLAY, STOP)) == REPLAY:
+                pad.stream(pair_renderer(freq, *amps))
+                replays += 1
+            if answer == STOP:
+                stopped = True
+            kind = answer
+        if stopped:
+            break
+        results.append((freq, low, high, picked, kind))
+        print(f"  {STRENGTH_PICK_LABELS[event]}" + (f", {STRENGTH_KINDS[kind]}" if kind else ""))
+    if not results:
+        print("그만둡니다.")
+        return
+    lines = [
+        f"세기 체감 점검 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
+        f"양쪽 그립, {STRENGTH_SECONDS:g}초씩, 기준 {STRENGTH_BASE:g}%, 순서 무작위, 다시 듣기 {replays}번",
+        f"답: {'패드 버튼' if buttons.connected else '키보드'}, {len(results)}/{len(plan)}회",
+        "",
+        *strength_verdict(results),
+    ]
+    _save_report("strength", lines)
+
+
 def _save_report(name: str, lines: list[str]) -> None:
     from datetime import datetime
 
@@ -1365,6 +1519,9 @@ def main() -> None:
     sound.add_argument("--record", metavar="DEVICE",
                        help="record it through ffmpeg from this DirectShow input (ffmpeg -list_devices true -f dshow -i x)")
 
+    strength = sub.add_parser("strength", help="blind check whether grips stronger than 20%% feel stronger")
+    strength.add_argument("--trials", type=int, default=STRENGTH_TRIALS, help="trials per case")
+
     from calibrate import AMP, SECONDS
     cal = sub.add_parser("calibrate", help="match each frequency's strength by feel, for the synth's eq")
     cal.add_argument("--channel", choices=("grip", "trigger", "both"), default="both")
@@ -1427,6 +1584,9 @@ def main() -> None:
             if args.trials < 1:
                 parser.error("--trials needs at least 1")
             run_model_check(pad, periods, args.trials, args.freq, args.amp, args.seconds)
+            return
+        if args.command == "strength":
+            run_strength_check(pad, max(1, args.trials))
             return
         if args.command == "pad-sound":
             run_sound(pad, args.target, args.amp, args.tap_amp, args.record)

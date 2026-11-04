@@ -497,5 +497,74 @@ class PadSoundTest(unittest.TestCase):
         self.assertEqual(cmd[-1], "x.wav")
 
 
+class StrengthCheckTest(unittest.TestCase):
+    def test_plan_has_every_case_and_the_control_each_trials_times(self) -> None:
+        from tone import STRENGTH_BASE, STRENGTH_CASES, STRENGTH_CONTROL, strength_plan
+        plan = strength_plan(3, random.Random(4))
+        cases = [(f, low, high) for f, low, high, _ in plan]
+        expected = [(f, STRENGTH_BASE, high) for f, high in STRENGTH_CASES] + [STRENGTH_CONTROL]
+        self.assertEqual(sorted(cases), sorted(case for case in expected for _ in range(3)))
+        orders = [first for *_, first in plan]
+        self.assertIn(True, orders)
+        self.assertIn(False, orders)
+
+    def test_pair_plays_both_strengths_with_silence_between(self) -> None:
+        from tone import REFERENCE_GAP, STRENGTH_SECONDS, pair_renderer
+        render = pair_renderer(140.0, 20.0, 50.0)
+        samples, first = [], 0
+        while (block := render(first)) is not None:
+            self.assertEqual(len(block.left_grip), SUBFRAMES)
+            self.assertEqual(block.left_grip, block.right_grip)
+            self.assertFalse(any(block.trigger))
+            samples += block.left_grip
+            first += SUBFRAMES
+        length = int(STRENGTH_SECONDS * 1000)
+        start = -(-(length + REFERENCE_GAP) // SUBFRAMES) * SUBFRAMES
+        self.assertAlmostEqual(max(samples[:length]), MAX_SAMPLE * 0.2, delta=0.5)
+        self.assertTrue(all(x == 0.0 for x in samples[length:start]))
+        self.assertAlmostEqual(max(samples[start:]), MAX_SAMPLE * 0.5, delta=0.5)
+        self.assertEqual(len(samples), start + length)
+
+    def test_pick_is_read_against_where_the_strong_tone_was(self) -> None:
+        from tone import strength_pick
+        self.assertEqual(strength_pick("L", True), "stronger")
+        self.assertEqual(strength_pick("R", True), "weaker")
+        self.assertEqual(strength_pick("R", False), "stronger")
+        self.assertEqual(strength_pick("B", False), "same")
+
+    def test_verdict_needs_the_control(self) -> None:
+        from tone import START, STRENGTH_CONTROL, strength_verdict
+        results = [(*STRENGTH_CONTROL, "same", None)] * 3 + [(140.0, 20.0, 50.0, "stronger", START)] * 3
+        self.assertIn("대조", strength_verdict(results)[-1])
+
+    def test_verdict_tells_no_gain_rougher_and_stronger_apart(self) -> None:
+        from tone import CLICK, START, STRENGTH_CONTROL, strength_verdict
+        results = [(*STRENGTH_CONTROL, "stronger", START)] * 3
+        results += [(65.0, 20.0, 35.0, "stronger", START)] * 3 + [(65.0, 20.0, 50.0, "stronger", START)] * 3
+        results += [(140.0, 20.0, 35.0, "same", None)] * 2 + [(140.0, 20.0, 35.0, "weaker", START)]
+        results += [(140.0, 20.0, 50.0, "same", None)] * 3
+        results += [(200.0, 20.0, 35.0, "same", None)] * 3 + [(200.0, 20.0, 50.0, "stronger", CLICK)] * 3
+        lines = strength_verdict(results)
+        verdicts = {line.split(":")[0]: line for line in lines if line.startswith("->")}
+        self.assertIn("35%부터 손에서도 더 셈", verdicts["-> 65 Hz"])
+        self.assertIn("세지지 않음", verdicts["-> 140 Hz"])
+        self.assertIn("50%부터 다르게 느끼지만 대부분 거칠어진 것", verdicts["-> 200 Hz"])
+        self.assertTrue(any("(대조)" in line and "3/3" in line for line in lines))
+
+    def test_the_whole_check_runs_and_saves(self) -> None:
+        from tone import REPLAY, START, run_strength_check
+        pad = FakePad()
+        pad.info = _parse_device_info(INFO_REPLY)
+        # start, then per trial: first was stronger, it shook more; the first trial is played again once
+        events = iter([START, REPLAY, "L", START] + ["L", START] * 6)
+        with mock.patch("tone._wait_event", lambda buttons, *wanted: next(events)),                 mock.patch("tone.pair_renderer", lambda *args: (lambda first: None)),                 mock.patch("calibrate.PadButtons", lambda: FakeButtons()),                 mock.patch("tone._save_report") as save, mock.patch("builtins.print"):
+            run_strength_check(pad, trials=1)
+        name, lines = save.call_args.args
+        self.assertEqual(name, "strength")
+        self.assertIn("다시 듣기 1번", lines[6])
+        self.assertTrue(any("7/7회" in line for line in lines))
+        self.assertEqual(pad.plays, 8)
+
+
 if __name__ == "__main__":
     unittest.main()

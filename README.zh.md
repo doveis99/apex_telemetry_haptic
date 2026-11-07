@@ -218,6 +218,7 @@
 - 覆盖前会先备份安装文件夹；复制失败时会恢复到旧版本再启动。如果 2 分钟后程序仍未退出，则不做任何更改。
 - 游戏运行期间不会更新。通过 Steam 启动选项打开时，可执行文件在游戏结束前一直处于使用状态。请退出游戏后重新打开窗口再更新。
 - 如果没有写入安装文件夹的权限（例如 `Program Files`），或从源码运行，则只打开发布页面。
+- 请勿删除安装文件夹中的 `_internal` 文件夹：只有存在该文件夹时才会替换安装文件夹，否则只打开发布页面。0.19.0 及之前这里存放 Python 运行时，更新到 0.20.0 后只剩一个说明文件。
 - 安装过程记录在 `%TEMP%\ATSHaptics-update-<版本>\unpacked\apply-update.log`。
 
 ## 调校技巧
@@ -268,39 +269,56 @@
 
 ## 从源码运行与构建
 
+发布的程序由 `rust\` 中的 Rust 代码构建，需要 [Rust](https://rustup.rs)（stable，MSVC 工具链）。
+
+```powershell
+cd rust
+cargo run --release --bin ATSHaptics                        # 窗口
+cargo run --release --bin ats_haptics -- --monitor          # 命令行：--simulate, --scenario highway|city|mountain, --replay <记录.csv>, --exit-with-game, 各效果强度选项
+cargo run --release --bin replay -- <记录.csv> --knocks 0.5  # 用当前的合成器重新运行调试记录，并与记录对比
+cargo test                                                  # 与 Python 实现逐位一致（见下）、窗口绘制、翻译
+cd ..
+powershell -ExecutionPolicy Bypass -File build.ps1          # dist\ATSHaptics-<版本>.zip（含源码和许可证）
+```
+
+版本号只保存在 `rust\Cargo.toml` 的 `version` 一处。可执行文件、发布 zip 的文件名和 Python 的 `version.py` 都从这里读取。
+
+仓库顶层的 Python 文件是 0.19.0 及之前发布的实现，保留下来作为检验 Rust 版振动是否一致的基准；手柄诊断工具（`tone.py`）只有 Python 版。
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # 窗口（或 start_gui.cmd）
-.\.venv\Scripts\python.exe ats_haptics.py --monitor   # 命令行：--simulate, --scenario highway|city|mountain, --exit-with-game, 各效果强度选项
+.\.venv\Scripts\python.exe ats_haptics.py --monitor   # 命令行（选项与 Rust 版相同）
 .\.venv\Scripts\python.exe tone.py probe              # 诊断：probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound | strength
 .\.venv\Scripts\python.exe tone.py trigger-side       # 扳机左右切换盲测（用手柄按键作答），结果保存在 logs\trigger-side-*.txt
 .\.venv\Scripts\python.exe tone.py calibrate          # 与窗口的电机校准相同（控制台），--reset 清除
 .\.venv\Scripts\python.exe tone.py pad-sound --record "<输入设备>"  # 用麦克风录下手柄发出的声音（16 个正弦 × 5 档强度、敲击），保存到 sound sample\pad-sound\
 .\.venv\Scripts\python.exe tone.py strength           # 盲测：超过 20% 的握把振动在手上是否更强（用手柄按键作答），结果保存在 logs\strength-*.txt
 python tools\pad_sound_analyze.py <录音.wav>         # 分析该录音；tools\synth_bands.py：合成输出各频段占比与强度（tools\requirements.txt）
-powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<版本>.zip（含源码）
+.\.venv\Scripts\python.exe rust\golden\make_golden.py  # 生成 cargo test 用来对比的基准数据，保存到 rust\golden-data\（约 460 MB）
 .\.venv\Scripts\python.exe i18n.py                  # 翻译检查：缺失、未使用或 {占位符} 不一致的文本
-.\.venv\Scripts\python.exe -m unittest              # 回归测试（tests\）
+.\.venv\Scripts\python.exe -m unittest              # Python 回归测试（tests\）
 ```
 
-界面文本以代码中的韩语原文作为键（`t("정지됨")`）。翻译位于 `locales\<语言>.py` 的 `MESSAGES` 中，缺少翻译时依次回退到英语、韩语。修改或新增文本后，请运行 `i18n.py` 确认所有语言表都已更新。
+界面文本以韩语原文作为键（代码中为 `t("정지됨")`，`.slint` 中为 `@tr("정지됨")`）。翻译的来源是 `locales\<语言>.py` 的 `MESSAGES`，缺少翻译时依次回退到英语、韩语。修改或新增文本后，请运行 `i18n.py` 确认所有语言表都已更新，再用 `rust\tools\export_locales.py`（翻译表）和 `rust\tools\export_gui_texts.py`（滑块行、提示、菜单）重新生成 Rust 侧的表。
 
-从源码运行时的 Steam 启动选项：`"<repo>\.venv\Scripts\pythonw.exe" "<repo>\launch.py" %command%`
+自行构建版本的 Steam 启动选项：`"<repo>\rust\target\release\ATSHaptics.exe" --launch %command%`
 
-结构：
+结构（`.rs` 文件都在 `rust\src\` 中，大多与同名的 Python 文件对应）：
 
 ```
-ATS ─(scs-telemetry 共享内存)─▶ telemetry.py ─▶ effects.py (1 kHz 合成) ─▶ apex6.py ─(HID 0x57, 8 ms)─▶ APEX 6 Pro
-                                  gamewatch.py：游戏运行检测       plugin_install.py：插件检测与安装
-                                  updater.py：GitHub 发布检查与自动更新
-                                  i18n.py + locales\：界面语言     gui.py + widgets.py：窗口、提示
-                                  blocklog.py：调试记录            errorlog.py：意外错误记录
-                                  preview.py：各效果的 ▶ 测试
+ATS ─(scs-telemetry 共享内存)─▶ telemetry.rs ─▶ effects.rs (1 kHz 合成) ─▶ apex6.rs ─(HID 0x57, 8 ms)─▶ APEX 6 Pro
+                                  runner.rs：一次行驶（窗口与命令行共用）
+                                  gamewatch.rs：游戏运行检测       plugin_install.rs：插件检测与安装
+                                  updater.rs：GitHub 发布检查与自动更新
+                                  i18n.rs + rust\locales, rust\lang：界面语言     rust\ui\*.slint + bin\app\：窗口、提示
+                                  blocklog.rs, replay.rs：调试记录与重新运行     errorlog.rs：意外错误记录
+                                  preview.rs：各效果的 ▶ 测试     calibrate.rs：电机校准
 ```
 
 ## 许可证
 
-GPL-3.0-or-later（`LICENSE`）。APEX 6 协议实现移植自 [ApexSenseBridge](https://github.com/ReynArts/ApexSenseBridge)（GPL-3.0-or-later），随附的遥测插件为 [RenCloud/scs-sdk-plugin](https://github.com/RenCloud/scs-sdk-plugin)（MIT）。详情见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。发布 zip 中的 `source\` 文件夹包含对应的源码。
+GPL-3.0-or-later（`LICENSE`）。APEX 6 协议实现移植自 [ApexSenseBridge](https://github.com/ReynArts/ApexSenseBridge)（GPL-3.0-or-later），随附的遥测插件为 [RenCloud/scs-sdk-plugin](https://github.com/RenCloud/scs-sdk-plugin)（MIT）。窗口以 GPL-3.0 使用 [Slint](https://slint.dev)。详情见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；可执行文件所含全部 Rust 库的许可证原文见发布 zip 中的 `THIRD_PARTY_LICENSES.txt`。发布 zip 中的 `source\` 文件夹包含对应的源码。
 
 本项目为非官方项目，与飞智及 SCS Software 无关。

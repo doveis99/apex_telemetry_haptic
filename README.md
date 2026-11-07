@@ -216,6 +216,7 @@ Steam 라이브러리에서 게임 **속성 → 일반 → 실행 옵션**에 �
 - 덮어쓰기 전에 설치 폴더를 백업해 두고, 복사에 실패하면 이전 버전으로 되돌린 뒤 실행합니다. 2분이 지나도 프로그램이 끝나지 않으면 아무것도 바꾸지 않습니다.
 - 게임 실행 중에는 업데이트하지 않습니다. Steam 실행 옵션으로 띄운 경우 게임이 끝날 때까지 실행 파일이 사용 중이기 때문입니다. 게임을 끈 뒤 창을 다시 열어 업데이트하세요.
 - 설치 폴더에 쓸 권한이 없거나(예: `Program Files`) 소스에서 실행 중이면 릴리스 페이지만 열어 줍니다.
+- 설치 폴더의 `_internal` 폴더는 지우지 마세요. 이 폴더가 있어야 설치 폴더를 바꾸고, 없으면 릴리스 페이지만 엽니다. 0.19.0까지는 여기에 파이썬 런타임이 있었고, 0.20.0으로 업데이트하면 설명 파일 하나만 남습니다.
 - 설치 과정 기록은 `%TEMP%\ATSHaptics-update-<버전>\unpacked\apply-update.log`에 남습니다.
 
 ## 튜닝 팁
@@ -266,37 +267,54 @@ Steam 라이브러리에서 게임 **속성 → 일반 → 실행 옵션**에 �
 
 ## 소스에서 실행 / 빌드
 
+배포하는 프로그램은 `rust\`의 Rust 코드로 만듭니다. [Rust](https://rustup.rs)(stable, MSVC 도구 모음)가 필요합니다.
+
+```powershell
+cd rust
+cargo run --release --bin ATSHaptics                        # 창
+cargo run --release --bin ats_haptics -- --monitor          # 명령줄: --simulate, --scenario highway|city|mountain, --replay <기록.csv>, --exit-with-game, 효과별 세기 옵션
+cargo run --release --bin replay -- <기록.csv> --knocks 0.5  # 디버그 기록을 지금의 합성기로 다시 돌려 기록과 비교
+cargo test                                                  # 파이썬 구현과 비트 단위로 같은지(아래), 창 그리기, 번역
+cd ..
+powershell -ExecutionPolicy Bypass -File build.ps1          # dist\ATSHaptics-<버전>.zip (소스와 라이선스 포함)
+```
+
+버전은 `rust\Cargo.toml`의 `version` 한 곳에만 있습니다. 실행 파일, 배포 zip 이름, 파이썬의 `version.py`가 모두 여기서 읽습니다.
+
+저장소 맨 위의 파이썬 파일은 0.19.0까지 배포하던 구현입니다. Rust 버전이 같은 진동을 내는지 비교하는 기준으로 남겨 두었고, 패드 진단 도구(`tone.py`)는 파이썬에만 있습니다.
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # 창 (또는 start_gui.cmd)
-.\.venv\Scripts\python.exe ats_haptics.py --monitor   # 명령줄: --simulate, --scenario highway|city|mountain, --exit-with-game, 효과별 세기 옵션
+.\.venv\Scripts\python.exe ats_haptics.py --monitor   # 명령줄 (Rust와 같은 옵션)
 .\.venv\Scripts\python.exe tone.py probe              # 진단: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound | strength
 .\.venv\Scripts\python.exe tone.py trigger-side       # 트리거 좌우 전환 블라인드 점검(패드 버튼으로 답함), 결과는 logs\trigger-side-*.txt
 .\.venv\Scripts\python.exe tone.py calibrate          # 창의 모터 보정과 같은 측정(콘솔), --reset으로 지움
 .\.venv\Scripts\python.exe tone.py pad-sound --record "<입력 장치>"  # 패드가 내는 소리를 마이크로 녹음(사인 16개 × 세기 5단계, 탭), sound sample\pad-sound\에 저장
 .\.venv\Scripts\python.exe tone.py strength           # 20%보다 센 그립 진동이 손에서 더 세게 느껴지는지 블라인드 점검(패드 버튼으로 답함), 결과는 logs\strength-*.txt
 python tools\pad_sound_analyze.py <녹음.wav>         # 그 녹음 분석. tools\synth_bands.py: 합성 출력의 대역별 비중과 세기 (tools\requirements.txt)
-powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<버전>.zip (소스 포함)
+.\.venv\Scripts\python.exe rust\golden\make_golden.py  # cargo test가 비교할 기준 데이터를 rust\golden-data\에 만듦 (약 460 MB)
 .\.venv\Scripts\python.exe i18n.py                  # 번역 점검: 빠지거나 안 쓰이거나 {자리} 가 다른 문구
-.\.venv\Scripts\python.exe -m unittest              # 회귀 테스트 (tests\)
+.\.venv\Scripts\python.exe -m unittest              # 파이썬 회귀 테스트 (tests\)
 ```
 
-화면 문구는 코드 안의 한국어 원문이 그대로 키입니다(`t("정지됨")`). 번역은 `locales\<언어>.py`의 `MESSAGES`에 있고, 빠진 번역은 영어, 그다음 한국어로 나옵니다. 문구를 바꾸거나 추가했으면 `i18n.py`를 실행해 모든 언어 표에 반영됐는지 확인하세요.
+화면 문구는 한국어 원문이 그대로 키입니다(코드에서는 `t("정지됨")`, `.slint`에서는 `@tr("정지됨")`). 번역의 원본은 `locales\<언어>.py`의 `MESSAGES`이고, 빠진 번역은 영어, 그다음 한국어로 나옵니다. 문구를 바꾸거나 추가했으면 `i18n.py`로 모든 언어 표에 반영됐는지 확인하고, `rust\tools\export_locales.py`(번역 표)와 `rust\tools\export_gui_texts.py`(슬라이더 줄, 툴팁, 메뉴)로 Rust 쪽 표를 다시 만드세요.
 
-소스에서 Steam 실행 옵션: `"<repo>\.venv\Scripts\pythonw.exe" "<repo>\launch.py" %command%`
+직접 빌드한 것의 Steam 실행 옵션: `"<repo>\rust\target\release\ATSHaptics.exe" --launch %command%`
 
-구조:
+구조 (`.rs` 파일은 모두 `rust\src\`에 있고, 대부분 같은 이름의 파이썬 파일과 짝을 이룹니다):
 
 ```
-ATS ─(scs-telemetry 공유 메모리)─▶ telemetry.py ─▶ effects.py (1 kHz 합성) ─▶ apex6.py ─(HID 0x57, 8 ms)─▶ APEX 6 Pro
-                                     gamewatch.py: 게임 실행 감지    plugin_install.py: 플러그인 감지·설치
-                                     updater.py: GitHub 릴리스 확인·자동 업데이트
-                                     i18n.py + locales\: 화면 언어    gui.py + widgets.py: 창, 툴팁
-                                     blocklog.py: 디버그 기록          errorlog.py: 예기치 못한 오류 기록
-                                     preview.py: 효과별 ▶ 테스트
+ATS ─(scs-telemetry 공유 메모리)─▶ telemetry.rs ─▶ effects.rs (1 kHz 합성) ─▶ apex6.rs ─(HID 0x57, 8 ms)─▶ APEX 6 Pro
+                                     runner.rs: 주행 (창과 명령줄이 함께 씀)
+                                     gamewatch.rs: 게임 실행 감지      plugin_install.rs: 플러그인 감지·설치
+                                     updater.rs: GitHub 릴리스 확인·자동 업데이트
+                                     i18n.rs + rust\locales, rust\lang: 화면 언어    rust\ui\*.slint + bin\app\: 창, 툴팁
+                                     blocklog.rs, replay.rs: 디버그 기록과 다시 돌리기    errorlog.rs: 예기치 못한 오류 기록
+                                     preview.rs: 효과별 ▶ 테스트       calibrate.rs: 모터 보정
 ```
 
 ## 라이선스
 
-GPL-3.0-or-later (`LICENSE`). APEX 6 프로토콜 구현은 [ApexSenseBridge](https://github.com/ReynArts/ApexSenseBridge)(GPL-3.0-or-later)를 옮긴 것이고, 동봉한 텔레메트리 플러그인은 [RenCloud/scs-sdk-plugin](https://github.com/RenCloud/scs-sdk-plugin)(MIT)입니다. 자세한 내용은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 보세요. 배포 zip에는 대응 소스가 `source\` 폴더로 함께 들어 있습니다.
+GPL-3.0-or-later (`LICENSE`). APEX 6 프로토콜 구현은 [ApexSenseBridge](https://github.com/ReynArts/ApexSenseBridge)(GPL-3.0-or-later)를 옮긴 것이고, 동봉한 텔레메트리 플러그인은 [RenCloud/scs-sdk-plugin](https://github.com/RenCloud/scs-sdk-plugin)(MIT)입니다. 창은 [Slint](https://slint.dev)를 GPL-3.0으로 사용합니다. 자세한 내용은 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 보세요. 실행 파일에 들어간 Rust 라이브러리의 라이선스 원문은 모두 배포 zip의 `THIRD_PARTY_LICENSES.txt`에 있습니다. 배포 zip에는 대응 소스가 `source\` 폴더로 함께 들어 있습니다.

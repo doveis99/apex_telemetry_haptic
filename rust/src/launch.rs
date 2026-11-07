@@ -88,6 +88,9 @@ pub fn selftest() -> i32 {
     let mut lines = vec![
         format!("version {}", crate::runner::version()),
         format!("bundled plugin: {}", !crate::plugin_install::BUNDLED_PLUGIN.is_empty()),
+        // the in-app update replaces only a folder laid out as the release zip is
+        format!("install folder: {} (_internal: {})", crate::updater::install_dir().display(),
+                crate::updater::install_dir().join("_internal").is_dir()),
     ];
     let status = match hidapi::HidApi::new() {
         Ok(api) => {

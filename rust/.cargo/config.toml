@@ -1,0 +1,14 @@
+# Link the Visual C++ runtime (vcruntime140.dll) into the executables, so they start on a
+# Windows without the Visual C++ Redistributable; the Python releases carried that DLL in
+# _internal. The Universal CRT stays dynamic: ucrtbase.dll is part of Windows 10/11, and its
+# math functions are the ones Python calls, which the bit-exact parity with the Python synth
+# relies on. This is Microsoft's "hybrid" linking: static CRT, then the UCRT import library in
+# place of the static one.
+#
+# Cargo reads this file only when it runs from rust\ or below (build.ps1 does).
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    "-C", "target-feature=+crt-static",
+    "-C", "link-arg=/NODEFAULTLIB:libucrt.lib",
+    "-C", "link-arg=/DEFAULTLIB:ucrt.lib",
+]

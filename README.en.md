@@ -218,6 +218,7 @@ When the window opens it checks GitHub for the latest release. If there is a new
 - The install folder is backed up first; if copying fails, the previous version is restored and started. If the program has not exited after 2 minutes, nothing is changed.
 - No updates while the game runs: when started through the Steam launch option, the executable stays in use until the game ends. Quit the game, open the window again and update.
 - If the install folder is not writable (e.g. `Program Files`) or you run from source, only the release page is opened.
+- Keep the `_internal` folder in the install folder: the update replaces only an install that has it, and otherwise opens the release page. Up to 0.19.0 it held the Python runtime; updating to 0.20.0 leaves a single note in it.
 - The install log is kept at `%TEMP%\ATSHaptics-update-<version>\unpacked\apply-update.log`.
 
 ## Tuning tips
@@ -268,39 +269,56 @@ When the window opens it checks GitHub for the latest release. If there is a new
 
 ## Running from source and building
 
+The released program is built from the Rust code in `rust\`. It needs [Rust](https://rustup.rs) (stable, MSVC toolchain).
+
+```powershell
+cd rust
+cargo run --release --bin ATSHaptics                        # window
+cargo run --release --bin ats_haptics -- --monitor          # command line: --simulate, --scenario highway|city|mountain, --replay <log.csv>, --exit-with-game, per-effect levels
+cargo run --release --bin replay -- <log.csv> --knocks 0.5  # run a debug log through today's synth and compare it with what was logged
+cargo test                                                  # bit-for-bit comparison with the Python implementation (below), window drawing, translations
+cd ..
+powershell -ExecutionPolicy Bypass -File build.ps1          # dist\ATSHaptics-<version>.zip (source and licenses included)
+```
+
+The version is kept in one place, `version` in `rust\Cargo.toml`. The executables, the zip's name and the Python `version.py` all read it from there.
+
+The Python files at the top of the repository are the implementation released up to 0.19.0. They stay as the reference the Rust version is checked against, and the pad diagnostics (`tone.py`) exist only there.
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\pythonw.exe app.py                    # window (or start_gui.cmd)
-.\.venv\Scripts\python.exe ats_haptics.py --monitor   # command line: --simulate, --scenario highway|city|mountain, --exit-with-game, per-effect levels
+.\.venv\Scripts\python.exe ats_haptics.py --monitor   # command line, same options as the Rust one
 .\.venv\Scripts\python.exe tone.py probe              # diagnostics: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound | strength
 .\.venv\Scripts\python.exe tone.py trigger-side       # blind check that the trigger follows its side (answered on the pad), results in logs\trigger-side-*.txt
 .\.venv\Scripts\python.exe tone.py calibrate          # the window's motor calibration in a console, --reset clears it
 .\.venv\Scripts\python.exe tone.py pad-sound --record "<input>"  # record the sound the pad makes with a microphone (16 sines at 5 strengths, taps) to sound sample\pad-sound\
 .\.venv\Scripts\python.exe tone.py strength           # blind check whether grip vibration past 20% feels stronger or only rougher (answered on the pad), results in logs\strength-*.txt
 python tools\pad_sound_analyze.py <recording.wav>    # analyse that recording; tools\synth_bands.py: the synth output's bands and strength (tools\requirements.txt)
-powershell -ExecutionPolicy Bypass -File build.ps1    # dist\ATSHaptics-<version>.zip (source included)
+.\.venv\Scripts\python.exe rust\golden\make_golden.py  # the reference data cargo test compares against, into rust\golden-data\ (about 460 MB)
 .\.venv\Scripts\python.exe i18n.py                  # translation check: missing, unused or {placeholder}-mismatched strings
-.\.venv\Scripts\python.exe -m unittest              # regression tests (tests\)
+.\.venv\Scripts\python.exe -m unittest              # Python regression tests (tests\)
 ```
 
-Interface strings use the Korean source text in the code as the key (`t("정지됨")`). Translations live in `MESSAGES` in `locales\<language>.py`; a missing translation falls back to English, then Korean. After changing or adding a string, run `i18n.py` to check that every language table has it.
+Interface strings use the Korean source text as the key (`t("정지됨")` in code, `@tr("정지됨")` in `.slint`). The translations are kept in `MESSAGES` in `locales\<language>.py`; a missing translation falls back to English, then Korean. After changing or adding a string, run `i18n.py` to check that every language table has it, then regenerate the Rust tables with `rust\tools\export_locales.py` (translations) and `rust\tools\export_gui_texts.py` (slider rows, tooltips, menus).
 
-Steam launch option from source: `"<repo>\.venv\Scripts\pythonw.exe" "<repo>\launch.py" %command%`
+Steam launch option for your own build: `"<repo>\rust\target\release\ATSHaptics.exe" --launch %command%`
 
-Structure:
+Structure (the `.rs` files are all in `rust\src\`; most pair with the Python file of the same name):
 
 ```
-ATS ─(scs-telemetry shared memory)─▶ telemetry.py ─▶ effects.py (1 kHz synthesis) ─▶ apex6.py ─(HID 0x57, 8 ms)─▶ APEX 6 Pro
-                                       gamewatch.py: game detection     plugin_install.py: plugin detection/install
-                                       updater.py: GitHub release check and self-update
-                                       i18n.py + locales\: interface languages    gui.py + widgets.py: window, tooltips
-                                       blocklog.py: debug log           errorlog.py: unexpected error log
-                                       preview.py: each effect's ▶ test
+ATS ─(scs-telemetry shared memory)─▶ telemetry.rs ─▶ effects.rs (1 kHz synthesis) ─▶ apex6.rs ─(HID 0x57, 8 ms)─▶ APEX 6 Pro
+                                       runner.rs: a drive, for the window and the command line
+                                       gamewatch.rs: game detection     plugin_install.rs: plugin detection/install
+                                       updater.rs: GitHub release check and self-update
+                                       i18n.rs + rust\locales, rust\lang: interface languages    rust\ui\*.slint + bin\app\: window, tooltips
+                                       blocklog.rs, replay.rs: debug log and replays    errorlog.rs: unexpected error log
+                                       preview.rs: each effect's ▶ test   calibrate.rs: motor calibration
 ```
 
 ## License
 
-GPL-3.0-or-later (`LICENSE`). The APEX 6 protocol implementation is ported from [ApexSenseBridge](https://github.com/ReynArts/ApexSenseBridge) (GPL-3.0-or-later), and the bundled telemetry plugin is [RenCloud/scs-sdk-plugin](https://github.com/RenCloud/scs-sdk-plugin) (MIT). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details. The release zip carries the corresponding source in its `source\` folder.
+GPL-3.0-or-later (`LICENSE`). The APEX 6 protocol implementation is ported from [ApexSenseBridge](https://github.com/ReynArts/ApexSenseBridge) (GPL-3.0-or-later), and the bundled telemetry plugin is [RenCloud/scs-sdk-plugin](https://github.com/RenCloud/scs-sdk-plugin) (MIT). The window uses [Slint](https://slint.dev) under GPL-3.0. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details; the license texts of every Rust library in the executables are in the release zip's `THIRD_PARTY_LICENSES.txt`. The release zip carries the corresponding source in its `source\` folder.
 
 Unofficial and not affiliated with Flydigi or SCS Software.

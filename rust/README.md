@@ -1,6 +1,6 @@
-# Rust 포팅 (진행 중)
+# Rust 포팅
 
-파이썬 앱을 Rust로 옮기는 중. 3단계까지 끝났음: 창(`ATSHaptics.exe`), 명령줄(`ats_haptics.exe`), 기록 요약(`replay.exe`). 배포는 아직 파이썬 버전이고, 남은 건 4단계(빌드와 배포 묶음).
+파이썬 앱을 Rust로 옮겼음: 창(`ATSHaptics.exe`), 명령줄(`ats_haptics.exe`), 기록 요약(`replay.exe`). 0.20.0부터 배포 zip은 이 코드로 만듦 ([배포 빌드](#배포-빌드)). 저장소 맨 위의 파이썬 파일은 비교 기준과 패드 진단(`tone.py`)용으로 남아 있음. 실제 패드로는 아직 써 보지 않았음.
 
 ## 옮긴 것
 
@@ -12,7 +12,7 @@
 | `settings.py` | `src/settings.rs` | 같은 `config.json`을 읽고 씀. 키 순서, 잘못된 값 처리, CRLF 줄끝까지 파이썬과 같음 |
 | `gamewatch.py` | `src/gamewatch.rs` | |
 | `scenarios.py` | `src/scenarios.rs` | 고속도로, 도시, 산길 |
-| `blocklog.py` | `src/blocklog.rs` | 열과 서식이 글자 단위로 같음. `.json`의 version은 `0.19.0 (rust)` |
+| `blocklog.py` | `src/blocklog.rs` | 열과 서식이 글자 단위로 같음. `.json`의 version은 `<버전> (rust)` |
 | `replay.py` | `src/replay.rs`, `src/bin/replay.rs` | 0.16.0 전 기록도 읽음. 그보다 오래된 13열 기록은 파이썬도 못 읽음 |
 | `ats_haptics.py` | `src/runner.rs`, `src/bin/ats_haptics.rs` | 명령줄. 창도 같은 `run()`을 씀 |
 | `preview.py` | `src/preview.rs` | 효과 테스트(▶) |
@@ -79,12 +79,20 @@ Rust가 쓴 기록은 파이썬 `replay.py`도 그대로 읽음 (같은 요약�
 
 모든 코어가 바쁠 때(`docs/latency-notes.md`의 부하 시험)는 아직 재지 않음.
 
+## 배포 빌드
+
+`powershell -ExecutionPolicy Bypass -File build.ps1` (저장소 맨 위에서):
+
+- `rust\`에서 `cargo build --release`로 `ATSHaptics.exe`(창), `ats_haptics.exe`(명령줄), `replay.exe`를 만들어 `dist\ATSHaptics\`에 모으고 `dist\ATSHaptics-<버전>.zip`으로 묶음. 플러그인 DLL은 `ATSHaptics.exe` 안에 있음
+- 함께 넣는 것: README 4개, `LICENSE`, `THIRD_PARTY_NOTICES.md`, `docs\`, `source\`(git이 추적하거나 새로 생긴 파일, `rust/target`·`rust/golden-data` 빼고), `THIRD_PARTY_LICENSES.txt`(`tools/collect_licenses.ps1`이 `Cargo.lock` 기준으로 실행 파일에 링크된 크레이트 183개의 라이선스 원문을 모음)
+- `_internal\README.txt`: 파이썬 0.19 이하의 업데이터는 새 zip에서 `ATSHaptics.exe` 옆에 `_internal` 폴더가 있어야 받아들이고, 그 폴더를 `/MIR`로 덮어써 파이썬 런타임을 지움. Rust 업데이터도 같은 폴더로 설치본을 알아봄. `Compress-Archive`가 빈 폴더를 버려서 설명 파일을 넣음. `build.ps1`이 zip 안에 둘 다 있는지 마지막에 확인함
+- 버전은 `Cargo.toml`의 `version` 한 곳(0.20.0부터). exe는 `CARGO_PKG_VERSION`, `build.ps1`은 zip 이름, 파이썬 `version.py`는 `tomllib`로 같은 값을 읽음
+- `.cargo/config.toml`: VC 런타임(`vcruntime140.dll`)은 정적으로 링크하고 UCRT(`ucrtbase.dll`, Windows 10/11 기본)는 동적으로 둠. 파이썬 배포는 `_internal`에 `vcruntime140.dll`을 넣어 다녔기 때문에, 이게 없으면 VC++ 재배포 패키지가 없는 PC에서 업데이트 후 실행이 안 됨. 수학 함수는 파이썬과 같은 `ucrtbase.dll` 것을 그대로 써서 비트 단위 비교도 그대로 통과함. cargo는 `rust\` 안에서 실행할 때만 이 파일을 읽음
+
+2026-11-08 확인: zip을 `Expand-Archive`로 풀어 `ATSHaptics.exe --selftest` 통과(패드 1개, ATS/ETS2 플러그인 인식, `_internal: true`). 파이썬 0.19의 `updater.py`가 하는 일을 그대로 재연(zip 풀기와 `ATSHaptics.exe`·`_internal` 확인, 가짜 0.19 설치본에 `UPDATE_SCRIPT` 실행, 마지막 `Start-Process`만 기록으로 바꿈): 받아들이고, 파이썬 런타임이 지워져 `_internal`에는 설명 파일만 남고, 새 exe 셋이 들어감.
+
 ## 아직 확인 안 된 것
 
 - 실제 패드: 주행, 효과 테스트, 모터 보정 모두 패드 없이만 시험함
-- 업데이트의 마지막 단계(설치 폴더를 바꾸고 다시 시작): 받기, 해시, 압축 풀기까지만 시험함
+- 업데이트의 마지막 단계(설치 폴더를 바꾸고 다시 시작): Rust 업데이터는 받기, 해시, 압축 풀기까지만, 파이썬 0.19 → 0.20은 가짜 설치본에서 다시 시작 직전까지만 시험함
 - 창을 사람이 직접 써 보는 것: 버튼, 메뉴, 프리셋 이름 입력, 말풍선은 그려진 모습만 확인함
-
-## 남은 단계
-
-4. `build.ps1`을 cargo 빌드로, 배포 zip (파이썬 0.19 이하의 업데이트가 받아들이도록 `_internal` 폴더 유지), `THIRD_PARTY_NOTICES.md`에 Slint(GPLv3) 등 추가

@@ -1,0 +1,40 @@
+[package]
+name = "ats_haptics"
+version = "0.19.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "ATS / ETS2 telemetry to APEX 6 Pro voice-coil haptics (Rust port of the Python app)"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "ats_haptics"
+path = "src/bin/ats_haptics.rs"
+
+[dependencies]
+hidapi = "2.6"
+indexmap = { version = "2", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+# preserve_order keeps config.json's keys where the Python app put them; float_roundtrip
+# parses every float to the bit, as Python's json does
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_System_Console",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+# The parity test reads ~400 MB of golden data; unoptimised it takes minutes.
+[profile.test]
+opt-level = 3

@@ -703,20 +703,36 @@ export component AppWindow inherits Window {
                         background: Theme.tile;
                         min-height: 6 * 18px + 8px;
                         vertical-stretch: 1;
-                        Flickable {
+                        event-list := Flickable {
+                            // an explicit size: without it the Flickable hands its lines' size on to
+                            // the window, which then grows by a line with every event
+                            width: parent.width;
+                            height: parent.height;
+                            content-width: self.width;
                             content-height: max(self.height, root.events.length * 18px + 8px);
                             VerticalLayout {
                                 padding: 4px;
+                                padding-right: 10px;
                                 alignment: start;
                                 for line in root.events: Text {
                                     height: 18px;
                                     text: line;
                                     color: Theme.text;
                                     vertical-alignment: center;
+                                    overflow: elide;
                                 }
                             }
                         }
                         TipArea { tip: @tr("변속, 충돌, 페달, 트레일러, 파킹 브레이크, 방향지시등, 시동, 게임 알림과 컨트롤러 연결 문제가 시간과 함께 기록됩니다. 최근 50개까지 보입니다."); }
+                        // where the view sits in the list, once it holds more than fits
+                        if event-list.content-height > event-list.height + 1px: Rectangle {
+                            x: parent.width - 6px;
+                            y: 2px + (parent.height - 4px) * (-event-list.content-y) / event-list.content-height;
+                            width: 4px;
+                            height: (parent.height - 4px) * event-list.height / event-list.content-height;
+                            border-radius: 2px;
+                            background: Theme.field-hi;
+                        }
                     }
                 }
             }

@@ -269,50 +269,50 @@
 
 ## 从源码运行与构建
 
-发布的程序由 `rust\` 中的 Rust 代码构建，需要 [Rust](https://rustup.rs)（stable，MSVC 工具链）。
+发布的程序由仓库顶层的 Rust 代码（`Cargo.toml`、`src\`、`ui\`）构建，需要 [Rust](https://rustup.rs)（stable，MSVC 工具链）。
 
 ```powershell
-cd rust
 cargo run --release --bin ATSHaptics                        # 窗口
 cargo run --release --bin ats_haptics -- --monitor          # 命令行：--simulate, --scenario highway|city|mountain, --replay <记录.csv>, --exit-with-game, 各效果强度选项
 cargo run --release --bin replay -- <记录.csv> --knocks 0.5  # 用当前的合成器重新运行调试记录，并与记录对比
 cargo test                                                  # 与 Python 实现逐位一致（见下）、窗口绘制、翻译
-cd ..
 powershell -ExecutionPolicy Bypass -File build.ps1          # dist\ATSHaptics-<版本>.zip（含源码和许可证）
 ```
 
-版本号只保存在 `rust\Cargo.toml` 的 `version` 一处。可执行文件、发布 zip 的文件名和 Python 的 `version.py` 都从这里读取。
+版本号只保存在 `Cargo.toml` 的 `version` 一处。可执行文件、发布 zip 的文件名和 Python 的 `version.py` 都从这里读取。
 
-仓库顶层的 Python 文件是 0.19.0 及之前发布的实现，保留下来作为检验 Rust 版振动是否一致的基准；手柄诊断工具（`tone.py`）只有 Python 版。
+`python\` 中的 Python 文件是 0.19.0 及之前发布的实现，保留下来作为检验 Rust 版振动是否一致的基准；手柄诊断工具（`tone.py`）只有 Python 版。
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\pythonw.exe app.py                    # 窗口（或 start_gui.cmd）
-.\.venv\Scripts\python.exe ats_haptics.py --monitor   # 命令行（选项与 Rust 版相同）
-.\.venv\Scripts\python.exe tone.py probe              # 诊断：probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound | strength
-.\.venv\Scripts\python.exe tone.py trigger-side       # 扳机左右切换盲测（用手柄按键作答），结果保存在 logs\trigger-side-*.txt
-.\.venv\Scripts\python.exe tone.py calibrate          # 与窗口的电机校准相同（控制台），--reset 清除
-.\.venv\Scripts\python.exe tone.py pad-sound --record "<输入设备>"  # 用麦克风录下手柄发出的声音（16 个正弦 × 5 档强度、敲击），保存到 sound sample\pad-sound\
-.\.venv\Scripts\python.exe tone.py strength           # 盲测：超过 20% 的握把振动在手上是否更强（用手柄按键作答），结果保存在 logs\strength-*.txt
-python tools\pad_sound_analyze.py <录音.wav>         # 分析该录音；tools\synth_bands.py：合成输出各频段占比与强度（tools\requirements.txt）
-.\.venv\Scripts\python.exe rust\golden\make_golden.py  # 生成 cargo test 用来对比的基准数据，保存到 rust\golden-data\（约 460 MB）
-.\.venv\Scripts\python.exe i18n.py                  # 翻译检查：缺失、未使用或 {占位符} 不一致的文本
-.\.venv\Scripts\python.exe -m unittest              # Python 回归测试（tests\）
+.\.venv\Scripts\python.exe -m pip install -r python\requirements.txt
+.\.venv\Scripts\pythonw.exe python\app.py                   # 窗口（或 python\start_gui.cmd）
+.\.venv\Scripts\python.exe python\ats_haptics.py --monitor  # 命令行（选项与 Rust 版相同）
+.\.venv\Scripts\python.exe python\tone.py probe             # 诊断：probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound | strength
+.\.venv\Scripts\python.exe python\tone.py trigger-side      # 扳机左右切换盲测（用手柄按键作答），结果保存在 logs\trigger-side-*.txt
+.\.venv\Scripts\python.exe python\tone.py calibrate         # 与窗口的电机校准相同（控制台），--reset 清除
+.\.venv\Scripts\python.exe python\tone.py pad-sound --record "<输入设备>"  # 用麦克风录下手柄发出的声音（16 个正弦 × 5 档强度、敲击），保存到 sound sample\pad-sound\
+.\.venv\Scripts\python.exe python\tone.py strength          # 盲测：超过 20% 的握把振动在手上是否更强（用手柄按键作答），结果保存在 logs\strength-*.txt
+python tools\pad_sound_analyze.py <录音.wav>                # 分析该录音；tools\synth_bands.py：合成输出各频段占比与强度（tools\requirements.txt）
+.\.venv\Scripts\python.exe tools\make_golden.py             # 生成 cargo test 用来对比的基准数据，保存到 tests\golden-data\（约 460 MB）
+.\.venv\Scripts\python.exe python\i18n.py                   # 翻译检查：缺失、未使用或 {占位符} 不一致的文本
+.\.venv\Scripts\python.exe -m unittest discover python      # Python 回归测试（python\tests\）
 ```
 
-界面文本以韩语原文作为键（代码中为 `t("정지됨")`，`.slint` 中为 `@tr("정지됨")`）。翻译的来源是 `locales\<语言>.py` 的 `MESSAGES`，缺少翻译时依次回退到英语、韩语。修改或新增文本后，请运行 `i18n.py` 确认所有语言表都已更新，再用 `rust\tools\export_locales.py`（翻译表）和 `rust\tools\export_gui_texts.py`（滑块行、提示、菜单）重新生成 Rust 侧的表。
+界面文本以韩语原文作为键（代码中为 `t("정지됨")`，`.slint` 中为 `@tr("정지됨")`）。翻译的来源是 `python\locales\<语言>.py` 的 `MESSAGES`，缺少翻译时依次回退到英语、韩语。修改或新增文本后，请运行 `python\i18n.py` 确认所有语言表都已更新，再用 `tools\export_locales.py`（翻译表）和 `tools\export_gui_texts.py`（滑块行、提示、菜单）重新生成 Rust 侧的表。
 
-自行构建版本的 Steam 启动选项：`"<repo>\rust\target\release\ATSHaptics.exe" --launch %command%`
+自行构建版本的 Steam 启动选项：`"<repo>\target\release\ATSHaptics.exe" --launch %command%`
 
-结构（`.rs` 文件都在 `rust\src\` 中，大多与同名的 Python 文件对应）：
+目录：`src\` 和 `ui\` 是 Rust 程序；`resources\` 是编入可执行文件的翻译表和遥测插件 DLL；`python\` 是 Python 实现；`tools\` 是开发工具（生成翻译表和对比数据、收集许可证、分析录音）；`docs\` 是截图和笔记（`docs\rust-port.md`：迁移到 Rust 的记录，韩文）。
+
+结构（`.rs` 文件都在 `src\` 中，大多与同名的 Python 文件对应）：
 
 ```
 ATS ─(scs-telemetry 共享内存)─▶ telemetry.rs ─▶ effects.rs (1 kHz 合成) ─▶ apex6.rs ─(HID 0x57, 8 ms)─▶ APEX 6 Pro
                                   runner.rs：一次行驶（窗口与命令行共用）
                                   gamewatch.rs：游戏运行检测       plugin_install.rs：插件检测与安装
                                   updater.rs：GitHub 发布检查与自动更新
-                                  i18n.rs + rust\locales, rust\lang：界面语言     rust\ui\*.slint + bin\app\：窗口、提示
+                                  i18n.rs + resources\locales, resources\lang：界面语言     ui\*.slint + bin\app\：窗口、提示
                                   blocklog.rs, replay.rs：调试记录与重新运行     errorlog.rs：意外错误记录
                                   preview.rs：各效果的 ▶ 测试     calibrate.rs：电机校准
 ```

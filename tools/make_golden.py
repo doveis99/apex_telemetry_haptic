@@ -1,13 +1,13 @@
 """Record what the Python synth makes of known drives, for the Rust port to match sample by sample.
 
-  .venv\\Scripts\\python.exe rust\\golden\\make_golden.py            every run below
-  .venv\\Scripts\\python.exe rust\\golden\\make_golden.py sim60      only runs whose name starts so
+  .venv\\Scripts\\python.exe tools\\make_golden.py            every run below
+  .venv\\Scripts\\python.exe tools\\make_golden.py sim60      only runs whose name starts so
 
-Writes rust/golden-data/<run>.jsonl (gitignored): a header line with the settings, the
+Writes tests/golden-data/<run>.jsonl (gitignored): a header line with the settings, the
 global random seed and, for the scripted drive, the clock it was read at; then one line
 per 8 ms block with the telemetry frame the synth was given ("f": 1 when it equals the
 block before's), the three channels as floats, the route, the trigger side, the events and
-a few internals to find where a difference starts. The Rust test (rust/tests/parity.rs)
+a few internals to find where a difference starts. The Rust test (tests/parity.rs)
 feeds the same frames to its synth and compares.
 
 Debug logs (blocks-*.csv beside a .json) under %APPDATA%\\ATSHaptics\\logs give real drives:
@@ -29,8 +29,8 @@ import sys
 from dataclasses import asdict, replace
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "python"))
 
 import i18n  # noqa: E402
 from apex6 import FRAME_PERIOD  # noqa: E402
@@ -40,7 +40,7 @@ from replay import LogReader, replay, settings_of  # noqa: E402
 from scenarios import SCENARIOS, ScenarioTelemetry  # noqa: E402
 from telemetry import Frame, SimulatedTelemetry  # noqa: E402
 
-OUT = ROOT / "rust" / "golden-data"
+OUT = ROOT / "tests" / "golden-data"
 SEED = 20261108  # the global random module's, which NoiseBurst draws its seeds from
 LOGS = 4
 OLD_LOGS = 2  # logs from before 0.16.0, which the reader fills in differently

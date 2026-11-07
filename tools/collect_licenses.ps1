@@ -2,10 +2,10 @@
 # text file for the release zip: the Rust crates they link and the telemetry plugin
 # DLL that ATSHaptics.exe embeds.
 #
-#   powershell -ExecutionPolicy Bypass -File rust\tools\collect_licenses.ps1 OUT.txt VERSION
+#   powershell -ExecutionPolicy Bypass -File tools\collect_licenses.ps1 OUT.txt VERSION
 #
 # The crates are cargo tree's normal (not build or proc-macro) dependencies on Windows,
-# as rust\Cargo.lock pins them; the texts come from each crate's package in cargo's
+# as Cargo.lock pins them; the texts come from each crate's package in cargo's
 # registry, so run it after a build has fetched them. A text shared by several crates
 # is written once, under all their names.
 
@@ -15,13 +15,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$rust = Split-Path $PSScriptRoot
-$repo = Split-Path $rust
+$repo = Split-Path $PSScriptRoot
 
 $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE ".cargo" }
 $registries = @(Get-ChildItem (Join-Path $cargoHome "registry\src") -Directory | ForEach-Object { $_.FullName })
 
-$tree = cargo tree --manifest-path (Join-Path $rust "Cargo.toml") -e "normal,no-proc-macro" `
+$tree = cargo tree --manifest-path (Join-Path $repo "Cargo.toml") -e "normal,no-proc-macro" `
     --target x86_64-pc-windows-msvc --prefix none --format "{p}|{l}|{r}"
 if ($LASTEXITCODE) { throw "cargo tree failed" }
 
@@ -45,7 +44,7 @@ function Add-Text([string]$Path, [string]$From) {
     [void]$texts[$text].Add($From)
 }
 
-Add-Text (Join-Path $repo "third_party\scs-sdk-plugin\LICENSE") "scs-sdk-plugin V.1.12.1, scs-telemetry.dll (LICENSE)"
+Add-Text (Join-Path $repo "resources\scs-sdk-plugin\LICENSE") "scs-sdk-plugin V.1.12.1, scs-telemetry.dll (LICENSE)"
 
 foreach ($crate in $crates) {
     $dir = $registries | ForEach-Object { Join-Path $_ "$($crate.Name)-$($crate.Version)" } |

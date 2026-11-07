@@ -19,8 +19,8 @@ pub const PLUGIN_FILE: &str = "scs-telemetry.dll";
 const PROVIDERS: [(&str, &str); 3] =
     [("SCSTelemetry", "RenCloud"), ("TruckDashTelemetry", "TruckDash"), ("SHSCSTelemetry", "SimHub")];
 const COMPATIBLE: [&str; 2] = ["RenCloud", "TruckDash"];
-/// The unmodified Win64 build from RenCloud's release V.1.12.1 (third_party/scs-sdk-plugin).
-pub const BUNDLED_PLUGIN: &[u8] = include_bytes!("../../third_party/scs-sdk-plugin/scs-telemetry.dll");
+/// The unmodified Win64 build from RenCloud's release V.1.12.1 (resources/scs-sdk-plugin).
+pub const BUNDLED_PLUGIN: &[u8] = include_bytes!("../resources/scs-sdk-plugin/scs-telemetry.dll");
 
 #[derive(Clone, Debug)]
 pub struct GameInstall {

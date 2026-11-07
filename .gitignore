@@ -9,6 +9,6 @@ config.json
 # extracted ATS sound mods, reference only: never commit or redistribute
 sound sample/
 
-# Rust port: build output and the golden data make_golden.py records from the Python synth
-rust/target/
-rust/golden-data/
+# cargo's build output, and the golden data tools/make_golden.py records from the Python synth
+target/
+tests/golden-data/

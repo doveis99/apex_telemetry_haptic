@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "python"))
 try:
     import hid  # noqa: F401
 except ImportError:  # only the pad needs it; the synth's constants live in the same module

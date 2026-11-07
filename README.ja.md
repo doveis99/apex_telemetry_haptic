@@ -269,50 +269,50 @@ Steam ライブラリでゲームの **プロパティ → 一般 → 起動オ�
 
 ## ソースから実行とビルド
 
-配布しているプログラムは `rust\` の Rust コードからビルドします。[Rust](https://rustup.rs)（stable、MSVC ツールチェーン）が必要です。
+配布しているプログラムはリポジトリ直下の Rust コード（`Cargo.toml`、`src\`、`ui\`）からビルドします。[Rust](https://rustup.rs)（stable、MSVC ツールチェーン）が必要です。
 
 ```powershell
-cd rust
 cargo run --release --bin ATSHaptics                        # ウィンドウ
 cargo run --release --bin ats_haptics -- --monitor          # コマンドライン: --simulate, --scenario highway|city|mountain, --replay <記録.csv>, --exit-with-game, エフェクトごとの強さ
 cargo run --release --bin replay -- <記録.csv> --knocks 0.5  # デバッグ記録を今の合成器でもう一度流し、記録と比べる
 cargo test                                                  # Python 実装とビット単位で同じか（下記）、ウィンドウの描画、翻訳
-cd ..
 powershell -ExecutionPolicy Bypass -File build.ps1          # dist\ATSHaptics-<バージョン>.zip（ソースとライセンス同梱）
 ```
 
-バージョンは `rust\Cargo.toml` の `version` 1 か所だけにあります。実行ファイル、配布 zip の名前、Python の `version.py` はすべてここから読みます。
+バージョンは `Cargo.toml` の `version` 1 か所だけにあります。実行ファイル、配布 zip の名前、Python の `version.py` はすべてここから読みます。
 
-リポジトリ直下の Python ファイルは 0.19.0 まで配布していた実装です。Rust 版が同じ振動を出すかを比べる基準として残しており、パッドの診断ツール（`tone.py`）は Python にだけあります。
+`python\` の Python ファイルは 0.19.0 まで配布していた実装です。Rust 版が同じ振動を出すかを比べる基準として残しており、パッドの診断ツール（`tone.py`）は Python にだけあります。
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\pythonw.exe app.py                    # ウィンドウ（または start_gui.cmd）
-.\.venv\Scripts\python.exe ats_haptics.py --monitor   # コマンドライン（Rust と同じオプション）
-.\.venv\Scripts\python.exe tone.py probe              # 診断: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound | strength
-.\.venv\Scripts\python.exe tone.py trigger-side       # トリガーが左右を切り替えて鳴るかのブラインドチェック（パッドのボタンで答える）、結果は logs\trigger-side-*.txt
-.\.venv\Scripts\python.exe tone.py calibrate          # ウィンドウのモーター補正と同じ測定（コンソール）、--reset で消去
-.\.venv\Scripts\python.exe tone.py pad-sound --record "<入力デバイス>"  # パッドが出す音をマイクで録音（サイン 16 個 × 強さ 5 段階、タップ）、sound sample\pad-sound\ に保存
-.\.venv\Scripts\python.exe tone.py strength           # 20% より強いグリップ振動が手に強く感じられるかのブラインドチェック（パッドのボタンで答える）、結果は logs\strength-*.txt
-python tools\pad_sound_analyze.py <録音.wav>         # その録音を分析。tools\synth_bands.py: 合成出力の帯域ごとの割合と強さ（tools\requirements.txt）
-.\.venv\Scripts\python.exe rust\golden\make_golden.py  # cargo test が比べる基準データを rust\golden-data\ に作る（約 460 MB）
-.\.venv\Scripts\python.exe i18n.py                  # 翻訳チェック: 抜け、未使用、{プレースホルダー} の不一致
-.\.venv\Scripts\python.exe -m unittest              # Python の回帰テスト（tests\）
+.\.venv\Scripts\python.exe -m pip install -r python\requirements.txt
+.\.venv\Scripts\pythonw.exe python\app.py                   # ウィンドウ（または python\start_gui.cmd）
+.\.venv\Scripts\python.exe python\ats_haptics.py --monitor  # コマンドライン（Rust と同じオプション）
+.\.venv\Scripts\python.exe python\tone.py probe             # 診断: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound | strength
+.\.venv\Scripts\python.exe python\tone.py trigger-side      # トリガーが左右を切り替えて鳴るかのブラインドチェック（パッドのボタンで答える）、結果は logs\trigger-side-*.txt
+.\.venv\Scripts\python.exe python\tone.py calibrate         # ウィンドウのモーター補正と同じ測定（コンソール）、--reset で消去
+.\.venv\Scripts\python.exe python\tone.py pad-sound --record "<入力デバイス>"  # パッドが出す音をマイクで録音（サイン 16 個 × 強さ 5 段階、タップ）、sound sample\pad-sound\ に保存
+.\.venv\Scripts\python.exe python\tone.py strength          # 20% より強いグリップ振動が手に強く感じられるかのブラインドチェック（パッドのボタンで答える）、結果は logs\strength-*.txt
+python tools\pad_sound_analyze.py <録音.wav>                # その録音を分析。tools\synth_bands.py: 合成出力の帯域ごとの割合と強さ（tools\requirements.txt）
+.\.venv\Scripts\python.exe tools\make_golden.py             # cargo test が比べる基準データを tests\golden-data\ に作る（約 460 MB）
+.\.venv\Scripts\python.exe python\i18n.py                   # 翻訳チェック: 抜け、未使用、{プレースホルダー} の不一致
+.\.venv\Scripts\python.exe -m unittest discover python      # Python の回帰テスト（python\tests\）
 ```
 
-画面の文言は韓国語の原文がそのままキーになっています（コードでは `t("정지됨")`、`.slint` では `@tr("정지됨")`）。翻訳の元は `locales\<言語>.py` の `MESSAGES` で、翻訳がなければ英語、その次に韓国語で表示されます。文言を変えたり追加したりしたら、`i18n.py` ですべての言語の表に反映されているか確認し、`rust\tools\export_locales.py`（翻訳表）と `rust\tools\export_gui_texts.py`（スライダーの行、ツールチップ、メニュー）で Rust 側の表を作り直してください。
+画面の文言は韓国語の原文がそのままキーになっています（コードでは `t("정지됨")`、`.slint` では `@tr("정지됨")`）。翻訳の元は `python\locales\<言語>.py` の `MESSAGES` で、翻訳がなければ英語、その次に韓国語で表示されます。文言を変えたり追加したりしたら、`python\i18n.py` ですべての言語の表に反映されているか確認し、`tools\export_locales.py`（翻訳表）と `tools\export_gui_texts.py`（スライダーの行、ツールチップ、メニュー）で Rust 側の表を作り直してください。
 
-自分でビルドしたものの Steam 起動オプション: `"<repo>\rust\target\release\ATSHaptics.exe" --launch %command%`
+自分でビルドしたものの Steam 起動オプション: `"<repo>\target\release\ATSHaptics.exe" --launch %command%`
 
-構成（`.rs` ファイルはすべて `rust\src\` にあり、多くは同じ名前の Python ファイルと対になっています）:
+フォルダー: `src\` と `ui\` は Rust アプリ、`resources\` は実行ファイルに入る翻訳表とテレメトリープラグイン DLL、`python\` は Python 実装、`tools\` は開発ツール（翻訳表と比較データの生成、ライセンスの収集、録音の分析）、`docs\` はスクリーンショットとメモ（`docs\rust-port.md`: Rust 移植の記録、韓国語）です。
+
+構成（`.rs` ファイルはすべて `src\` にあり、多くは同じ名前の Python ファイルと対になっています）:
 
 ```
 ATS ─(scs-telemetry 共有メモリ)─▶ telemetry.rs ─▶ effects.rs (1 kHz 合成) ─▶ apex6.rs ─(HID 0x57, 8 ms)─▶ APEX 6 Pro
                                     runner.rs: 走行（ウィンドウとコマンドラインが共用）
                                     gamewatch.rs: ゲーム起動の検出     plugin_install.rs: プラグインの検出・インストール
                                     updater.rs: GitHub リリースの確認と自動アップデート
-                                    i18n.rs + rust\locales, rust\lang: 画面の言語     rust\ui\*.slint + bin\app\: ウィンドウ、ツールチップ
+                                    i18n.rs + resources\locales, resources\lang: 画面の言語     ui\*.slint + bin\app\: ウィンドウ、ツールチップ
                                     blocklog.rs, replay.rs: デバッグ記録と再実行     errorlog.rs: 予期しないエラーの記録
                                     preview.rs: エフェクトごとの ▶ テスト   calibrate.rs: モーター補正
 ```

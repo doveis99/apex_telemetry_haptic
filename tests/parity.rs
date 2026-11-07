@@ -1,15 +1,15 @@
 //! The Rust synth against the Python one, sample by sample.
 //!
-//! rust/golden/make_golden.py records what effects.py makes of known drives (the scripted
+//! tools/make_golden.py records what effects.py makes of known drives (the scripted
 //! drive at three frame rates and three settings, the scenarios, slices of real debug logs)
-//! into rust/golden-data/*.jsonl. This feeds the same frames to the Rust synth and requires
+//! into tests/golden-data/*.jsonl. This feeds the same frames to the Rust synth and requires
 //! every output sample to be the same float, bit for bit, along with the route, the trigger
 //! side, the events and the steady-fade and ducking state. The frame sources (the scripted
 //! drive, the scenarios, the debug log reader), the debug log's rows and the replay tool's
 //! summary are held to the Python ones too. Without the data it says so and passes;
 //! generate it with
 //!
-//!   .venv\Scripts\python.exe rust\golden\make_golden.py
+//!   .venv\Scripts\python.exe tools\make_golden.py
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -62,7 +62,7 @@ struct Row {
 }
 
 fn golden_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("golden-data")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden-data")
 }
 
 fn golden_files() -> Vec<PathBuf> {
@@ -178,7 +178,7 @@ fn check(path: &Path) -> Report {
 fn synth_matches_python_sample_for_sample() {
     let files = golden_files();
     if files.is_empty() {
-        eprintln!("no golden data in {}: run rust/golden/make_golden.py first", golden_dir().display());
+        eprintln!("no golden data in {}: run tools/make_golden.py first", golden_dir().display());
         return;
     }
     let reports: Vec<Report> =
@@ -329,7 +329,7 @@ fn block_log_matches_python_row_for_row() {
     }
     let _ = std::fs::remove_dir_all(&dir);
     if checked == 0 {
-        eprintln!("no golden block logs: run rust/golden/make_golden.py first");
+        eprintln!("no golden block logs: run tools/make_golden.py first");
     }
 }
 

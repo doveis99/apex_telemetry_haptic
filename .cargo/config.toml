@@ -5,7 +5,7 @@
 # relies on. This is Microsoft's "hybrid" linking: static CRT, then the UCRT import library in
 # place of the static one.
 #
-# Cargo reads this file only when it runs from rust\ or below (build.ps1 does).
+# Cargo reads this file whenever it runs inside the repository.
 [target.x86_64-pc-windows-msvc]
 rustflags = [
     "-C", "target-feature=+crt-static",

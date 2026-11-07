@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import re
 import shutil
-import sys
 import winreg
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,12 +25,12 @@ COMPATIBLE = {"RenCloud", "TruckDash"}
 
 
 def resource_dir() -> Path:
-    """Folder holding bundled files, both from source and in the PyInstaller build."""
-    return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    """The repository's resources folder: the plugin DLL the Rust build embeds."""
+    return Path(__file__).resolve().parent.parent / "resources"
 
 
 def bundled_plugin() -> Path:
-    return resource_dir() / "third_party" / "scs-sdk-plugin" / PLUGIN_FILE
+    return resource_dir() / "scs-sdk-plugin" / PLUGIN_FILE
 
 
 @dataclass

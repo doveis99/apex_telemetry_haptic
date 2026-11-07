@@ -1,6 +1,6 @@
 //! UI language (port of i18n.py): the Korean text in the code is the message key, looked up
 //! in per-language tables. A missing translation falls back to English, then to the Korean
-//! key. The tables are locales/*.py exported by rust/tools/export_locales.py and embedded.
+//! key. The tables are python/locales/*.py exported by tools/export_locales.py and embedded.
 
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
@@ -20,15 +20,15 @@ pub const LANGUAGES: [(&str, &str); 10] = [
 ];
 
 const TABLES: [(&str, &str); 9] = [
-    ("en", include_str!("../locales/en.json")),
-    ("ja", include_str!("../locales/ja.json")),
-    ("zh", include_str!("../locales/zh.json")),
-    ("de", include_str!("../locales/de.json")),
-    ("fr", include_str!("../locales/fr.json")),
-    ("es", include_str!("../locales/es.json")),
-    ("pt", include_str!("../locales/pt.json")),
-    ("pl", include_str!("../locales/pl.json")),
-    ("ru", include_str!("../locales/ru.json")),
+    ("en", include_str!("../resources/locales/en.json")),
+    ("ja", include_str!("../resources/locales/ja.json")),
+    ("zh", include_str!("../resources/locales/zh.json")),
+    ("de", include_str!("../resources/locales/de.json")),
+    ("fr", include_str!("../resources/locales/fr.json")),
+    ("es", include_str!("../resources/locales/es.json")),
+    ("pt", include_str!("../resources/locales/pt.json")),
+    ("pl", include_str!("../resources/locales/pl.json")),
+    ("ru", include_str!("../resources/locales/ru.json")),
 ];
 
 /// Windows primary language id -> code

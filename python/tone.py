@@ -1116,7 +1116,7 @@ def sound_renderer(plan: list[dict], target: str, tap_amp_percent: float):
 
 
 # Recordings go next to the code, in the git-ignored sample folder, not to the log folder.
-SOUND_OUT = Path(__file__).with_name("sound sample") / "pad-sound"
+SOUND_OUT = Path(__file__).resolve().parent.parent / "sound sample" / "pad-sound"
 RECORD_SETTLE_S = 1.0  # ffmpeg takes a moment to open the input
 RECORD_TAIL_S = 1.0
 

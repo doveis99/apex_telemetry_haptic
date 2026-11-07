@@ -3,14 +3,14 @@
 ATS Haptics is licensed under the GNU General Public License v3.0 or later (see `LICENSE`).
 It includes or is derived from the following works. The release zip also carries
 `THIRD_PARTY_LICENSES.txt`: every Rust crate compiled into the executables, with its version,
-declared license and license texts, as `rust/tools/collect_licenses.ps1` collects them from
-`rust/Cargo.lock` when `build.ps1` packs a release.
+declared license and license texts, as `tools/collect_licenses.ps1` collects them from
+`Cargo.lock` when `build.ps1` packs a release.
 
 ## ApexSenseBridge — GPL-3.0-or-later
 
 <https://github.com/ReynArts/ApexSenseBridge>
 
-The APEX 6 Pro HID protocol in `rust/src/apex6.rs` and `apex6.py` (motor enable `0x53`,
+The APEX 6 Pro HID protocol in `src/apex6.rs` and `python/apex6.py` (motor enable `0x53`,
 realtime motor `0x57`, packet layout, checksum and init sequence) was ported from
 ApexSenseBridge's `src/flydigi/Apex6Protocol.cpp`, `src/flydigi/Apex5Device.cpp` and
 `src/dualsense/Apex6HapticBridge.cpp`. ApexSenseBridge is distributed under the GNU General
@@ -20,20 +20,20 @@ Public License v3.0 or later.
 
 <https://github.com/RenCloud/scs-sdk-plugin>
 
-`third_party/scs-sdk-plugin/scs-telemetry.dll` is the unmodified Win64 build from release
+`resources/scs-sdk-plugin/scs-telemetry.dll` is the unmodified Win64 build from release
 V.1.12.1 (`release_v_1_12_1.zip`, SHA-256
 `3679ec81407de0ebfb45241e496e2ad31e30a6e409ef0246fc86195bfee9c9a5`; DLL SHA-256
 `1d03dbc7a975e72203c60a7b9998021ceb8800b836bf28a131279979ad386cd4`). `ATSHaptics.exe` carries
 it inside and copies it into the game's `plugins` folder from its plugin window. The
-shared-memory layout read by `rust/src/telemetry.rs` and `telemetry.py` follows that plugin's
+shared-memory layout read by `src/telemetry.rs` and `python/telemetry.py` follows that plugin's
 `scs-telemetry-common.hpp` (revision 12). Its MIT license is in
-`third_party/scs-sdk-plugin/LICENSE` and in `THIRD_PARTY_LICENSES.txt`.
+`resources/scs-sdk-plugin/LICENSE` and in `THIRD_PARTY_LICENSES.txt`.
 
 ## truck-telemetry — layout reference
 
 <https://pypi.org/project/truck-telemetry/>
 
-Field offsets in `telemetry.py`, and from there `rust/src/telemetry.rs`, were computed from this
+Field offsets in `python/telemetry.py`, and from there `src/telemetry.rs`, were computed from this
 package's revision 12 structure definitions. No code from the package is included.
 
 ## Slint — used under GPL-3.0-only (also offered under the Slint Royalty-free and Software licenses)
@@ -72,8 +72,8 @@ texts.
 
 ## The Python implementation — not in the release executables
 
-The Python files at the top of the repository are the program as released up to 0.19.0, kept as
-the reference the Rust port is tested against (`rust/tests/parity.rs`). Run from source they use
+The Python files in `python/` are the program as released up to 0.19.0, kept as
+the reference the Rust port is tested against (`tests/parity.rs`). Run from source they use
 cython-hidapi (<https://github.com/trezor/cython-hidapi>, used under GPL-3.0) and CPython with
 Tcl/Tk. Releases up to 0.19.0 bundled those with PyInstaller (bootloader under GPL-2.0 with the
-bootloader exception); releases built from `rust/` contain none of them.
+bootloader exception); releases built from the Rust code contain none of them.

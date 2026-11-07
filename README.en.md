@@ -269,50 +269,50 @@ When the window opens it checks GitHub for the latest release. If there is a new
 
 ## Running from source and building
 
-The released program is built from the Rust code in `rust\`. It needs [Rust](https://rustup.rs) (stable, MSVC toolchain).
+The released program is built from the Rust code at the top of the repository (`Cargo.toml`, `src\`, `ui\`). It needs [Rust](https://rustup.rs) (stable, MSVC toolchain).
 
 ```powershell
-cd rust
 cargo run --release --bin ATSHaptics                        # window
 cargo run --release --bin ats_haptics -- --monitor          # command line: --simulate, --scenario highway|city|mountain, --replay <log.csv>, --exit-with-game, per-effect levels
 cargo run --release --bin replay -- <log.csv> --knocks 0.5  # run a debug log through today's synth and compare it with what was logged
 cargo test                                                  # bit-for-bit comparison with the Python implementation (below), window drawing, translations
-cd ..
 powershell -ExecutionPolicy Bypass -File build.ps1          # dist\ATSHaptics-<version>.zip (source and licenses included)
 ```
 
-The version is kept in one place, `version` in `rust\Cargo.toml`. The executables, the zip's name and the Python `version.py` all read it from there.
+The version is kept in one place, `version` in `Cargo.toml`. The executables, the zip's name and the Python `version.py` all read it from there.
 
-The Python files at the top of the repository are the implementation released up to 0.19.0. They stay as the reference the Rust version is checked against, and the pad diagnostics (`tone.py`) exist only there.
+The Python files in `python\` are the implementation released up to 0.19.0. They stay as the reference the Rust version is checked against, and the pad diagnostics (`tone.py`) exist only there.
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\pythonw.exe app.py                    # window (or start_gui.cmd)
-.\.venv\Scripts\python.exe ats_haptics.py --monitor   # command line, same options as the Rust one
-.\.venv\Scripts\python.exe tone.py probe              # diagnostics: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound | strength
-.\.venv\Scripts\python.exe tone.py trigger-side       # blind check that the trigger follows its side (answered on the pad), results in logs\trigger-side-*.txt
-.\.venv\Scripts\python.exe tone.py calibrate          # the window's motor calibration in a console, --reset clears it
-.\.venv\Scripts\python.exe tone.py pad-sound --record "<input>"  # record the sound the pad makes with a microphone (16 sines at 5 strengths, taps) to sound sample\pad-sound\
-.\.venv\Scripts\python.exe tone.py strength           # blind check whether grip vibration past 20% feels stronger or only rougher (answered on the pad), results in logs\strength-*.txt
-python tools\pad_sound_analyze.py <recording.wav>    # analyse that recording; tools\synth_bands.py: the synth output's bands and strength (tools\requirements.txt)
-.\.venv\Scripts\python.exe rust\golden\make_golden.py  # the reference data cargo test compares against, into rust\golden-data\ (about 460 MB)
-.\.venv\Scripts\python.exe i18n.py                  # translation check: missing, unused or {placeholder}-mismatched strings
-.\.venv\Scripts\python.exe -m unittest              # Python regression tests (tests\)
+.\.venv\Scripts\python.exe -m pip install -r python\requirements.txt
+.\.venv\Scripts\pythonw.exe python\app.py                   # window (or python\start_gui.cmd)
+.\.venv\Scripts\python.exe python\ats_haptics.py --monitor  # command line, same options as the Rust one
+.\.venv\Scripts\python.exe python\tone.py probe             # diagnostics: probe | tone | sweep | walk | route-test | diag | split | trigger-side | calibrate | pad-sound | strength
+.\.venv\Scripts\python.exe python\tone.py trigger-side      # blind check that the trigger follows its side (answered on the pad), results in logs\trigger-side-*.txt
+.\.venv\Scripts\python.exe python\tone.py calibrate         # the window's motor calibration in a console, --reset clears it
+.\.venv\Scripts\python.exe python\tone.py pad-sound --record "<input>"  # record the sound the pad makes with a microphone (16 sines at 5 strengths, taps) to sound sample\pad-sound\
+.\.venv\Scripts\python.exe python\tone.py strength          # blind check whether grip vibration past 20% feels stronger or only rougher (answered on the pad), results in logs\strength-*.txt
+python tools\pad_sound_analyze.py <recording.wav>           # analyse that recording; tools\synth_bands.py: the synth output's bands and strength (tools\requirements.txt)
+.\.venv\Scripts\python.exe tools\make_golden.py             # the reference data cargo test compares against, into tests\golden-data\ (about 460 MB)
+.\.venv\Scripts\python.exe python\i18n.py                   # translation check: missing, unused or {placeholder}-mismatched strings
+.\.venv\Scripts\python.exe -m unittest discover python      # Python regression tests (python\tests\)
 ```
 
-Interface strings use the Korean source text as the key (`t("정지됨")` in code, `@tr("정지됨")` in `.slint`). The translations are kept in `MESSAGES` in `locales\<language>.py`; a missing translation falls back to English, then Korean. After changing or adding a string, run `i18n.py` to check that every language table has it, then regenerate the Rust tables with `rust\tools\export_locales.py` (translations) and `rust\tools\export_gui_texts.py` (slider rows, tooltips, menus).
+Interface strings use the Korean source text as the key (`t("정지됨")` in code, `@tr("정지됨")` in `.slint`). The translations are kept in `MESSAGES` in `python\locales\<language>.py`; a missing translation falls back to English, then Korean. After changing or adding a string, run `python\i18n.py` to check that every language table has it, then regenerate the Rust tables with `tools\export_locales.py` (translations) and `tools\export_gui_texts.py` (slider rows, tooltips, menus).
 
-Steam launch option for your own build: `"<repo>\rust\target\release\ATSHaptics.exe" --launch %command%`
+Steam launch option for your own build: `"<repo>\target\release\ATSHaptics.exe" --launch %command%`
 
-Structure (the `.rs` files are all in `rust\src\`; most pair with the Python file of the same name):
+Folders: `src\` and `ui\` hold the Rust app; `resources\` what the executable embeds (the translation tables and the telemetry plugin DLL); `python\` the Python implementation; `tools\` development tools (regenerating the translation tables and the reference data, collecting licenses, analysing recordings); `docs\` screenshots and notes (`docs\rust-port.md`: notes on the move to Rust, in Korean).
+
+Structure (the `.rs` files are all in `src\`; most pair with the Python file of the same name):
 
 ```
 ATS ─(scs-telemetry shared memory)─▶ telemetry.rs ─▶ effects.rs (1 kHz synthesis) ─▶ apex6.rs ─(HID 0x57, 8 ms)─▶ APEX 6 Pro
                                        runner.rs: a drive, for the window and the command line
                                        gamewatch.rs: game detection     plugin_install.rs: plugin detection/install
                                        updater.rs: GitHub release check and self-update
-                                       i18n.rs + rust\locales, rust\lang: interface languages    rust\ui\*.slint + bin\app\: window, tooltips
+                                       i18n.rs + resources\locales, resources\lang: interface languages    ui\*.slint + bin\app\: window, tooltips
                                        blocklog.rs, replay.rs: debug log and replays    errorlog.rs: unexpected error log
                                        preview.rs: each effect's ▶ test   calibrate.rs: motor calibration
 ```

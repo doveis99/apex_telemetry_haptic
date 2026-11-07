@@ -8,23 +8,22 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-# The version is kept in rust\Cargo.toml alone; the programs read it at compile time.
-$version = (Select-String -Path rust\Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' |
+# The version is kept in Cargo.toml alone; the programs read it at compile time.
+$version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' |
     Select-Object -First 1).Matches[0].Groups[1].Value
 
-# from rust\, where cargo finds .cargo\config.toml (the VC runtime linked in)
-Push-Location rust
-try { cargo build --release } finally { Pop-Location }
+# inside the repository, where cargo finds .cargo\config.toml (the VC runtime linked in)
+cargo build --release
 if ($LASTEXITCODE) { throw "cargo build failed" }
 
 Remove-Item dist -Recurse -Force -ErrorAction SilentlyContinue
 $out = "dist\ATSHaptics"
 New-Item -ItemType Directory $out | Out-Null
 # the window, the command line and the debug-log summary; the plugin DLL is inside ATSHaptics.exe
-Copy-Item rust\target\release\ATSHaptics.exe, rust\target\release\ats_haptics.exe, rust\target\release\replay.exe $out
+Copy-Item target\release\ATSHaptics.exe, target\release\ats_haptics.exe, target\release\replay.exe $out
 Copy-Item README.md, README.en.md, README.ja.md, README.zh.md, LICENSE, THIRD_PARTY_NOTICES.md $out
 Copy-Item docs -Destination $out -Recurse  # screenshots the READMEs show
-& powershell -NoProfile -ExecutionPolicy Bypass -File rust\tools\collect_licenses.ps1 `
+& powershell -NoProfile -ExecutionPolicy Bypass -File tools\collect_licenses.ps1 `
     (Join-Path $out "THIRD_PARTY_LICENSES.txt") $version
 if ($LASTEXITCODE) { throw "collecting the license texts failed" }
 
@@ -45,7 +44,7 @@ Set-Content -Encoding ASCII (Join-Path $internal "README.txt") @(
 # Tracked and new (not ignored) files: what the repository would contain.
 $src = Join-Path $out "source"
 git ls-files --cached --others --exclude-standard |
-    Where-Object { $_ -notmatch '^rust/(target|golden-data)/' -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+    Where-Object { $_ -notmatch '^(target|tests/golden-data)/' -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
     ForEach-Object {
         $dest = Join-Path $src $_
         New-Item -ItemType Directory -Path (Split-Path $dest) -Force | Out-Null

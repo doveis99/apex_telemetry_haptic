@@ -12,12 +12,19 @@ feeds the same frames to its synth and compares.
 
 Debug logs (blocks-*.csv beside a .json) under %APPDATA%\\ATSHaptics\\logs give real drives:
 the first LOG_BLOCKS rows of the newest LOGS of them, with the settings they were recorded with.
+
+Also, for the debug log and the replay tool:
+  <run>.blocks.csv/.json    the runs in BLOCKLOG_RUNS written through blocklog.BlockLog as well
+  replay_<log>.json         replay.py's summary of each log's first LOG_BLOCKS rows, knocks of 0.5 listed
 """
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import random
+import shutil
 import sys
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -27,16 +34,18 @@ sys.path.insert(0, str(ROOT))
 
 import i18n  # noqa: E402
 from apex6 import FRAME_PERIOD  # noqa: E402
-from blocklog import LOG_DIR  # noqa: E402
+from blocklog import LOG_DIR, BlockLog  # noqa: E402
 from effects import DEFAULT_ROUTES, Equalizer, Gains, Synth, effective_gains  # noqa: E402
-from replay import LogReader, settings_of  # noqa: E402
+from replay import LogReader, replay, settings_of  # noqa: E402
 from scenarios import SCENARIOS, ScenarioTelemetry  # noqa: E402
 from telemetry import Frame, SimulatedTelemetry  # noqa: E402
 
 OUT = ROOT / "rust" / "golden-data"
 SEED = 20261108  # the global random module's, which NoiseBurst draws its seeds from
 LOGS = 4
+OLD_LOGS = 2  # logs from before 0.16.0, which the reader fills in differently
 LOG_BLOCKS = 30_000  # 4 minutes of each
+BLOCKLOG_RUNS = ("sim60_default", "sim60_variants", "scenario_city", "log_")  # "log_": the newest log only
 
 
 class Clock:
@@ -57,13 +66,20 @@ def frame_dict(frame: Frame | None):
     return data
 
 
-def write_run(name: str, frames, gains: Gains, eq: Equalizer, extra: dict | None = None) -> None:
+def write_run(name: str, frames, gains: Gains, eq: Equalizer, extra: dict | None = None,
+              blocklog: bool = False) -> None:
     """frames yields (frame or None); each one is rendered as one block."""
     gains = effective_gains(gains)
     random.seed(SEED)
     synth = Synth(gains, eq)
     path = OUT / f"{name}.jsonl"
     blocks = 0
+    log = None
+    if blocklog:
+        folder = OUT / f"_blocklog_{name}"
+        shutil.rmtree(folder, ignore_errors=True)
+        log = BlockLog(folder, info={"version": "golden", "source": name, "gains": asdict(gains),
+                                     "eq_curves": eq.curves})
     with path.open("w", encoding="utf-8", newline="\n") as out:
         header = {"name": name, "seed": SEED, "gains": asdict(gains), "eq_curves": eq.curves, **(extra or {})}
         out.write(json.dumps(header, ensure_ascii=False, allow_nan=False) + "\n")
@@ -83,9 +99,39 @@ def write_run(name: str, frames, gains: Gains, eq: Equalizer, extra: dict | None
                 "dk": list(synth.duck),
             }
             out.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n")
+            if log is not None:
+                log.add(block, frame, list(lv.events), synth)
             previous = frame
             blocks += 1
-    print(f"{name}: {blocks} blocks -> {path.relative_to(ROOT)}")
+    if log is not None:
+        log.close()
+        shutil.move(log.path, OUT / f"{name}.blocks.csv")
+        shutil.move(log.path.with_suffix(".json"), OUT / f"{name}.blocks.json")
+        shutil.rmtree(log.path.parent)
+    print(f"{name}: {blocks} blocks -> {path.relative_to(ROOT)}" + (" (+ block log)" if log else ""))
+
+
+def write_replay(log: Path) -> None:
+    """replay.py's summary of the log's first LOG_BLOCKS rows, as its command line prints it."""
+    end = None
+    for n, (clock, _, _) in enumerate(LogReader(log).rows()):
+        end = clock
+        if n + 1 >= LOG_BLOCKS:
+            break
+    gains, eq, version = settings_of(log)
+    random.seed(SEED)
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        logged, replayed, blocks = replay(log, gains, eq, None, end, 0.5)
+    minutes, seconds = divmod(round(blocks * 0.008), 60)
+    lines = printed.getvalue().splitlines() + [
+        f"{log.name}: {blocks} blocks, {minutes}:{seconds:02d}, recorded with {version}; settings from the log",
+        "       knocks pulses strong fade-up   grip p50/p99  trig p50/p99  limited",
+        logged.line("log"), replayed.line("replay")]
+    path = OUT / f"replay_{log.stem}.json"
+    path.write_text(json.dumps({"log_path": str(log), "end": end, "seed": SEED, "knocks": 0.5, "lines": lines},
+                               ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"replay {log.name}: {blocks} blocks to {end} -> {path.relative_to(ROOT)}")
 
 
 def scripted(source_factory, seconds: float):
@@ -120,7 +166,16 @@ def runs():
                                                                               sec),
                Gains(), default_eq, {"scenario": name, "seconds": seconds})
     logs = sorted(LOG_DIR.glob("blocks-*.csv"), reverse=True)
-    for log in [log for log in logs if log.with_suffix(".json").exists()][:LOGS]:
+
+    def columns(log: Path) -> str:
+        with log.open(encoding="utf-8") as file:
+            return file.readline()
+
+    # before 0.16.0 the frame columns are missing and the reader fills them in; older still
+    # (no new_frame) replay.py cannot read at all
+    old = [log for log in logs if "new_frame" in columns(log) and "render_us" not in columns(log)]
+    full = [log for log in logs if "render_us" in columns(log) and log.with_suffix(".json").exists()]
+    for log in full[:LOGS] + old[:OLD_LOGS]:
         gains, eq, _ = settings_of(log)
 
         def rows(log=log):
@@ -129,17 +184,22 @@ def runs():
                     return
                 yield frame
 
-        yield (f"log_{log.stem}", rows, gains, eq, {"log": log.name})
+        yield (f"log_{log.stem}", rows, gains, eq, {"log": log.name, "log_path": str(log)})
 
 
 def main() -> None:
     i18n.set_language("ko")  # events in the source language, as the Rust port writes them for now
     OUT.mkdir(parents=True, exist_ok=True)
     wanted = sys.argv[1:]
+    logged_once = False
     for name, frames, gains, eq, extra in runs():
         if wanted and not any(name.startswith(w) for w in wanted):
             continue
-        write_run(name, frames(), replace(gains), eq, extra)
+        blocklog = name in BLOCKLOG_RUNS or (name.startswith("log_") and not logged_once)
+        logged_once |= name.startswith("log_") and blocklog
+        write_run(name, frames(), replace(gains), eq, extra, blocklog)
+        if "log_path" in extra:
+            write_replay(Path(extra["log_path"]))
 
 
 if __name__ == "__main__":

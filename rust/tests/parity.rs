@@ -4,8 +4,10 @@
 //! drive at three frame rates and three settings, the scenarios, slices of real debug logs)
 //! into rust/golden-data/*.jsonl. This feeds the same frames to the Rust synth and requires
 //! every output sample to be the same float, bit for bit, along with the route, the trigger
-//! side, the events and the steady-fade and ducking state. Without the data it says so and
-//! passes; generate it with
+//! side, the events and the steady-fade and ducking state. The frame sources (the scripted
+//! drive, the scenarios, the debug log reader), the debug log's rows and the replay tool's
+//! summary are held to the Python ones too. Without the data it says so and passes;
+//! generate it with
 //!
 //!   .venv\Scripts\python.exe rust\golden\make_golden.py
 
@@ -13,9 +15,12 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use ats_haptics::apex6::{build_realtime, FRAME_PERIOD};
+use ats_haptics::apex6::{build_realtime, Block, FRAME_PERIOD};
+use ats_haptics::blocklog::{json_indent1, BlockLog};
 use ats_haptics::effects::{Equalizer, Gains, Synth};
 use ats_haptics::pyrandom::PyRandom;
+use ats_haptics::replay::{replay, settings_of, summary, LogReader};
+use ats_haptics::scenarios::{scenario, ScenarioTelemetry};
 use ats_haptics::telemetry::{Frame, SimulatedTelemetry, TelemetrySource};
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -28,6 +33,10 @@ struct Header {
     eq_curves: Map<String, Value>,
     #[serde(default)]
     sim_fps: Option<f64>,
+    #[serde(default)]
+    scenario: Option<String>,
+    #[serde(default)]
+    log_path: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -212,4 +221,165 @@ fn scripted_drive_matches_python_frame_for_frame() {
         }
         eprintln!("{}: {block} frames match", header.name);
     }
+}
+
+/// The golden runs' frames, None for a block without one.
+fn golden_frames(path: &Path) -> (Header, Vec<Option<Frame>>) {
+    let mut lines = BufReader::new(File::open(path).unwrap()).lines();
+    let header: Header = serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
+    let mut frames: Vec<Option<Frame>> = Vec::new();
+    for line in lines {
+        let row: Row = serde_json::from_str(&line.unwrap()).unwrap();
+        let frame = match row.f {
+            None => None,
+            Some(FrameField::Same(_)) => frames.last().cloned().flatten(),
+            Some(FrameField::Frame(f)) => Some(*f),
+        };
+        frames.push(frame);
+    }
+    (header, frames)
+}
+
+fn fake_clock() -> (std::sync::Arc<std::sync::atomic::AtomicU64>, Box<dyn FnMut() -> f64 + Send>) {
+    let block = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let shared = std::sync::Arc::clone(&block);
+    (block, Box::new(move || shared.load(std::sync::atomic::Ordering::Relaxed) as f64 * FRAME_PERIOD))
+}
+
+#[test]
+fn scenarios_match_python_frame_for_frame() {
+    for path in golden_files() {
+        let (header, expected) = golden_frames(&path);
+        let Some(name) = header.scenario else { continue };
+        let (block, clock) = fake_clock();
+        let mut source = ScenarioTelemetry::with_clock(scenario(&name).unwrap(), Some(60.0), clock);
+        for (n, want) in expected.iter().enumerate() {
+            block.store(n as u64, std::sync::atomic::Ordering::Relaxed);
+            assert_eq!(&source.read(), want, "{}: block {n}", header.name);
+        }
+        eprintln!("{}: {} frames match", header.name, expected.len());
+    }
+}
+
+#[test]
+fn log_reader_matches_python_frame_for_frame() {
+    for path in golden_files() {
+        let (header, expected) = golden_frames(&path);
+        let Some(log) = header.log_path else { continue };
+        if !Path::new(&log).exists() {
+            eprintln!("{}: {log} is gone, skipped", header.name);
+            continue;
+        }
+        let rows = LogReader::new(&log, None, None).rows().unwrap();
+        let mut count = 0;
+        for (n, ((_, _, frame), want)) in rows.zip(&expected).enumerate() {
+            assert_eq!(Some(&frame), want.as_ref(), "{}: block {n}", header.name);
+            count += 1;
+        }
+        assert_eq!(count, expected.len(), "{}", header.name);
+        eprintln!("{}: {count} frames match", header.name);
+    }
+}
+
+/// A CSV line without its first two fields (the wall clock and the gap, which no two runs share).
+fn after_clock(line: &str) -> &str {
+    line.splitn(3, ',').nth(2).unwrap_or("")
+}
+
+#[test]
+fn block_log_matches_python_row_for_row() {
+    let dir = std::env::temp_dir().join(format!("ats_haptics_blocklog_{}", std::process::id()));
+    let mut checked = 0;
+    for path in golden_files() {
+        let python_csv = path.with_extension("blocks.csv");
+        if !python_csv.exists() {
+            continue;
+        }
+        let (header, frames) = golden_frames(&path);
+        let info: Value = serde_json::from_str(&std::fs::read_to_string(path.with_extension("blocks.json")).unwrap()).unwrap();
+        let mut synth = Synth::with_seeds(header.gains.effective(), Equalizer::new(&header.eq_curves), PyRandom::new(header.seed));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut log = BlockLog::new(&dir, Some(&info)).unwrap();
+        for frame in &frames {
+            let block: Block = synth.render(frame.as_ref());
+            log.add(&block, frame.as_ref(), &synth.levels.events.clone(), Some(&synth), "").unwrap();
+        }
+        let ours = log.path.clone();
+        log.close().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(ours.with_extension("json")).unwrap(),
+            std::fs::read_to_string(path.with_extension("blocks.json")).unwrap(),
+            "{}: the .json beside the log",
+            header.name
+        );
+        let ours = std::fs::read_to_string(&ours).unwrap();
+        let theirs = std::fs::read_to_string(&python_csv).unwrap();
+        let (ours, theirs): (Vec<&str>, Vec<&str>) = (ours.split_inclusive("\r\n").collect(), theirs.split_inclusive("\r\n").collect());
+        assert_eq!(ours.len(), theirs.len(), "{}: rows", header.name);
+        assert_eq!(ours[0], theirs[0], "{}: the header", header.name);
+        for (n, (a, b)) in ours.iter().zip(&theirs).enumerate().skip(1) {
+            assert_eq!(after_clock(a), after_clock(b), "{}: row {n}", header.name);
+        }
+        eprintln!("{}: {} log rows match", header.name, ours.len() - 1);
+        checked += 1;
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    if checked == 0 {
+        eprintln!("no golden block logs: run rust/golden/make_golden.py first");
+    }
+}
+
+#[derive(Deserialize)]
+struct ReplayGolden {
+    log_path: String,
+    end: String,
+    seed: u64,
+    knocks: f64,
+    lines: Vec<String>,
+}
+
+#[test]
+fn replay_summary_matches_python() {
+    let Ok(entries) = std::fs::read_dir(golden_dir()) else { return };
+    for entry in entries.filter_map(Result::ok) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !(name.starts_with("replay_") && name.ends_with(".json")) {
+            continue;
+        }
+        let golden: ReplayGolden = serde_json::from_str(&std::fs::read_to_string(entry.path()).unwrap()).unwrap();
+        let log = PathBuf::from(&golden.log_path);
+        if !log.exists() {
+            eprintln!("{name}: {} is gone, skipped", log.display());
+            continue;
+        }
+        let (gains, eq, version) = settings_of(&log);
+        let mut lines = Vec::new();
+        let (logged, replayed, blocks) = replay(&log, &gains, eq, None, Some(&golden.end), Some(golden.knocks),
+                                                PyRandom::new(golden.seed), &mut |line| lines.push(line))
+            .unwrap();
+        lines.extend(summary(&log, &version, true, &logged, &replayed, blocks));
+        assert_eq!(lines, golden.lines, "{name}");
+        eprintln!("{name}: {} lines match ({} knocks of 0.5 or more)", lines.len(), lines.len() - 4);
+    }
+}
+
+#[test]
+fn json_is_written_as_python_writes_it() {
+    let value: Value = serde_json::from_str(r#"{"a": [], "b": {}, "c": [1, 2.5, "ä"], "d": {"e": null}}"#).unwrap();
+    assert_eq!(json_indent1(&value), "{\n \"a\": [],\n \"b\": {},\n \"c\": [\n  1,\n  2.5,\n  \"ä\"\n ],\n \"d\": {\n  \"e\": null\n }\n}");
+}
+
+#[test]
+fn config_json_is_written_as_the_python_app_writes_it() {
+    // tests/data/python_config.json: settings.save_gains(Gains()), then
+    // settings.save_app_options(AppOptions(language="ja")), from the Python app
+    let path = std::env::temp_dir().join(format!("ats_haptics_config_{}", std::process::id())).join("config.json");
+    let _ = std::fs::remove_file(&path);
+    let settings = ats_haptics::settings::Settings::at(&path);
+    settings.save_gains(&Gains::default()).unwrap();
+    settings.save_app_options(&ats_haptics::settings::AppOptions { language: "ja".into(), ..Default::default() }).unwrap();
+    let ours = std::fs::read(&path).unwrap();
+    let theirs = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/python_config.json")).unwrap();
+    assert_eq!(String::from_utf8(ours).unwrap(), String::from_utf8(theirs).unwrap());
+    let _ = std::fs::remove_dir_all(path.parent().unwrap());
 }

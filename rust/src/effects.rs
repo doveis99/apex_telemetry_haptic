@@ -1399,6 +1399,13 @@ pub struct BurstEntry {
     id: u64,
 }
 
+impl BurstEntry {
+    /// Unique for the synth's lifetime: tells a burst seen before from a new one.
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+}
+
 #[derive(Clone, Copy, Default)]
 struct Amps {
     engine: f64,

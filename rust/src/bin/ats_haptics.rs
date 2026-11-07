@@ -3,6 +3,8 @@
 //!   ats_haptics                      run with the game (waits for it)
 //!   ats_haptics --simulate           scripted 60 s test drive, no game needed
 //!   ats_haptics --simulate --sim-fps 30   the same drive as a 30 fps game (0: new data every block)
+//!   ats_haptics --scenario city      a few minutes of real driving: highway, city or mountain
+//!   ats_haptics --replay LOG.csv     a drive recorded by the debug log, again (--from/--to HH:MM:SS)
 //!   ats_haptics --dry-run            no controller; print levels only
 //!   ats_haptics --gain 0.8 --road 0.4 --trigger 0.3 --monitor
 //!   ats_haptics --exit-with-game
@@ -17,7 +19,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use ats_haptics::effects::{Equalizer, Gains, GEARBOXES};
-use ats_haptics::runner::{run, Connection, Runner};
+use ats_haptics::runner::{run, Connection, Runner, Source};
+use ats_haptics::scenarios::{scenario, scenarios};
 use ats_haptics::settings::Settings;
 use ats_haptics::t;
 use ats_haptics::telemetry::SIMULATED_FPS;
@@ -26,9 +29,11 @@ const USAGE: &str = "usage: ats_haptics [--simulate] [--sim-fps FPS] [--dry-run]
                    [--exit-with-game] [--gain G] [--grip-level G] [--trigger-level G]
                    [--engine G] [--road G] [--bumps G] [--rumble G] [--wheelspin G] [--gear G]
                    [--retarder G] [--impact G] [--trigger G] [--throttle-pulse P]
-                   [--cylinders N] [--gearbox amt|converter]
+                   [--cylinders N] [--gearbox amt|converter] [--scenario highway|city|mountain]
+                   [--replay LOG] [--from HH:MM:SS] [--to HH:MM:SS] [--log-blocks]
 
-Not in the Rust port yet: --scenario, --replay/--from/--to, --log-blocks (use ats_haptics.py).";
+--scenario and --replay play without the game, as --simulate does. --log-blocks writes every
+output block as CSV under %APPDATA%\\ATSHaptics\\logs.";
 
 static STOP: AtomicBool = AtomicBool::new(false);
 
@@ -44,6 +49,11 @@ struct Args {
     monitor: bool,
     seconds: Option<f64>,
     exit_with_game: bool,
+    scenario: Option<String>,
+    replay: Option<String>,
+    replay_from: Option<String>,
+    replay_to: Option<String>,
+    log_blocks: bool,
 }
 
 fn fail(message: &str) -> ! {
@@ -52,8 +62,19 @@ fn fail(message: &str) -> ! {
 }
 
 fn parse_args(gains: &mut Gains) -> Args {
-    let mut args =
-        Args { simulate: false, sim_fps: SIMULATED_FPS, dry_run: false, monitor: false, seconds: None, exit_with_game: false };
+    let mut args = Args {
+        simulate: false,
+        sim_fps: SIMULATED_FPS,
+        dry_run: false,
+        monitor: false,
+        seconds: None,
+        exit_with_game: false,
+        scenario: None,
+        replay: None,
+        replay_from: None,
+        replay_to: None,
+        log_blocks: false,
+    };
     let mut items = std::env::args().skip(1);
     while let Some(item) = items.next() {
         let (flag, inline) = match item.split_once('=') {
@@ -87,9 +108,18 @@ fn parse_args(gains: &mut Gains) -> Args {
                 }
                 gains.gearbox = gearbox;
             }
-            "--scenario" | "--replay" | "--from" | "--to" | "--log-blocks" => {
-                fail(&format!("{flag} is not in the Rust port yet; use ats_haptics.py"))
+            "--scenario" => {
+                let name = value("a scenario");
+                if scenario(&name).is_none() {
+                    let names: Vec<_> = scenarios().iter().map(|s| s.name).collect();
+                    fail(&format!("--scenario: choose from {}", names.join(", ")));
+                }
+                args.scenario = Some(name);
             }
+            "--replay" => args.replay = Some(value("a debug log")),
+            "--from" => args.replay_from = Some(value("HH:MM:SS")),
+            "--to" => args.replay_to = Some(value("HH:MM:SS")),
+            "--log-blocks" => args.log_blocks = true,
             _ => {
                 let name = flag.trim_start_matches("--").replace('-', "_");
                 let known = ["grip_level", "trigger_level", "engine", "road", "bumps", "rumble", "wheelspin", "gear",
@@ -110,7 +140,16 @@ fn main() {
     let args = parse_args(&mut gains);
     let eq = Equalizer::for_player(&settings.load_eq());
     let sim_fps = (args.sim_fps != 0.0).then_some(args.sim_fps);
-    let mut runner = Runner::new(&gains, eq, args.simulate, sim_fps, args.seconds)
+    let source = if let Some(log) = args.replay {
+        Source::Replay { log: log.into(), from: args.replay_from, to: args.replay_to }
+    } else if let Some(name) = args.scenario {
+        Source::Scenario(scenario(&name).unwrap(), sim_fps)
+    } else if args.simulate {
+        Source::Simulated(sim_fps)
+    } else {
+        Source::Game
+    };
+    let mut runner = Runner::new(&gains, eq, source, args.seconds, args.log_blocks)
         .on_state(Box::new(|state| println!("\n[{}] {state}", ats_haptics::runner::clock_hms())));
     // SAFETY: the handler only stores to an atomic.
     unsafe {

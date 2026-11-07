@@ -1,0 +1,2 @@
+# byte-exact fixtures (CRLF as the Python app writes them on Windows)
+tests/data/** -text

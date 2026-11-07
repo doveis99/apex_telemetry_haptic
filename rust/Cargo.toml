@@ -13,6 +13,10 @@ path = "src/lib.rs"
 name = "ats_haptics"
 path = "src/bin/ats_haptics.rs"
 
+[[bin]]
+name = "replay"
+path = "src/bin/replay.rs"
+
 [dependencies]
 hidapi = "2.6"
 indexmap = { version = "2", features = ["serde"] }

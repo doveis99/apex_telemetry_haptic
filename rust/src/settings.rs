@@ -50,7 +50,8 @@ fn write(path: &Path, data: &Map<String, Value>) -> std::io::Result<()> {
     temp.push(".tmp");
     let temp = PathBuf::from(temp);
     let text = serde_json::to_string_pretty(data).map_err(std::io::Error::other)?;
-    std::fs::write(&temp, text)?;
+    // CRLF, as the Python app's write_text leaves it on Windows
+    std::fs::write(&temp, crate::blocklog::text_mode(&text))?;
     std::fs::rename(&temp, path)
 }
 

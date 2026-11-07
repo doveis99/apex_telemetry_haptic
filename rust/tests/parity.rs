@@ -68,7 +68,11 @@ fn golden_dir() -> PathBuf {
 fn golden_files() -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(golden_dir()) else { return Vec::new() };
     let mut files: Vec<PathBuf> =
-        entries.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|x| x == "jsonl")).collect();
+        entries
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+            .filter(|p| p.file_stem().is_some_and(|s| s != "previews")) // the effect tests have their own test
+            .collect();
     files.sort();
     files
 }
@@ -382,4 +386,39 @@ fn config_json_is_written_as_the_python_app_writes_it() {
     let theirs = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/python_config.json")).unwrap();
     assert_eq!(String::from_utf8(ours).unwrap(), String::from_utf8(theirs).unwrap());
     let _ = std::fs::remove_dir_all(path.parent().unwrap());
+}
+
+#[derive(Deserialize)]
+struct PreviewGolden {
+    effect: String,
+    surfaces: Vec<String>,
+    seed: u64,
+    blocks: Vec<([f64; 8], [f64; 8], [f64; 8], u8, Option<u8>)>,
+}
+
+#[test]
+fn effect_tests_match_python_sample_for_sample() {
+    use ats_haptics::effects::Effect;
+    use ats_haptics::preview::Preview;
+    let Ok(text) = std::fs::read_to_string(golden_dir().join("previews.jsonl")) else { return };
+    let eq = Equalizer::for_player(&Map::new());
+    for line in text.lines() {
+        let golden: PreviewGolden = serde_json::from_str(line).unwrap();
+        let surfaces: Vec<&str> = golden.surfaces.iter().map(String::as_str).collect();
+        let effect = Effect::from_name(&golden.effect).unwrap();
+        let mut preview = Preview::with_synth(effect, &Gains::default(), &surfaces, |gains| {
+            Synth::with_seeds(gains, eq.clone(), PyRandom::new(golden.seed))
+        });
+        let mut n = 0;
+        while let Some(block) = preview.render() {
+            let (t, l, r, route, side) = &golden.blocks[n];
+            let label = format!("{} {:?} block {n}", golden.effect, golden.surfaces);
+            assert!(same_bits(&block.trigger, t) && same_bits(&block.left_grip, l) && same_bits(&block.right_grip, r),
+                    "{label}: samples differ");
+            assert_eq!((block.route as u8, block.side.map(|s| s as u8)), (*route, *side), "{label}");
+            n += 1;
+        }
+        assert_eq!(n, golden.blocks.len(), "{} {:?}", golden.effect, golden.surfaces);
+    }
+    eprintln!("{} effect tests match", text.lines().count());
 }

@@ -1,0 +1,424 @@
+// Dark theme and the small widgets the tuning window is built from (port of widgets.py).
+// Sizes are design pixels at 100 % scaling, which Slint scales to the screen; tkinter's
+// point sizes are given as px (1 pt = 4/3 px).
+
+export global Theme {
+    out property <color> bg: #0e1014;          // window
+    out property <color> card: #161a21;        // panels
+    out property <color> card-line: #20252f;
+    out property <color> rule: #252a34;        // separators inside a card
+    out property <color> tile: #1c2029;        // telemetry tiles, log
+    out property <color> field: #232833;       // tracks, idle segments
+    out property <color> field-hi: #2e3441;    // hover
+    out property <color> text: #e7e9ee;
+    out property <color> muted: #8a92a3;
+    out property <color> faint: #555c6b;
+    out property <color> ink: #0e1014;         // text on a coloured fill
+    out property <color> grip: #5aa2ff;
+    out property <color> trigger: #ff9a4d;
+    out property <color> both: #b58cff;
+    out property <color> accent: #5aa2ff;
+    out property <color> go: #2ec27e;
+    out property <color> stop: #f05252;
+    out property <color> warn: #f5b942;
+    // tkinter font sizes, in points, as px
+    out property <length> pt8: 10.67px;
+    out property <length> pt9: 12px;
+    out property <length> pt10: 13.33px;
+    out property <length> pt11: 14.67px;
+    out property <length> pt13: 17.33px;
+    out property <length> pt15: 20px;
+    out property <length> pt16: 21.33px;
+}
+
+// The explanation shown once the pointer rests on a widget (Tooltip in widgets.py). Widgets
+// report where they are; the window draws the box (TipOverlay) after a short delay.
+export global Tips {
+    in-out property <string> text;
+    in-out property <length> pointer-x;
+    in-out property <length> top;       // the widget's top and bottom, window coordinates
+    in-out property <length> bottom;
+    in-out property <bool> hovering;
+    in-out property <bool> shown;
+}
+
+// A TouchArea that shows `tip` while the pointer rests on it, hidden on leaving or pressing.
+export component TipArea inherits TouchArea {
+    in property <string> tip;
+    changed has-hover => {
+        if (self.has-hover && root.tip != "") {
+            Tips.shown = false;
+            Tips.text = root.tip;
+            Tips.pointer-x = self.absolute-position.x + self.mouse-x;
+            Tips.top = self.absolute-position.y;
+            Tips.bottom = self.absolute-position.y + self.height;
+            Tips.hovering = true;
+        } else if (!self.has-hover && Tips.text == root.tip) {
+            Tips.hovering = false;
+            Tips.shown = false;
+        }
+    }
+    changed pressed => {
+        if (self.pressed) {
+            Tips.hovering = false;
+            Tips.shown = false;
+        }
+    }
+}
+
+// The box itself; place it last in a window so it draws over everything.
+export component TipOverlay inherits Rectangle {
+    in property <length> window-width;
+    in property <length> window-height;
+    property <length> wrap: 340px;
+    visible: Tips.shown && Tips.text != "";
+    width: min(label.preferred-width, root.wrap) + 18px + 2px;
+    height: label.preferred-height + 12px + 2px;
+    x: max(4px, min(Tips.pointer-x + 12px, root.window-width - self.width - 4px));
+    y: Tips.bottom + 6px + self.height > root.window-height ? max(0px, Tips.top - self.height - 6px) : Tips.bottom + 6px;
+    background: Theme.field-hi;
+    Rectangle {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        height: parent.height - 2px;
+        background: Theme.tile;
+        label := Text {
+            x: 9px;
+            y: 6px;
+            width: min(self.preferred-width, root.wrap);
+            text: Tips.text;
+            color: Theme.text;
+            font-size: Theme.pt9;
+            wrap: word-wrap;
+        }
+    }
+    Timer {
+        interval: 500ms;
+        running: Tips.hovering && !Tips.shown;
+        triggered => { Tips.shown = true; }
+    }
+}
+
+// Rounded flat button: kind is "go", "danger", "primary" or "ghost".
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <string> kind: "ghost";
+    in property <length> font-size: Theme.pt10;
+    in property <length> min-w: 0px;
+    in property <bool> enabled: true;
+    in property <string> tip;
+    callback clicked();
+    // a right click, with where it happened in the window
+    callback context(length, length);
+    property <color> fill: root.kind == "go" ? Theme.go : root.kind == "danger" ? Theme.stop
+        : root.kind == "primary" ? Theme.accent : Theme.field;
+    property <color> hover-fill: root.kind == "go" ? #3fd590 : root.kind == "danger" ? #ff6b6b
+        : root.kind == "primary" ? #7ab6ff : Theme.field-hi;
+    property <color> ink: root.kind == "danger" ? #ffffff : root.kind == "ghost" ? Theme.text : Theme.ink;
+    height: 32px;
+    preferred-width: max(root.min-w, label.preferred-width + 32px);
+    min-width: self.preferred-width;
+    horizontal-stretch: 0;
+    border-radius: 9px;
+    background: !root.enabled ? Theme.field : touch.has-hover ? root.hover-fill : root.fill;
+    label := Text {
+        text: root.text;
+        color: root.enabled ? root.ink : Theme.faint;
+        font-size: root.font-size;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TipArea {
+        tip: root.tip;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) {
+                root.clicked();
+            }
+        }
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
+                root.context(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            }
+        }
+    }
+}
+
+export struct SegOption {
+    value: string,
+    text: string,
+    color: color,
+}
+
+// A row of mutually exclusive segments, each with its own colour when picked. `dim` greys
+// the picked one (the effect is off but remembers its route); `locked` ignores clicks.
+export component Segmented inherits Rectangle {
+    in property <[SegOption]> options;
+    in property <string> current;
+    in property <bool> dim;
+    in property <bool> locked;
+    in property <length> segment-width: 54px;
+    in property <length> font-size: Theme.pt9;
+    in property <string> tip;
+    callback picked(string);
+    property <length> inset: 3px;
+    // every segment as wide as the longest text needs, which depends on the language
+    property <length> seg: max(root.segment-width, measure.preferred-width + 16px);
+    height: 28px;
+    width: root.seg * root.options.length + 2 * root.inset;
+    border-radius: 9px;
+    background: Theme.field;
+    measure := VerticalLayout {
+        visible: false;
+        for option in root.options: Text {
+            text: option.text;
+            font-size: root.font-size;
+            font-weight: 700;
+        }
+    }
+    for option[i] in root.options: Rectangle {
+        property <bool> picked: option.value == root.current;
+        x: root.inset + i * root.seg;
+        y: root.inset;
+        width: root.seg;
+        height: root.height - 2 * root.inset;
+        border-radius: 7px;
+        background: self.picked && !root.dim ? (root.locked ? Theme.faint : option.color)
+            : !self.picked && seg-touch.has-hover && !root.locked ? Theme.field-hi : transparent;
+        border-width: self.picked && root.dim ? 1px : 0px;
+        border-color: Theme.faint;
+        Text {
+            text: option.text;
+            font-size: root.font-size;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            color: parent.picked && !root.dim ? Theme.ink : parent.picked ? Theme.muted
+                : seg-touch.has-hover && !root.locked ? Theme.text : (root.dim || root.locked) ? Theme.faint : Theme.muted;
+        }
+        seg-touch := TipArea {
+            tip: root.tip;
+            mouse-cursor: root.locked ? default : pointer;
+            clicked => {
+                if (!root.locked) {
+                    root.picked(option.value);
+                }
+            }
+        }
+    }
+}
+
+// On/off pill; `toggled` gets the new state.
+export component Switch inherits Rectangle {
+    in property <bool> checked;
+    in property <color> tint: Theme.go;
+    in property <string> tip;
+    callback toggled(bool);
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    background: root.checked ? root.tint : Theme.field-hi;
+    Rectangle {
+        x: root.checked ? root.width - root.height / 2 + 1px - 7px : root.height / 2 - 1px - 7px;
+        y: root.height / 2 - 7px;
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        background: root.checked ? #ffffff : Theme.muted;
+    }
+    TipArea {
+        tip: root.tip;
+        mouse-cursor: pointer;
+        clicked => { root.toggled(!root.checked); }
+    }
+}
+
+// Horizontal slider whose filled part takes `color`. Drag or click to set, mouse wheel to
+// step; `moved` gets the user's whole-number value, which the owner sets back as `value`.
+export component Slider inherits Rectangle {
+    in property <float> minimum: 0;
+    in property <float> maximum: 100;
+    in property <float> value;
+    in property <color> tint: Theme.accent;
+    in property <string> tip;
+    callback moved(float);
+    property <length> margin: 8px;
+    property <float> step: root.maximum - root.minimum >= 100 ? 5 : 1;
+    property <float> fraction: max(0, min(1, (root.value - root.minimum) / (root.maximum - root.minimum)));
+    property <length> knob-x: root.margin + root.fraction * (root.width - 2 * root.margin);
+    width: 200px;
+    height: 24px;
+    function put(wanted: float) {
+        root.moved(round(min(root.maximum, max(root.minimum, wanted))));
+    }
+    function put-at(x: length) {
+        root.put(root.minimum + (x - root.margin) / (root.width - 2 * root.margin) * (root.maximum - root.minimum));
+    }
+    Rectangle {
+        x: root.margin - 2px;
+        y: root.height / 2 - 2px;
+        width: root.width - 2 * root.margin + 4px;
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.field-hi;
+    }
+    Rectangle {
+        x: root.margin - 2px;
+        y: root.height / 2 - 2px;
+        width: root.knob-x - root.margin + 4px;
+        height: 4px;
+        border-radius: 2px;
+        background: root.tint;
+    }
+    Rectangle {
+        x: root.knob-x - 7px;
+        y: root.height / 2 - 7px;
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        background: #ffffff;
+        border-width: 2px;
+        border-color: root.tint;
+    }
+    TipArea {
+        tip: root.tip;
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                Tips.hovering = false;
+                Tips.shown = false;
+                root.put-at(self.mouse-x);
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.put-at(self.mouse-x);
+            }
+        }
+        scroll-event(event) => {
+            root.put(root.value + (event.delta-y > 0 ? root.step : -root.step));
+            accept
+        }
+    }
+}
+
+// Thin level bar, 0..1.
+export component Meter inherits Rectangle {
+    in property <float> level;
+    in property <color> tint;
+    in property <string> tip;
+    width: 200px;
+    height: 10px;
+    border-radius: 5px;
+    background: Theme.field;
+    Rectangle {
+        property <length> fill: max(0, min(1, root.level)) * root.width;
+        x: 0;
+        width: self.fill;
+        visible: self.fill >= 4px;
+        border-radius: 5px;
+        background: root.tint;
+    }
+    TipArea { tip: root.tip; }
+}
+
+// Text that runs `clicked` on a click, underlined under the pointer.
+export component Link inherits Text {
+    in property <string> tip;
+    callback clicked();
+    color: touch.has-hover ? Theme.accent : Theme.muted;
+    font-size: Theme.pt9;
+    vertical-alignment: center;
+    touch := TipArea {
+        tip: root.tip;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    Rectangle {
+        visible: touch.has-hover;
+        y: parent.height - 3px;
+        height: 1px;
+        background: Theme.accent;
+    }
+}
+
+// A label with a tooltip.
+export component TipText inherits Text {
+    in property <string> tip;
+    vertical-alignment: center;
+    TipArea { tip: root.tip; }
+}
+
+// A panel with a heading; children go in its body.
+export component Card inherits Rectangle {
+    vertical-stretch: 0;
+    in property <string> title;
+    in property <string> hint;
+    in property <bool> show-head: true;
+    in property <length> body-spacing: 0px;
+    background: Theme.card;
+    border-width: 1px;
+    border-color: Theme.card-line;
+    VerticalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        padding-top: root.show-head ? 10px : 12px;
+        padding-bottom: 12px;
+        spacing: root.body-spacing;
+        if root.show-head: HorizontalLayout {
+            padding-bottom: 4px;
+            spacing: 8px;
+            alignment: start;
+            Text {
+                text: root.title;
+                color: Theme.text;
+                font-size: Theme.pt11;
+                font-weight: 700;
+                horizontal-stretch: 0;
+            }
+            Text {
+                text: root.hint;
+                color: Theme.faint;
+                font-size: Theme.pt9;
+                vertical-alignment: bottom;
+            }
+        }
+        @children
+    }
+}
+
+// A thin rule between groups of rows.
+export component Rule inherits Rectangle {
+    height: 1px;
+    background: Theme.rule;
+}
+
+// One choice of a pop-up menu.
+export component MenuItem inherits Rectangle {
+    in property <string> text;
+    in property <bool> checked;
+    in property <bool> radio;
+    callback clicked();
+    height: 26px;
+    background: touch.has-hover ? Theme.field-hi : transparent;
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 16px;
+        spacing: 6px;
+        Text {
+            width: 14px;
+            text: root.radio && root.checked ? "●" : "";
+            color: Theme.accent;
+            vertical-alignment: center;
+            font-size: Theme.pt8;
+        }
+        Text {
+            text: root.text;
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+    }
+    touch := TouchArea { clicked => { root.clicked(); } }
+}

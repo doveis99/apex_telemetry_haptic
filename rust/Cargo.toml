@@ -24,14 +24,31 @@ serde = { version = "1", features = ["derive"] }
 # preserve_order keeps config.json's keys where the Python app put them; float_roundtrip
 # parses every float to the bit, as Python's json does
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+sha2 = "0.10"
+raw-window-handle = "0.6"
+# the window: the software renderer keeps it near 13 MB private memory (OpenGL egui took 152)
+slint = { version = "1.18", default-features = false, features = [
+    "std", "compat-1-2", "backend-winit", "renderer-software", "raw-window-handle-06",
+] }
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Graphics_Dwm",
+    "Win32_Networking_WinHttp",
+    "Win32_Security",
+    "Win32_System_Com",
     "Win32_System_Console",
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
+    "Win32_System_Registry",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
+    "Win32_UI_Controls_Dialogs",
+    "Win32_UI_Input_XboxController",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [profile.release]
@@ -42,3 +59,10 @@ strip = true
 # The parity test reads ~400 MB of golden data; unoptimised it takes minutes.
 [profile.test]
 opt-level = 3
+
+[build-dependencies]
+slint-build = "1.18"
+
+[[bin]]
+name = "ATSHaptics"
+path = "src/bin/app/main.rs"

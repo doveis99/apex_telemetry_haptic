@@ -1,6 +1,6 @@
 //! One block per 8 ms tick, and the loop that holds the controller only while the game runs
-//! (port of ats_haptics.py's Runner and run()). Not yet here: the effect tests (preview.py),
-//! which come over with the window.
+//! (port of ats_haptics.py's Runner and run()). An effect test (preview.rs) plays in place of
+//! the drive while the drive renders on underneath.
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -14,6 +14,7 @@ use crate::apex6::{Apex6, Block, PadError, StreamStats, FRAME_PERIOD, MAX_SAMPLE
 use crate::blocklog::{log_dir, BlockLog};
 use crate::effects::{Equalizer, Gains, Synth, FLOAT_FIELDS};
 use crate::gamewatch::GameWatcher;
+use crate::preview::Preview;
 use crate::pymath as m;
 use crate::replay::LogTelemetry;
 use crate::scenarios::{Scenario, ScenarioTelemetry};
@@ -78,6 +79,8 @@ pub struct Runner {
     log_here: bool,
     /// state changes and edited settings, for the log's next row
     log_notes: Vec<String>,
+    /// an effect test playing in place of the drive
+    pub preview: Option<Preview>,
 }
 
 impl Runner {
@@ -120,6 +123,7 @@ impl Runner {
             block_log: None,
             log_here: false,
             log_notes: Vec::new(),
+            preview: None,
         }
     }
 
@@ -293,13 +297,21 @@ impl Runner {
             return None;
         }
         let frame = self.read_frame();
-        let block = self.synth.render(frame.as_ref());
+        let mut block = self.synth.render(frame.as_ref());
         self.max_accel = m::max(self.max_accel, self.synth.levels.max_accel);
         self.synth.levels.max_accel = 0.0;
         if !self.synth.levels.events.is_empty() {
             let stamp = clock_hms();
             for event in self.synth.levels.events.clone() {
                 self.push_event(format!("{stamp} {event}"));
+            }
+        }
+        // the drive renders on underneath a test, so it carries on where it was
+        let playing = self.preview.as_ref().map_or("", |p| p.effect.name());
+        if let Some(preview) = &mut self.preview {
+            match preview.render() {
+                Some(solo) => block = solo,
+                None => self.preview = None,
             }
         }
         for (i, channel) in [&block.left_grip, &block.right_grip, &block.trigger].into_iter().enumerate() {
@@ -310,7 +322,7 @@ impl Runner {
         let notes = std::mem::take(&mut self.log_notes);
         if let Some(log) = &mut self.block_log {
             let events: Vec<String> = self.synth.levels.events.iter().cloned().chain(notes).collect();
-            if let Err(error) = log.add(&block, frame.as_ref(), &events, Some(&self.synth), "") {
+            if let Err(error) = log.add(&block, frame.as_ref(), &events, Some(&self.synth), playing) {
                 // a full disk or a pulled drive: stop logging, keep the motors going
                 self.close_log();
                 let line = format!("{} {}", clock_hms(), t!("디버그 기록을 열 수 없음 ({error})", error = error));

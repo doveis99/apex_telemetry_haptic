@@ -1,0 +1,954 @@
+// The live tuning window (port of gui.py's App). The Rust side (src/bin/app) owns the
+// tuning and the output; this file lays it out and reports what the player does. Fixed
+// text is translated here with @tr (the Korean is the key, as in i18n.py); the effect rows,
+// menus and anything with values in it come translated from Rust.
+
+import { Theme, Tips, TipArea, TipOverlay, Button, SegOption, Segmented, Switch, Slider, Meter, Link, TipText, Card,
+         Rule, MenuItem } from "widgets.slint";
+import { PluginDialog, CalibrationDialog, GameRow } from "dialogs.slint";
+export { PluginDialog, CalibrationDialog, GameRow, Tips }
+
+// One slider row: an effect (with its switch, route and ▶ test), a level or a threshold.
+export struct Row {
+    key: string,
+    label: string,
+    tip: string,
+    value: float,
+    minimum: float,
+    maximum: float,
+    shown: string,
+    color: color,
+    toggle: bool,       // switch, route picker and ▶
+    enabled: bool,
+    route: string,
+    test-tip: string,
+    rule-before: bool,  // a setting for the whole card, set off by a line
+}
+
+export struct Choice {
+    value: string,
+    label: string,
+}
+
+export struct Preset {
+    name: string,
+    active: bool,
+}
+
+component SliderRow inherits HorizontalLayout {
+    in property <Row> data;
+    in property <length> label-width;
+    in property <bool> switch-column;
+    in property <[SegOption]> routes;
+    in property <string> route-tip;
+    in property <string> switch-tip;
+    callback moved(float);
+    callback toggled(bool);
+    callback routed(string);
+    callback test(length, length);
+    spacing: 0px;
+    if root.switch-column: Rectangle {
+        width: 46px;
+        if root.data.toggle: Switch {
+            x: 0;
+            y: (parent.height - self.height) / 2;
+            checked: root.data.enabled;
+            tip: root.switch-tip;
+            toggled(on) => { root.toggled(on); }
+        }
+    }
+    TipText {
+        width: root.label-width;
+        text: root.data.label;
+        tip: root.data.tip;
+        color: root.data.toggle && !root.data.enabled ? Theme.muted : Theme.text;
+    }
+    Rectangle {
+        width: 212px;
+        height: 32px;
+        Slider {
+            x: 6px;
+            y: 4px;
+            value: root.data.value;
+            minimum: root.data.minimum;
+            maximum: root.data.maximum;
+            tint: root.data.color;
+            tip: root.data.tip;
+            moved(value) => { root.moved(value); }
+        }
+    }
+    Text {
+        width: 56px;
+        text: root.data.shown;
+        color: Theme.text;
+        font-size: Theme.pt9;
+        font-weight: 700;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    if root.data.toggle: HorizontalLayout {
+        padding-left: 14px;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            Segmented {
+                options: root.routes;
+                current: root.data.route;
+                dim: !root.data.enabled;
+                tip: root.route-tip;
+                picked(route) => { root.routed(route); }
+            }
+        }
+        VerticalLayout {
+            padding-left: 8px;
+            alignment: center;
+            test := Button {
+                text: "▶";
+                font-size: Theme.pt8;
+                height: 26px;
+                tip: root.data.test-tip;
+                clicked => { root.test(self.absolute-position.x, self.absolute-position.y + self.height); }
+            }
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    // header and title
+    in property <string> window-title;
+    in property <string> subtitle;
+    in property <string> github-tip;
+    in property <string> language-label;
+    in property <[Choice]> languages;
+    in property <string> language;
+    in property <bool> update-visible;
+    in property <string> update-text;
+    in property <bool> update-enabled: true;
+    in property <string> ui-font: "Malgun Gothic";
+    // control strip
+    in property <string> source: "game";
+    in property <bool> source-locked;
+    in property <string> drive-label;
+    in property <bool> drive-enabled: true;
+    in property <[Choice]> drives;
+    in property <string> drive;
+    in property <string> run-text;
+    in property <string> run-kind: "go";
+    in property <bool> run-enabled: true;
+    in property <bool> auto-start;
+    in property <string> status;
+    in property <color> status-color: Theme.faint;
+    // presets
+    in property <[Preset]> presets;
+    // cards
+    in property <[Row]> effect-rows;
+    in property <[Row]> event-rows;
+    in property <[Row]> output-rows;
+    in property <[Row]> threshold-rows;
+    in property <[float]> meters: [0, 0, 0];
+    in property <string> speed: "-";
+    in property <string> rpm: "-";
+    in property <string> gear: "-";
+    in property <string> pedal: "-";
+    in property <string> surface: "-";
+    in property <string> trigger-pedal: "-";
+    in property <string> accel: "-";
+    in property <int> cylinders: 6;
+    in property <string> gearbox: "amt";
+    in property <[string]> events;
+    in property <[Choice]> surfaces;
+    in property <string> all-surfaces-label;
+    // footer
+    in property <string> save-state;
+    in property <color> save-state-color: Theme.warn;
+    in property <bool> dirty;
+    in property <string> timing;
+    in property <bool> debug-log;
+    in property <string> log-dir-tip;
+    // the preset-name prompt
+    in property <bool> prompt-visible;
+    in property <string> prompt-title;
+    in-out property <string> prompt-text;
+
+    callback language-picked(string);
+    callback github();
+    callback plugins();
+    callback update();
+    callback source-picked(string);
+    callback drive-picked(string);
+    callback pick-log();
+    callback run();
+    callback auto-start-toggled(bool);
+    callback preset-clicked(string);
+    callback preset-action(string, string);  // name, "rename" or "delete"
+    callback new-preset();
+    callback slider-moved(string, float);    // key, value in slider units
+    callback effect-toggled(string, bool);
+    callback route-picked(string, string);
+    callback test(string, string);           // key, surfaces: "" its own moment, "all", or one surface
+    callback calibration();
+    callback cylinders-step(int);
+    callback gearbox-picked(string);
+    callback save();
+    callback reset();
+    callback debug-log-toggled(bool);
+    callback open-log-dir();
+    callback prompt-done(bool);
+    // the size the content asks for, for the offscreen snapshot
+    out property <length> content-width: body.preferred-width;
+    out property <length> content-height: body.preferred-height;
+
+    title: root.window-title;
+    background: Theme.bg;
+    default-font-family: root.ui-font;
+    default-font-size: Theme.pt10;
+    // sized to its content, as the tkinter window
+    min-width: body.preferred-width;
+    max-width: body.preferred-width;
+    min-height: body.preferred-height;
+    max-height: body.preferred-height;
+
+    property <[SegOption]> routes: [
+        { value: "grip", text: @tr("그립"), color: Theme.grip },
+        { value: "trigger", text: @tr("트리거"), color: Theme.trigger },
+        { value: "both", text: @tr("둘 다"), color: Theme.both },
+    ];
+    property <string> route-tip: @tr("이 효과의 진동이 갈 곳: 그립(파랑), 트리거(주황), 둘 다(보라). 꺼진 효과에서 위치를 누르면 그 위치로 다시 켜집니다.");
+    property <string> switch-tip: @tr("이 효과 켜기/끄기. 꺼도 세기와 진동 위치는 남아서 다시 켜면 그대로 돌아옵니다.");
+    // label columns fit the longest name in this language, the same in every card
+    property <length> label-width: label-measure.preferred-width + 12px;
+    label-measure := VerticalLayout {
+        visible: false;
+        for row in root.effect-rows: Text { text: row.label; }
+        for row in root.event-rows: Text { text: row.label; }
+        for row in root.output-rows: Text { text: row.label; }
+        for row in root.threshold-rows: Text { text: row.label; }
+        Text { text: @tr("왼쪽 그립"); }
+        Text { text: @tr("오른쪽 그립"); }
+        Text { text: @tr("엔진 기통 수"); }
+        Text { text: @tr("변속기"); }
+    }
+    // the telemetry rows' label column
+    info-measure := VerticalLayout {
+        visible: false;
+        Text { text: @tr("페달"); }
+        Text { text: @tr("노면"); }
+        Text { text: @tr("트리거"); }
+        Text { text: @tr("가속도 최대"); }
+    }
+    property <length> menu-x;
+    property <length> menu-y;
+    property <string> menu-preset;
+    property <string> menu-effect;
+
+    body := VerticalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        padding-top: 14px;
+        padding-bottom: 14px;
+        spacing: 12px;
+
+        // header: name, version and repository link; plugin, language and update on the right
+        HorizontalLayout {
+            spacing: 10px;
+            Text {
+                text: @tr("ATS 햅틱");
+                color: Theme.text;
+                font-size: Theme.pt16;
+                font-weight: 700;
+                horizontal-stretch: 0;
+            }
+            VerticalLayout {
+                padding-top: 6px;
+                Text {
+                    text: root.subtitle;
+                    color: Theme.muted;
+                    font-size: Theme.pt9;
+                    vertical-alignment: center;
+                }
+            }
+            VerticalLayout {
+                padding-top: 6px;
+                padding-left: 2px;
+                Link {
+                    text: "GitHub ↗";
+                    tip: root.github-tip;
+                    clicked => { root.github(); }
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if root.update-visible: Button {
+                text: root.update-text;
+                kind: "primary";
+                font-size: Theme.pt9;
+                height: 30px;
+                enabled: root.update-enabled;
+                tip: @tr("새 버전의 릴리스 노트를 보고, 내려받아 설치한 뒤 다시 시작합니다. 설정은 그대로입니다.");
+                clicked => { root.update(); }
+            }
+            language-button := Button {
+                text: root.language-label;
+                font-size: Theme.pt9;
+                height: 30px;
+                tip: "Language · 언어 · 言語 · 语言 · Sprache · Langue · Idioma · Język · Язык";
+                clicked => {
+                    root.menu-x = self.absolute-position.x;
+                    root.menu-y = self.absolute-position.y + self.height;
+                    language-menu.show();
+                }
+            }
+            Button {
+                text: @tr("텔레메트리 플러그인");
+                font-size: Theme.pt9;
+                height: 30px;
+                tip: @tr("게임에 설치된 텔레메트리 플러그인을 확인하고, 없으면 동봉한 플러그인을 설치합니다.");
+                clicked => { root.plugins(); }
+            }
+        }
+
+        // control strip: what drives the vibration, start/stop, auto start, status
+        Card {
+            show-head: false;
+            HorizontalLayout {
+                spacing: 0px;
+                Text {
+                    text: @tr("입력");
+                    color: Theme.muted;
+                    font-size: Theme.pt9;
+                    vertical-alignment: center;
+                    horizontal-stretch: 0;
+                }
+                VerticalLayout {
+                    padding-left: 8px;
+                    alignment: center;
+                    Segmented {
+                        options: [
+                            { value: "game", text: @tr("ATS/ETS2 게임"), color: Theme.accent },
+                            { value: "sim", text: @tr("테스트 주행"), color: Theme.accent },
+                        ];
+                        current: root.source;
+                        locked: root.source-locked;
+                        segment-width: 104px;
+                        height: 32px;
+                        font-size: Theme.pt10;
+                        tip: @tr("ATS/ETS2 게임: 게임 텔레메트리로 진동을 만듭니다. 게임이 실행 중일 때만 컨트롤러를 씁니다.\n테스트 주행: 게임 없이 옆의 ▾에서 고른 주행을 재생합니다. 효과 확인과 튜닝용입니다.\n실행 중에는 바꿀 수 없습니다.");
+                        picked(value) => { root.source-picked(value); }
+                    }
+                }
+                VerticalLayout {
+                    padding-left: 6px;
+                    alignment: center;
+                    Button {
+                        text: root.drive-label + "  ▼";
+                        font-size: Theme.pt9;
+                        height: 30px;
+                        enabled: root.drive-enabled;
+                        tip: @tr("테스트 주행이 재생할 주행입니다. 기본 60초는 모든 효과를 한 번씩, 고속도로·시내·산길은 효과가 겹치는 실제 주행 몇 분입니다. 디버그 기록 재생은 기록해 둔 주행을 지금 설정으로 다시 느껴 봅니다. 실행 중에는 바꿀 수 없습니다.");
+                        clicked => {
+                            root.menu-x = self.absolute-position.x;
+                            root.menu-y = self.absolute-position.y + self.height;
+                            drive-menu.show();
+                        }
+                    }
+                }
+                VerticalLayout {
+                    padding-left: 14px;
+                    padding-right: 18px;
+                    alignment: center;
+                    Button {
+                        text: root.run-text;
+                        kind: root.run-kind;
+                        enabled: root.run-enabled;
+                        font-size: Theme.pt11;
+                        height: 36px;
+                        min-w: 120px;
+                        tip: @tr("진동 출력을 시작하거나 멈춥니다. 정지하면 모터를 끄고 컨트롤러를 놓습니다.");
+                        clicked => { root.run(); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Switch {
+                        checked: root.auto-start;
+                        tint: Theme.accent;
+                        tip: @tr("창이 정지 상태일 때 게임이 실행되면 자동으로 시작합니다. 게임 도중 직접 정지하면 그 게임이 끝날 때까지는 다시 켜지지 않습니다. 바꾸면 바로 저장됩니다.");
+                        toggled(on) => { root.auto-start-toggled(on); }
+                    }
+                }
+                HorizontalLayout {
+                    padding-left: 8px;
+                    horizontal-stretch: 0;
+                    TipText {
+                        text: @tr("게임 감지 시 자동 시작");
+                        color: Theme.text;
+                        tip: @tr("창이 정지 상태일 때 게임이 실행되면 자동으로 시작합니다. 게임 도중 직접 정지하면 그 게임이 끝날 때까지는 다시 켜지지 않습니다. 바꾸면 바로 저장됩니다.");
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    min-width: 24px;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    padding-right: 8px;
+                    Rectangle {
+                        width: 10px;
+                        height: 10px;
+                        border-radius: 5px;
+                        background: root.status-color;
+                    }
+                }
+                TipText {
+                    text: root.status;
+                    color: Theme.text;
+                    horizontal-alignment: right;
+                    wrap: word-wrap;
+                    // an explicit width, so a long message wraps into lines the strip makes room for
+                    width: min(self.preferred-width, 380px);
+                    tip: @tr("컨트롤러 상태 · 텔레메트리 상태\n점 색: 초록 출력 중, 노랑 컨트롤러 대기, 빨강 오류, 회색 정지");
+                }
+            }
+        }
+
+        // preset bar: one button per preset, the one in use lit
+        HorizontalLayout {
+            spacing: 6px;
+            TipText {
+                text: @tr("프리셋");
+                color: Theme.muted;
+                font-size: Theme.pt9;
+                horizontal-stretch: 0;
+                tip: @tr("프리셋마다 세기, 기준, 켜기/끄기, 진동 위치, 기통 수, 변속기를 통째로 따로 둡니다. 트럭과 트립 모드의 승용차처럼 탈것이 바뀔 때 눌러서 바로 바꿉니다. 주행 중에도 즉시 적용되고 다음 실행에도 이어집니다.");
+            }
+            Rectangle { width: 2px; }
+            for preset in root.presets: Button {
+                text: preset.name;
+                kind: preset.active ? "primary" : "ghost";
+                font-size: Theme.pt9;
+                height: 30px;
+                tip: @tr("이 프리셋으로 바꿉니다. 오른쪽 클릭: 이름 바꾸기, 삭제");
+                clicked => { root.preset-clicked(preset.name); }
+                context(x, y) => {
+                    root.menu-preset = preset.name;
+                    root.menu-x = x;
+                    root.menu-y = y;
+                    preset-menu.show();
+                }
+            }
+            if root.presets.length == 0: Text {
+                text: @tr("없음");
+                color: Theme.faint;
+                font-size: Theme.pt9;
+                vertical-alignment: center;
+                horizontal-stretch: 0;
+            }
+            Button {
+                text: @tr("＋ 지금 설정으로 새 프리셋");
+                font-size: Theme.pt9;
+                height: 30px;
+                tip: @tr("지금 설정(저장하지 않은 변경 포함)을 새 이름으로 보관하고 그 프리셋으로 바꿉니다.");
+                clicked => { root.new-preset(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: start;
+            // left: the effects
+            VerticalLayout {
+                spacing: 12px;
+                alignment: start;
+                for card[c] in [
+                    { title: @tr("주행 효과"), hint: @tr("달리는 동안 계속 나는 진동") },
+                    { title: @tr("이벤트 효과"), hint: @tr("순간적으로 한 번 나는 진동") },
+                ]: Card {
+                    title: card.title;
+                    hint: card.hint;
+                    HorizontalLayout {
+                        Rectangle { width: 46px + root.label-width + 212px + 56px + 14px; }
+                        TipText {
+                            text: @tr("진동 위치");
+                            tip: root.route-tip;
+                            color: Theme.faint;
+                            font-size: Theme.pt8;
+                            horizontal-alignment: center;
+                            width: 3 * 54px + 6px;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                    for row in (c == 0 ? root.effect-rows : root.event-rows): VerticalLayout {
+                        if row.rule-before: VerticalLayout {
+                            padding-top: 6px;
+                            padding-bottom: 6px;
+                            Rule { }
+                        }
+                        SliderRow {
+                            data: row;
+                            label-width: root.label-width;
+                            switch-column: true;
+                            routes: root.routes;
+                            route-tip: root.route-tip;
+                            switch-tip: root.switch-tip;
+                            moved(value) => { root.slider-moved(row.key, value); }
+                            toggled(on) => { root.effect-toggled(row.key, on); }
+                            routed(route) => { root.route-picked(row.key, route); }
+                            test(x, y) => {
+                                if (row.key == "road") {
+                                    root.menu-effect = row.key;
+                                    root.menu-x = x;
+                                    root.menu-y = y;
+                                    surface-menu.show();
+                                } else {
+                                    root.test(row.key, "");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // right: output, telemetry, thresholds, events
+            VerticalLayout {
+                spacing: 12px;
+                Card {
+                    title: @tr("출력 세기");
+                    for row in root.output-rows: SliderRow {
+                        data: row;
+                        label-width: root.label-width;
+                        switch-column: false;
+                        moved(value) => { root.slider-moved(row.key, value); }
+                    }
+                    VerticalLayout {
+                        padding-top: 8px;
+                        padding-bottom: 8px;
+                        Rule { }
+                    }
+                    for meter[i] in [
+                        { label: @tr("왼쪽 그립"), color: Theme.grip },
+                        { label: @tr("오른쪽 그립"), color: Theme.grip },
+                        { label: @tr("트리거"), color: Theme.trigger },
+                    ]: HorizontalLayout {
+                        padding-top: 4px;
+                        padding-bottom: 4px;
+                        TipText {
+                            width: root.label-width;
+                            text: meter.label;
+                            color: Theme.muted;
+                            tip: @tr("이 모터로 실제로 나가는 세기입니다. 진동이 약하거나 없을 때 어느 단계에서 줄어드는지 확인하세요.");
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            padding-left: 6px;
+                            Meter {
+                                level: root.meters[i];
+                                tint: meter.color;
+                                tip: @tr("이 모터로 실제로 나가는 세기입니다. 진동이 약하거나 없을 때 어느 단계에서 줄어드는지 확인하세요.");
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                    HorizontalLayout {
+                        padding-top: 8px;
+                        Button {
+                            text: @tr("모터 보정…");
+                            font-size: Theme.pt9;
+                            height: 28px;
+                            tip: @tr("모터가 주파수마다 다르게 울리는 정도를 손으로 느끼며 맞춥니다. 결과는 모든 효과에 주파수별로 적용됩니다. 출력을 정지한 상태에서 씁니다.");
+                            clicked => { root.calibration(); }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                }
+                Card {
+                    title: @tr("텔레메트리");
+                    hint: @tr("게임에서 받고 있는 값");
+                    HorizontalLayout {
+                        spacing: 6px;
+                        for tile in [
+                            { label: @tr("속도"), value: root.speed },
+                            { label: "RPM", value: root.rpm },
+                            { label: @tr("기어"), value: root.gear },
+                        ]: Rectangle {
+                            horizontal-stretch: 1;
+                            background: Theme.tile;
+                            VerticalLayout {
+                                padding-left: 10px;
+                                padding-top: 6px;
+                                padding-bottom: 6px;
+                                Text {
+                                    text: tile.label;
+                                    color: Theme.muted;
+                                    font-size: Theme.pt8;
+                                }
+                                Text {
+                                    text: tile.value;
+                                    color: Theme.text;
+                                    font-size: Theme.pt15;
+                                    font-weight: 700;
+                                }
+                            }
+                            TipArea { tip: @tr("게임 값 그대로입니다. 후진 기어는 음수, 중립은 0입니다."); }
+                        }
+                    }
+                    VerticalLayout {
+                        padding-top: 8px;
+                        for item in [
+                            { label: @tr("페달"), value: root.pedal, tip: @tr("엑셀/브레이크 입력(0~1)입니다. 크루즈 컨트롤처럼 게임이 대신 밟는 값은 포함하지 않습니다.") },
+                            { label: @tr("노면"), value: root.surface, tip: @tr("첫 번째 바퀴 아래 노면 재질의 게임 내부 이름입니다(예: road, gravel, grass).") },
+                            { label: @tr("트리거"), value: root.trigger-pedal, tip: @tr("트리거 채널이 지금 따라가는 페달입니다.") },
+                            { label: @tr("가속도 최대"), value: root.accel, tip: @tr("최근 0.1초 동안 수평 가속도 최대값입니다. 충돌 감지 기준을 정할 때 참고하세요.") },
+                        ]: HorizontalLayout {
+                            spacing: 12px;
+                            TipText {
+                                width: info-measure.preferred-width;
+                                text: item.label;
+                                color: Theme.muted;
+                                tip: item.tip;
+                            }
+                            TipText {
+                                text: item.value;
+                                color: Theme.text;
+                                tip: item.tip;
+                            }
+                        }
+                    }
+                }
+                Card {
+                    title: @tr("감지 기준");
+                    for row in root.threshold-rows: SliderRow {
+                        data: row;
+                        label-width: root.label-width;
+                        switch-column: false;
+                        moved(value) => { root.slider-moved(row.key, value); }
+                    }
+                    HorizontalLayout {
+                        padding-top: 4px;
+                        TipText {
+                            width: root.label-width;
+                            text: @tr("엔진 기통 수");
+                            color: Theme.text;
+                            tip: @tr("엔진 진동 주파수 계산에 씁니다. ATS 순정 트럭은 대부분 직렬 6기통이고, ETS2의 Scania V8 같은 트럭은 8로 두세요. 텔레메트리에는 기통 수가 없습니다.");
+                        }
+                        Rectangle {
+                            width: 6px;
+                        }
+                        Rectangle {
+                            width: 76px;
+                            height: 28px;
+                            border-radius: 6px;
+                            background: Theme.field;
+                            Text {
+                                x: 10px;
+                                text: root.cylinders;
+                                color: Theme.text;
+                                vertical-alignment: center;
+                            }
+                            for arrow[i] in ["▲", "▼"]: Rectangle {
+                                x: parent.width - 22px;
+                                y: i * parent.height / 2;
+                                width: 22px;
+                                height: parent.height / 2;
+                                background: arrow-touch.has-hover ? Theme.field-hi : transparent;
+                                Text {
+                                    text: arrow;
+                                    color: Theme.text;
+                                    font-size: 8px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                                arrow-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.cylinders-step(i == 0 ? 2 : -2); }
+                                }
+                            }
+                            TipArea {
+                                width: parent.width - 22px;
+                                tip: @tr("엔진 진동 주파수 계산에 씁니다. ATS 순정 트럭은 대부분 직렬 6기통이고, ETS2의 Scania V8 같은 트럭은 8로 두세요. 텔레메트리에는 기통 수가 없습니다.");
+                                scroll-event(event) => {
+                                    root.cylinders-step(event.delta-y > 0 ? 2 : -2);
+                                    accept
+                                }
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                    HorizontalLayout {
+                        padding-top: 6px;
+                        padding-bottom: 2px;
+                        TipText {
+                            width: root.label-width;
+                            text: @tr("변속기");
+                            color: Theme.text;
+                            tip: @tr("변속할 때의 느낌입니다. AMT·수동은 레버가 빠지고 다음 기어가 '철컥' 들어갑니다(이튼 풀러, DT12 같은 변속기). 토크컨버터는 동력이 끊기지 않고 다음 기어가 물리며 부드럽게 '쿵' 밀어 줍니다(앨리슨). 엑셀을 깊이 밟을수록 단단하고, 발을 떼고 변속하면 거의 없습니다. 텔레메트리에는 변속기 종류가 없습니다.");
+                        }
+                        Rectangle {
+                            width: 6px;
+                        }
+                        Segmented {
+                            options: [
+                                { value: "amt", text: @tr("AMT·수동"), color: Theme.accent },
+                                { value: "converter", text: @tr("토크컨버터"), color: Theme.accent },
+                            ];
+                            current: root.gearbox;
+                            tip: @tr("변속할 때의 느낌입니다. AMT·수동은 레버가 빠지고 다음 기어가 '철컥' 들어갑니다(이튼 풀러, DT12 같은 변속기). 토크컨버터는 동력이 끊기지 않고 다음 기어가 물리며 부드럽게 '쿵' 밀어 줍니다(앨리슨). 엑셀을 깊이 밟을수록 단단하고, 발을 떼고 변속하면 거의 없습니다. 텔레메트리에는 변속기 종류가 없습니다.");
+                            picked(value) => { root.gearbox-picked(value); }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                }
+                Card {
+                    title: @tr("이벤트");
+                    vertical-stretch: 1;
+                    Rectangle {
+                        background: Theme.tile;
+                        min-height: 6 * 18px + 8px;
+                        vertical-stretch: 1;
+                        Flickable {
+                            content-height: max(self.height, root.events.length * 18px + 8px);
+                            VerticalLayout {
+                                padding: 4px;
+                                alignment: start;
+                                for line in root.events: Text {
+                                    height: 18px;
+                                    text: line;
+                                    color: Theme.text;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                        TipArea { tip: @tr("변속, 충돌, 페달, 트레일러, 파킹 브레이크, 방향지시등, 시동, 게임 알림과 컨트롤러 연결 문제가 시간과 함께 기록됩니다. 최근 50개까지 보입니다."); }
+                    }
+                }
+            }
+        }
+
+        // footer: save and defaults on the left; timing, debug log and its folder on the right
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: @tr("저장");
+                kind: root.dirty ? "primary" : "ghost";
+                min-w: 84px;
+                tip: @tr("슬라이더, 켜기/끄기, 진동 위치를 %APPDATA%\\ATSHaptics\\config.json에 저장합니다. 프리셋을 쓰는 중이면 그 프리셋에도 저장합니다. 저장하지 않은 변경이 있으면 버튼이 파랗게 바뀝니다.");
+                clicked => { root.save(); }
+            }
+            Button {
+                text: @tr("기본값");
+                min-w: 84px;
+                tip: @tr("모든 세기와 기준, 진동 위치를 기본값으로 되돌리고 모든 효과를 켭니다. 저장은 따로 눌러야 합니다.");
+                clicked => { root.reset(); }
+            }
+            HorizontalLayout {
+                padding-left: 4px;
+                Text {
+                    text: root.save-state;
+                    color: root.save-state-color;
+                    font-size: Theme.pt9;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                Switch {
+                    checked: root.debug-log;
+                    tint: Theme.accent;
+                    tip: @tr("켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 주행 중에도 켜고 끄는 즉시 적용되고 바로 저장됩니다.");
+                    toggled(on) => { root.debug-log-toggled(on); }
+                }
+            }
+            TipText {
+                text: @tr("디버그 기록");
+                color: Theme.text;
+                font-size: Theme.pt9;
+                horizontal-stretch: 0;
+                tip: @tr("켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 주행 중에도 켜고 끄는 즉시 적용되고 바로 저장됩니다.");
+            }
+            Link {
+                text: @tr("기록 폴더 ↗");
+                tip: root.log-dir-tip;
+                horizontal-stretch: 0;
+                clicked => { root.open-log-dir(); }
+            }
+            Rectangle { width: 10px; }
+            TipText {
+                text: root.timing;
+                color: Theme.faint;
+                font-size: Theme.pt9;
+                horizontal-stretch: 0;
+                tip: @tr("직전 세션에서 8ms 출력 주기를 놓친 횟수와 가장 늦었던 시간입니다. 0에 가까우면 정상입니다.");
+            }
+        }
+    }
+
+    language-menu := PopupWindow {
+        x: root.menu-x;
+        y: root.menu-y;
+        Rectangle {
+            background: Theme.tile;
+            border-width: 1px;
+            border-color: Theme.field-hi;
+            VerticalLayout {
+                padding: 4px;
+                for choice in root.languages: MenuItem {
+                    text: choice.label;
+                    radio: true;
+                    checked: choice.value == root.language;
+                    clicked => { root.language-picked(choice.value); }
+                }
+            }
+        }
+    }
+
+    drive-menu := PopupWindow {
+        x: root.menu-x;
+        y: root.menu-y;
+        Rectangle {
+            background: Theme.tile;
+            border-width: 1px;
+            border-color: Theme.field-hi;
+            VerticalLayout {
+                padding: 4px;
+                for choice in root.drives: MenuItem {
+                    text: choice.label;
+                    radio: true;
+                    checked: choice.value == root.drive;
+                    clicked => { root.drive-picked(choice.value); }
+                }
+                VerticalLayout {
+                    padding: 4px;
+                    Rule { }
+                }
+                MenuItem {
+                    text: @tr("디버그 기록 재생…");
+                    clicked => { root.pick-log(); }
+                }
+            }
+        }
+    }
+
+    surface-menu := PopupWindow {
+        x: root.menu-x;
+        y: root.menu-y;
+        Rectangle {
+            background: Theme.tile;
+            border-width: 1px;
+            border-color: Theme.field-hi;
+            VerticalLayout {
+                padding: 4px;
+                MenuItem {
+                    text: @tr("아스팔트 → 자갈");
+                    clicked => { root.test(root.menu-effect, ""); }
+                }
+                MenuItem {
+                    text: root.all-surfaces-label;
+                    clicked => { root.test(root.menu-effect, "all"); }
+                }
+                VerticalLayout {
+                    padding: 4px;
+                    Rule { }
+                }
+                for choice in root.surfaces: MenuItem {
+                    text: choice.label;
+                    clicked => { root.test(root.menu-effect, choice.value); }
+                }
+            }
+        }
+    }
+
+    preset-menu := PopupWindow {
+        x: root.menu-x;
+        y: root.menu-y;
+        Rectangle {
+            background: Theme.tile;
+            border-width: 1px;
+            border-color: Theme.field-hi;
+            VerticalLayout {
+                padding: 4px;
+                MenuItem {
+                    text: @tr("이름 바꾸기…");
+                    clicked => { root.preset-action(root.menu-preset, "rename"); }
+                }
+                MenuItem {
+                    text: @tr("삭제");
+                    clicked => { root.preset-action(root.menu-preset, "delete"); }
+                }
+            }
+        }
+    }
+
+    // the preset-name prompt, over the window
+    if root.prompt-visible: Rectangle {
+        width: root.width;
+        height: root.height;
+        background: #000000a0;
+        TouchArea { }
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 3;
+            width: 360px;
+            height: prompt-body.preferred-height;
+            background: Theme.card;
+            border-width: 1px;
+            border-color: Theme.field-hi;
+            border-radius: 8px;
+            prompt-body := VerticalLayout {
+                padding: 18px;
+                spacing: 10px;
+                Text {
+                    text: root.prompt-title;
+                    color: Theme.text;
+                    font-size: Theme.pt11;
+                    font-weight: 700;
+                }
+                Text {
+                    text: @tr("프리셋 이름");
+                    color: Theme.muted;
+                    font-size: Theme.pt9;
+                }
+                Rectangle {
+                    height: 32px;
+                    border-radius: 6px;
+                    background: Theme.field;
+                    border-width: 1px;
+                    border-color: input.has-focus ? Theme.accent : Theme.field-hi;
+                    input := TextInput {
+                        x: 8px;
+                        width: parent.width - 16px;
+                        text <=> root.prompt-text;
+                        color: Theme.text;
+                        selection-background-color: Theme.accent;
+                        selection-foreground-color: Theme.ink;
+                        vertical-alignment: center;
+                        single-line: true;
+                        accepted => { root.prompt-done(true); }
+                        init => {
+                            self.focus();
+                            self.select-all();
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    Button {
+                        text: "OK";
+                        kind: "primary";
+                        min-w: 84px;
+                        clicked => { root.prompt-done(true); }
+                    }
+                    Button {
+                        text: "Cancel";
+                        min-w: 84px;
+                        clicked => { root.prompt-done(false); }
+                    }
+                }
+            }
+        }
+    }
+
+    TipOverlay {
+        window-width: root.width;
+        window-height: root.height;
+    }
+}

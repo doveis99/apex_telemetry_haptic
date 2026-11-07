@@ -187,10 +187,33 @@ def runs():
         yield (f"log_{log.stem}", rows, gains, eq, {"log": log.name, "log_path": str(log)})
 
 
+def write_previews() -> None:
+    """Every effect test (preview.Preview) at the default settings, the road's surfaces too."""
+    from preview import ROAD_SURFACES, Preview
+    from effects import TOGGLEABLE
+    cases = [(name, ()) for name in TOGGLEABLE] + [("road", tuple(ROAD_SURFACES))] + [
+        ("road", (surface,)) for surface in ROAD_SURFACES]
+    eq = Equalizer.for_player({})
+    path = OUT / "previews.jsonl"
+    with path.open("w", encoding="utf-8", newline="\n") as out:
+        for name, surfaces in cases:
+            random.seed(SEED)
+            preview = Preview(name, Gains(), eq, surfaces)
+            blocks = []
+            while (block := preview.render()) is not None:
+                blocks.append([list(block.trigger), list(block.left_grip), list(block.right_grip), int(block.route),
+                               None if block.side is None else int(block.side)])
+            out.write(json.dumps({"effect": name, "surfaces": list(surfaces), "seed": SEED, "blocks": blocks},
+                                 allow_nan=False) + "\n")
+    print(f"previews: {len(cases)} -> {path.relative_to(ROOT)}")
+
+
 def main() -> None:
     i18n.set_language("ko")  # events in the source language, as the Rust port writes them for now
     OUT.mkdir(parents=True, exist_ok=True)
     wanted = sys.argv[1:]
+    if not wanted or "previews" in wanted:
+        write_previews()
     logged_once = False
     for name, frames, gains, eq, extra in runs():
         if wanted and not any(name.startswith(w) for w in wanted):

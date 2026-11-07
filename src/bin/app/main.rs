@@ -72,9 +72,12 @@ pub fn when_created<C: slint::ComponentHandle + 'static>(component: &C, visible:
     slint::Timer::single_shot(Duration::from_millis(0), move || attempt(weak, visible, Box::new(f), 100));
 }
 
-/// A dark caption once the native window exists.
-pub fn dark_title_bar_later<C: slint::ComponentHandle + 'static>(component: &C) {
-    when_created(component, false, platform::dark_title_bar);
+/// A dark caption with the program's icon once the native window exists.
+pub fn title_bar_later<C: slint::ComponentHandle + 'static>(component: &C) {
+    when_created(component, false, |handle| {
+        platform::dark_title_bar(handle);
+        platform::app_icon(handle);
+    });
 }
 
 /// Switch both the Rust messages and the window's own (@tr) texts.
@@ -116,7 +119,7 @@ fn main() {
     }
     let weak = std::rc::Rc::downgrade(&app);
     let ui = app.borrow().ui.clone_strong();
-    dark_title_bar_later(&ui);
+    title_bar_later(&ui);
     if minimized {
         when_created(&ui, true, |handle| {
             // minimized without taking the focus from the game being launched

@@ -32,7 +32,7 @@ Drives the voice-coil (VCM) motors of the Flydigi APEX 6 Pro directly from Ameri
 ## Install and quick start
 
 1. Download `ATSHaptics-<version>.zip` from [Releases](../../releases) and unpack it anywhere.
-2. Run `ATSHaptics\ATSHaptics.exe`. There is no installer.
+2. Run `ATSHaptics\ATSHaptics.exe` (the blue controller icon). There is no installer. `ats_haptics.exe` and `replay.exe`, with the dark console icons, are for the command line.
 3. If no usable telemetry plugin is found for your game, the [plugin window](#telemetry-plugin-window) opens by itself. Press **Install**.
 4. First check that the controller vibrates with **Test drive** → **Start** (a 60-second scenario, no game needed).
 5. Choose **ATS/ETS2 game** → **Start** and launch the game. The app takes the controller when the game starts and releases it when the game ends.

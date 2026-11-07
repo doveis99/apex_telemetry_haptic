@@ -45,6 +45,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
     "Win32_UI_Controls_Dialogs",
+    "Win32_UI_HiDpi",
     "Win32_UI_Input_XboxController",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
@@ -62,6 +63,8 @@ opt-level = 3
 
 [build-dependencies]
 slint-build = "1.18"
+# each program's icon and version info in its .exe (with rc.exe from the Windows SDK)
+embed-resource = "3"
 
 [[bin]]
 name = "ATSHaptics"

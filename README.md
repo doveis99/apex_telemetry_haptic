@@ -30,7 +30,7 @@ American Truck Simulator / Euro Truck Simulator 2의 텔레메트리로 Flydigi 
 ## 설치와 빠른 시작
 
 1. [Releases](../../releases)에서 `ATSHaptics-<버전>.zip`을 받아 원하는 곳에 압축을 풉니다.
-2. `ATSHaptics\ATSHaptics.exe`를 실행합니다. 설치 과정은 없습니다.
+2. `ATSHaptics\ATSHaptics.exe`(파란 컨트롤러 아이콘)를 실행합니다. 설치 과정은 없습니다. 검은 콘솔 아이콘의 `ats_haptics.exe`와 `replay.exe`는 명령줄용입니다.
 3. 게임에 쓸 수 있는 텔레메트리 플러그인이 없으면 [플러그인 창](#텔레메트리-플러그인-창)이 자동으로 열립니다. **설치**를 누르세요.
 4. 먼저 **테스트 주행** → **시작**으로 진동이 오는지 확인합니다(게임 없이 60초 시나리오).
 5. **ATS/ETS2 게임** → **시작**을 누르고 게임을 실행합니다. 게임이 켜지면 컨트롤러를 잡고, 게임이 끝나면 놓습니다.

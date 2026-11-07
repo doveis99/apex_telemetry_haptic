@@ -119,7 +119,7 @@ impl Calibration {
             let inner = me.0.borrow();
             inner.dialog.set_ui_font(ats_haptics::i18n::ui_font().into());
             let _ = inner.dialog.show();
-            crate::dark_title_bar_later(&inner.dialog);
+            crate::title_bar_later(&inner.dialog);
         }
         me.relabel();
         let poll = Rc::downgrade(&me.0);

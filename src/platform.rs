@@ -1,6 +1,7 @@
 //! What the window asks of Windows itself: message boxes and file pickers (the native ones,
-//! as tkinter's are), opening a link or a folder, a dark title bar, and the named mutex and
-//! event that keep one window running and let a Steam launch start its session.
+//! as tkinter's are), opening a link or a folder, a dark title bar and the window's icon, and
+//! the named mutex and event that keep one window running and let a Steam launch start its
+//! session.
 
 // A window handle here is only ever handed to Windows as the owner or target of a call, never
 // dereferenced by this code.
@@ -145,6 +146,30 @@ pub fn dark_title_bar(hwnd: HWND) {
         // SAFETY: a 4-byte BOOL for DWMWA_USE_IMMERSIVE_DARK_MODE.
         if unsafe { DwmSetWindowAttribute(hwnd, attribute, (&on as *const i32).cast(), 4) } == 0 {
             break;
+        }
+    }
+}
+
+/// Give a window the program's own icon (resource 1, which build.rs embeds) in its caption and
+/// on the taskbar, at the sizes the window's DPI asks for; winit leaves both empty.
+pub fn app_icon(hwnd: HWND) {
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::UI::HiDpi::{GetDpiForWindow, GetSystemMetricsForDpi};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        LoadImageW, SendMessageW, ICON_BIG, ICON_SMALL, IMAGE_ICON, LR_DEFAULTCOLOR, SM_CXICON, SM_CXSMICON,
+        WM_SETICON,
+    };
+    // SAFETY: a window of this process; the icon resource is this executable's, and an icon
+    // LoadImageW makes without LR_SHARED stays alive for the window to keep using.
+    unsafe {
+        let module = GetModuleHandleW(std::ptr::null());
+        let dpi = GetDpiForWindow(hwnd).max(96);
+        for (kind, metric) in [(ICON_SMALL, SM_CXSMICON), (ICON_BIG, SM_CXICON)] {
+            let side = GetSystemMetricsForDpi(metric, dpi);
+            let icon = LoadImageW(module, 1 as _, IMAGE_ICON, side, side, LR_DEFAULTCOLOR);
+            if !icon.is_null() {
+                SendMessageW(hwnd, WM_SETICON, kind as usize, icon as isize);
+            }
         }
     }
 }

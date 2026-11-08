@@ -386,4 +386,8 @@ MESSAGES = {
     "이름 바꾸기": "Rename",
     "삭제": "Delete",
     "'{name}' 프리셋을 지울까요? 지금 설정은 그대로 남습니다.": "Delete the preset '{name}'? The current settings stay as they are.",
+    '2 kHz 출력': '2 kHz output',
+    '켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다.':
+        'When on, the controller gets 2 kHz samples every 4 ms instead of 1 kHz. The vibration keeps its strength, the 500–1000 Hz buzz the pad made along with 1 kHz samples is filtered out, and clicks (ticks) come out sharper. Turn it off if wireless dropouts get more frequent. Switches at once, also while driving or testing, and is saved right away.',
+    '2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄': '2 kHz output: sending 2 kHz samples every 4 ms',
 }

@@ -17,6 +17,7 @@ pub mod plugin_install;
 pub mod preview;
 pub mod pymath;
 pub mod pyrandom;
+pub mod rate2k;
 pub mod replay;
 pub mod runner;
 pub mod scenarios;

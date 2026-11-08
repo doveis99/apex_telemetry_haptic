@@ -8,6 +8,12 @@
 //! trigger, left-grip and right-grip sample (signed, +-127 max). The trigger channel is a
 //! single waveform, played on the left, the right or both triggers (Block::side).
 //!
+//! The pad's output runs at 2 kHz (docs/xhaptics-engine-notes.md section 11, measured
+//! 2026-11-08 on firmware 9.0.6.8): with bit 7 of the first payload byte set, as Flydigi's
+//! engine and ASB send it, it joins the eight samples into sixteen by straight lines; with it
+//! clear it queues them as they are, so a report every 4 ms carries 2 kHz data
+//! (Block::upsample, src/rate2k.rs).
+//!
 //! The reasons behind the numbers (the 94 ms wait, re-asserting the route, sending silence
 //! every block, the time-critical thread) are written up in apex6.py.
 
@@ -118,7 +124,11 @@ fn encode(sample: f64) -> u8 {
     (value + 128) as u8 // 0x80 is electrical zero
 }
 
-/// Eight 1 kHz subframes for the three output channels.
+/// One sample at 1 kHz per channel (left grip, right grip, trigger) where a tick fired, to be
+/// placed at 2 kHz instead of being joined into the line (src/rate2k.rs).
+pub type Ticks = [[f64; SUBFRAMES]; 3];
+
+/// Eight subframes for the three output channels: 1 kHz, or 2 kHz when upsample is off.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Block {
     pub trigger: [f64; SUBFRAMES],
@@ -130,6 +140,12 @@ pub struct Block {
     /// The trigger(s) the trigger channel plays on, set with the 0x53 trigger frame before
     /// this block goes out; None leaves it where it is.
     pub side: Option<Route>,
+    /// Bit 7 of the first payload byte. Set (1 kHz samples, a report every 8 ms), the pad
+    /// joins the eight samples into sixteen by straight lines; clear, they are 2 kHz samples
+    /// and the block lasts 4 ms.
+    pub upsample: bool,
+    /// The synth's ticks, kept out of the samples, when it renders for the 2 kHz output.
+    pub ticks: Option<Box<Ticks>>,
 }
 
 impl Default for Block {
@@ -141,6 +157,8 @@ impl Default for Block {
             route: Route::Mute,
             trigger_bit: None,
             side: None,
+            upsample: true,
+            ticks: None,
         }
     }
 }
@@ -148,6 +166,24 @@ impl Default for Block {
 impl Block {
     pub fn is_silent(&self) -> bool {
         self.trigger.iter().chain(&self.left_grip).chain(&self.right_grip).all(|&x| x == 0.0)
+            && self.ticks.as_ref().is_none_or(|t| t.iter().flatten().all(|&x| x == 0.0))
+    }
+
+    /// How long the pad plays it, with a report period of `period` for 1 kHz blocks.
+    pub fn period(&self, period: f64) -> f64 {
+        if self.upsample { period } else { period / 2.0 }
+    }
+
+    /// Strongest sample of each channel (left grip, right grip, trigger), ticks included.
+    pub fn peaks(&self) -> [f64; 3] {
+        let ticks = self.ticks.as_deref().copied().unwrap_or([[0.0; SUBFRAMES]; 3]);
+        let mut peaks = [0.0f64; 3];
+        for (i, channel) in [&self.left_grip, &self.right_grip, &self.trigger].into_iter().enumerate() {
+            for (x, t) in channel.iter().zip(&ticks[i]) {
+                peaks[i] = crate::pymath::max(peaks[i], crate::pymath::max(x.abs(), t.abs()));
+            }
+        }
+        peaks
     }
 }
 
@@ -157,7 +193,7 @@ pub fn build_realtime(block: &Block, enable_trigger: bool, enable_grips: bool) -
         None => enable_trigger && block.route != Route::Mute,
     };
     let mut payload = [0u8; 25];
-    payload[0] = 0x80
+    payload[0] = if block.upsample { 0x80 } else { 0 }
         | if enable_grips { 0x10 | 0x08 } else { 0 }
         | if enable_trigger { 0x04 } else { 0 }
         | block.route as u8;
@@ -385,6 +421,21 @@ impl Clock for RealClock {
     }
 }
 
+/// A 0x53 frame that waits for a free slot between 2 kHz blocks; built when it goes out, so it
+/// carries the route as it is then.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Deferred {
+    /// the two frames of reassert()
+    Side,
+    Target,
+    /// a trigger the channel left: off, unless the channel came back to it meanwhile
+    Release(u8),
+}
+
+fn plays_on(side: u8, one: u8) -> bool {
+    side == one || side == Route::Both as u8
+}
+
 /// The vendor interface, verified, streaming motor blocks. Dropping it mutes and releases the motors.
 pub struct Apex6<L: Link = HidLink, C: Clock = RealClock> {
     link: L,
@@ -394,6 +445,7 @@ pub struct Apex6<L: Link = HidLink, C: Clock = RealClock> {
     trigger_mode: u8,
     trigger_target: u8,
     trigger_side: u8,
+    deferred: std::collections::VecDeque<Deferred>,
 }
 
 impl Apex6<HidLink, RealClock> {
@@ -420,6 +472,7 @@ impl<L: Link, C: Clock> Apex6<L, C> {
             trigger_mode: DEFAULT_TRIGGER_MODE,
             trigger_target: DEFAULT_TRIGGER_TARGET,
             trigger_side: DEFAULT_TRIGGER_SIDE as u8,
+            deferred: Default::default(),
         }
     }
 
@@ -505,23 +558,57 @@ impl<L: Link, C: Clock> Apex6<L, C> {
     /// Play the trigger channel on Route::Left, Right or Both from the next report on. The new
     /// side goes on before the one it leaves goes off; only a change is sent.
     pub fn set_trigger_side(&mut self, side: Route) -> Result<(), PadError> {
+        self.change_trigger_side(side, false).map(|_| ())
+    }
+
+    /// set_trigger_side; with `defer`, the side left is let go in a later free slot. True when
+    /// a frame went out.
+    fn change_trigger_side(&mut self, side: Route, defer: bool) -> Result<bool, PadError> {
         let side = side as u8;
         if side == self.trigger_side {
-            return Ok(());
+            return Ok(false);
         }
         let old = self.trigger_side;
         self.trigger_side = side;
         self.write(&trigger_side_report(side))?;
-        let both = Route::Both as u8;
         for one in [Route::Left as u8, Route::Right as u8] {
-            if (old == one || old == both) && !(side == one || side == both) {
-                self.write(&build_command(CMD_MOTOR_ROUTE, &[0x01, one, 0x00]))?;
+            if plays_on(old, one) && !plays_on(side, one) {
+                if defer {
+                    self.defer(Deferred::Release(one));
+                } else {
+                    self.write(&build_command(CMD_MOTOR_ROUTE, &[0x01, one, 0x00]))?;
+                }
             }
         }
-        Ok(())
+        Ok(true)
+    }
+
+    fn defer(&mut self, frame: Deferred) {
+        if !self.deferred.contains(&frame) {
+            self.deferred.push_back(frame);
+        }
+    }
+
+    /// Send the oldest deferred frame that still applies; false when none is left.
+    fn send_deferred(&mut self) -> Result<bool, PadError> {
+        while let Some(next) = self.deferred.pop_front() {
+            let [side, target] = motor_enable_reports(self.trigger_mode, self.trigger_target, self.trigger_side);
+            let report = match next {
+                Deferred::Side => side,
+                Deferred::Target => target,
+                Deferred::Release(one) if !plays_on(self.trigger_side, one) => {
+                    build_command(CMD_MOTOR_ROUTE, &[0x01, one, 0x00])
+                }
+                Deferred::Release(_) => continue,
+            };
+            self.write(&report)?;
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     pub fn disable(&mut self) -> Result<(), PadError> {
+        self.deferred.clear();
         let silent = silent_report();
         for _ in 0..3 {
             self.write(&silent)?;
@@ -548,6 +635,11 @@ impl<L: Link, C: Clock> Apex6<L, C> {
 
     /// Call render(first_sample_index) every period (8 ms) and send its block; None stops.
     /// Writes are scheduled on absolute deadlines so one late frame does not shift every later one.
+    ///
+    /// A 2 kHz block (upsample off) lasts half a period, so the next is due 4 ms later. The link
+    /// takes one report per 2 ms slot, which leaves room for one more frame between two such
+    /// blocks: the route's reassert and the side a trigger change leaves go out one per block
+    /// then, instead of together, which would hold the next block back past its turn.
     pub fn stream<F>(&mut self, mut render: F, max_seconds: Option<f64>, period: f64) -> Result<StreamStats, PadError>
     where
         F: FnMut(usize) -> Option<Block>,
@@ -564,15 +656,18 @@ impl<L: Link, C: Clock> Apex6<L, C> {
         let _priority = TimeCritical::raise();
         while max_seconds.is_none_or(|max| deadline - start < max) {
             let Some(block) = render(sample_index) else { break };
+            let lasts = block.period(period);
+            let spread = !block.upsample;
             let now = self.clock.now();
             let lateness = (now - deadline) * 1000.0;
             stats.max_lateness_ms = crate::pymath::max(stats.max_lateness_ms, lateness);
-            if lateness > period * 1000.0 {
+            if lateness > lasts * 1000.0 {
                 stats.late_frames += 1;
                 deadline = now; // resync instead of bursting to catch up
             }
+            let mut slots_used = 1;
             if let Some(side) = block.side {
-                self.set_trigger_side(side)?;
+                slots_used += self.change_trigger_side(side, spread)? as u32;
             }
             self.write_block(&block)?;
             let write_ms = (self.clock.now() - now) * 1000.0;
@@ -582,11 +677,24 @@ impl<L: Link, C: Clock> Apex6<L, C> {
             silent_streak = if block.is_silent() { silent_streak + 1 } else { 0 };
             let every = if silent_streak > 0 { REASSERT_IDLE_S } else { REASSERT_ACTIVE_S };
             if now - last_reassert >= every {
-                self.reassert()?;
+                if spread {
+                    self.defer(Deferred::Side);
+                    self.defer(Deferred::Target);
+                } else {
+                    self.reassert()?;
+                }
                 last_reassert = now;
             }
+            if spread {
+                // the side frame already took this block's spare slot
+                if slots_used == 1 {
+                    self.send_deferred()?;
+                }
+            } else {
+                while self.send_deferred()? {}
+            }
             sample_index += SUBFRAMES;
-            deadline += period;
+            deadline += lasts;
             let remaining = deadline - self.clock.now();
             if remaining > 0.0 {
                 self.clock.sleep(remaining);
@@ -670,6 +778,65 @@ mod tests {
             .unwrap();
         assert_eq!((stats.frames, stats.late_frames), (10, 0));
         assert!((pad.clock().now - 0.02).abs() < 1e-12);
+        pad.set_enabled(false);
+    }
+
+    #[test]
+    fn two_khz_blocks_go_out_every_half_period() {
+        let mut pad = pad();
+        let half = Block { upsample: false, ..Block::default() };
+        let stats = pad.stream(|first| (first < 10 * SUBFRAMES).then(|| half.clone()), None, FRAME_PERIOD).unwrap();
+        assert_eq!((stats.frames, stats.late_frames), (10, 0));
+        assert!((pad.clock().now - 0.04).abs() < 1e-12);
+        let realtime: Vec<&Vec<u8>> = pad.link().reports.iter().filter(|r| r[3] == CMD_REALTIME_MOTOR).collect();
+        assert!(realtime.iter().all(|r| r[5] & 0x80 == 0), "bit 7 clear");
+        pad.set_enabled(false);
+    }
+
+    #[test]
+    fn between_2k_blocks_goes_one_route_frame_at_most() {
+        let mut pad = pad();
+        let tone = |side| Block {
+            trigger: [20.0; SUBFRAMES],
+            route: Route::Both,
+            side: Some(side),
+            upsample: false,
+            ..Block::default()
+        };
+        // a side change each block for a while, then 2 s of silence (a reassert falls due)
+        let blocks: Vec<Block> = [Route::Left, Route::Right, Route::Left, Route::Both, Route::Left]
+            .into_iter()
+            .map(tone)
+            .chain(std::iter::repeat_n(Block { upsample: false, ..Block::default() }, 500))
+            .collect();
+        pad.stream(|first| blocks.get(first / SUBFRAMES).cloned(), None, FRAME_PERIOD).unwrap();
+        let reports = pad.link().reports.clone();
+        let route = |r: &Vec<u8>| r[3] == CMD_MOTOR_ROUTE;
+        // each block's own side goes on just before it
+        let first = reports.iter().position(|r| !route(r)).unwrap();
+        assert_eq!(reports[first - 1], trigger_side_report(Route::Left as u8).to_vec());
+        // one frame at most between two blocks: a deferred one, or the next block's own side
+        let mut since_block = 0;
+        let mut realtime = 0;
+        for (i, r) in reports.iter().enumerate() {
+            if route(r) {
+                since_block += 1;
+                assert!(since_block <= 1, "report {i}: {since_block} frames");
+            } else {
+                since_block = 0;
+                realtime += 1;
+            }
+        }
+        assert_eq!(realtime, blocks.len());
+        // the sides left wait for a free slot, once each; the channel ended on Left, so Left's
+        // own release had gone stale by then and only Right is let go
+        let release = |one: Route| build_command(CMD_MOTOR_ROUTE, &[0x01, one as u8, 0x00]).to_vec();
+        assert_eq!(reports.iter().filter(|r| **r == release(Route::Right)).count(), 1);
+        assert_eq!(reports.iter().filter(|r| **r == release(Route::Left)).count(), 0);
+        // the reassert came, both its frames, with the side as it stands
+        let [side, target] = motor_enable_reports(DEFAULT_TRIGGER_MODE, DEFAULT_TRIGGER_TARGET, Route::Left as u8);
+        assert!(reports.iter().filter(|r| **r == side.to_vec()).count() >= 3); // two changes to Left, a reassert
+        assert!(reports.contains(&target.to_vec()));
         pad.set_enabled(false);
     }
 

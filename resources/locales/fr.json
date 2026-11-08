@@ -1,6 +1,8 @@
 {
 "'{name}' 프리셋을 지울까요? 지금 설정은 그대로 남습니다.": "Supprimer le préréglage « {name} » ? Les réglages actuels restent tels quels.",
 "'{name}' 프리셋이 이미 있습니다. 덮어쓸까요?": "Le préréglage « {name} » existe déjà. L'écraser ?",
+"2 kHz 출력": "Sortie 2 kHz",
+"2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄": "Sortie 2 kHz : échantillons à 2 kHz envoyés toutes les 4 ms",
 "AMT·수동": "AMT / manuelle",
 "APEX 6 Pro가 아님 (device type 0x{type})": "Ce n'est pas une APEX 6 Pro (device type 0x{type})",
 "ATS 또는 ETS2 설치 폴더": "Dossier d'installation d'ATS ou ETS2",
@@ -222,6 +224,7 @@
 "컨트롤러를 열 수 없음 ({error})": "Impossible d'ouvrir la manette ({error})",
 "컨트롤러를 평소처럼 잡으세요. 패드 버튼으로 답할 수 있습니다: 십자키 ← 또는 LB 첫 번째, → 또는 RB 두 번째, X 다시 듣기, B 그만. 키보드는 ← → (또는 1 2) R Esc입니다. 재생 중에 눌러도 바로 반영됩니다.": "Tenez la manette normalement. Vous pouvez répondre avec les boutons de la manette : croix ← ou LB le premier, → ou RB le second, X réécouter, B arrêter. Au clavier : ← → (ou 1 2) R Échap. Les réponses comptent même pendant les sons.",
 "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 주행 중에도 켜고 끄는 즉시 적용되고 바로 저장됩니다.": "Activé, chaque démarrage écrit dans un CSV chaque bloc de 8 ms envoyé à la manette (heure, intervalle, route des gâchettes, intensité par canal, vitesse, revêtement, événements). Si une vibration semble anormale, notez l'heure et cherchez-la dedans. Environ 30 Mo par heure ; les 10 plus récents sont gardés. Pris en compte aussitôt, même en roulant, enregistré aussitôt.",
+"켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다.": "Activée, la manette reçoit des échantillons à 2 kHz toutes les 4 ms au lieu de 1 kHz. La vibration garde sa force, le bourdonnement de 500 à 1000 Hz que la manette produisait avec les échantillons à 1 kHz est filtré et les clics (ticks) sont plus nets. Désactivez-la si les coupures en sans-fil deviennent plus fréquentes. Pris en compte aussitôt, même en roulant ou pendant un test, enregistré aussitôt.",
 "콘크리트": "Béton",
 "키보드 {keys}": "Clavier {keys}",
 "테스트 주행": "Essai routier",

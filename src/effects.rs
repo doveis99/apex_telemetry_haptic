@@ -28,8 +28,8 @@ use crate::telemetry::{Frame, Wheel};
 
 const SR: f64 = SAMPLE_RATE as f64;
 pub const DT: f64 = SUBFRAMES as f64 / SAMPLE_RATE as f64; // 8 ms per telemetry update
-const CEILING_GRIP: f64 = SAMPLE_LIMIT as f64;
-const CEILING_TRIGGER: f64 = 102.0; // round(0.8 * SAMPLE_LIMIT)
+pub const CEILING_GRIP: f64 = SAMPLE_LIMIT as f64;
+pub const CEILING_TRIGGER: f64 = 102.0; // round(0.8 * SAMPLE_LIMIT)
 pub const TAU: f64 = 2.0 * m::PI;
 const CHANGE_TAU: f64 = 2.0;
 const FADE_TAU: f64 = 8.0;
@@ -573,6 +573,7 @@ pub struct ResonanceCut {
     pub center: f64,
     pub depth_db: f64,
     pub q: f64,
+    rate: f64,
     b0: f64,
     b1: f64,
     b2: f64,
@@ -586,14 +587,20 @@ pub struct ResonanceCut {
 
 impl ResonanceCut {
     pub fn new(center: f64, depth_db: f64, q: f64) -> ResonanceCut {
+        ResonanceCut::at_rate(center, depth_db, q, SR)
+    }
+
+    /// The same cut for samples at `rate` Hz (the 2 kHz output's ticks).
+    pub fn at_rate(center: f64, depth_db: f64, q: f64, rate: f64) -> ResonanceCut {
         let a = m::pow(10.0, -depth_db / 40.0);
-        let w = TAU * center / SR;
+        let w = TAU * center / rate;
         let alpha = m::sin(w) / (2.0 * q);
         let a0 = 1.0 + alpha / a;
         ResonanceCut {
             center,
             depth_db,
             q,
+            rate,
             b0: (1.0 + alpha * a) / a0,
             b1: -2.0 * m::cos(w) / a0,
             b2: (1.0 - alpha * a) / a0,
@@ -607,7 +614,7 @@ impl ResonanceCut {
     }
 
     pub fn magnitude(&self, freq: f64) -> f64 {
-        biquad_magnitude([self.b0, self.b1, self.b2], [self.a1, self.a2], freq)
+        m::biquad_magnitude([self.b0, self.b1, self.b2], [self.a1, self.a2], TAU, freq, self.rate)
     }
 
     pub fn next(&mut self, x: f64) -> f64 {
@@ -770,6 +777,11 @@ impl Equalizer {
     /// A fresh filter for one output of this channel; None when its curve shows no resonance.
     pub fn cut(&self, channel: usize) -> Option<ResonanceCut> {
         self.resonances[channel].map(|(c, d, q)| ResonanceCut::new(c, d, q))
+    }
+
+    /// cut() for samples at `rate` Hz.
+    pub fn cut_at(&self, channel: usize, rate: f64) -> Option<ResonanceCut> {
+        self.resonances[channel].map(|(c, d, q)| ResonanceCut::at_rate(c, d, q, rate))
     }
 
     /// The curve: how much a steady tone at freq is driven, all told.
@@ -1506,6 +1518,10 @@ pub struct Synth {
     /// left grip, right grip, trigger; 0 = no ducking
     pub duck: [f64; 3],
     pub levels: Levels,
+    /// Render for the 2 kHz output: ticks stay out of the samples and go in Block::ticks, at
+    /// their 1 kHz strength, for src/rate2k.rs to place at 2 kHz. Off, the output is the
+    /// Python app's to the bit.
+    pub native_ticks: bool,
 }
 
 impl Synth {
@@ -1577,6 +1593,7 @@ impl Synth {
             fresh: [1.0; 3],
             duck: [0.0; 3],
             levels: Levels { trigger_mode: "-", ..Levels::default() },
+            native_ticks: false,
         }
     }
 
@@ -2307,6 +2324,8 @@ impl Synth {
         let duck_release = duck_release();
         let mut block = Block::default();
         let mut heard = [false; 5]; // the TRIGGER_SLOTS something played in
+        let native_ticks = self.native_ticks;
+        let mut ticks = [[0.0; SUBFRAMES]; 3]; // left grip, right grip, trigger
         let p = self.prev_amp;
         for n in 0..SUBFRAMES {
             let k = (n + 1) as f64 / SUBFRAMES as f64;
@@ -2397,6 +2416,7 @@ impl Synth {
                 mix(&mut out, routes[Effect::Bumps.index()], wl * c, wr * c, 0.7 * (wl + wr) * c, eq_sway, BOTH_TRIGGERS);
             }
             let mut drive = [0.0; 5];
+            let mut tick = [0.0; 5]; // native_ticks: the ticks, apart from out
             for (entry, &burst_eq) in self.bursts.iter_mut().zip(&eq_bursts) {
                 let route = routes[entry.effect.index()];
                 let slot = entry.burst.trigger_slot;
@@ -2407,14 +2427,15 @@ impl Synth {
                 }
                 let b = entry.burst.next();
                 let (l, r) = side_pair(entry.side, b);
-                mix(&mut out, route, l, r, b, burst_eq, slot);
+                let into = if native_ticks && entry.burst.is_tick() { &mut tick } else { &mut out };
+                mix(into, route, l, r, b, burst_eq, slot);
             }
             for slot in TRIGGER_SLOTS {
-                if out[slot] != 0.0 || bed[slot] != 0.0 {
+                if out[slot] != 0.0 || bed[slot] != 0.0 || tick[slot] != 0.0 {
                     heard[slot] = true;
                 }
             }
-            for mix in [&mut out, &mut bed, &mut drive] {
+            for mix in [&mut out, &mut bed, &mut drive, &mut tick] {
                 // one trigger channel from here on
                 mix[BOTH_TRIGGERS] += mix[BRAKE_TRIGGER] + mix[THROTTLE_TRIGGER];
             }
@@ -2433,6 +2454,16 @@ impl Synth {
             block.left_grip[n] = self.out(out[0], g.grip_level, CEILING_GRIP);
             block.right_grip[n] = self.out(out[1], g.grip_level, CEILING_GRIP);
             block.trigger[n] = self.out(out[2], g.trigger_level, CEILING_TRIGGER);
+            if native_ticks {
+                // what the tick adds through the soft limit, on top of what plays with it: the
+                // sum is the sample the 1 kHz output sends (bar the resonance cut's first step)
+                ticks[0][n] = self.out(out[0] + tick[0], g.grip_level, CEILING_GRIP) - block.left_grip[n];
+                ticks[1][n] = self.out(out[1] + tick[1], g.grip_level, CEILING_GRIP) - block.right_grip[n];
+                ticks[2][n] = self.out(out[2] + tick[2], g.trigger_level, CEILING_TRIGGER) - block.trigger[n];
+            }
+        }
+        if ticks.iter().flatten().any(|&x| x != 0.0) {
+            block.ticks = Some(Box::new(ticks));
         }
         self.prev_amp = Amps {
             engine: engine_amp,
@@ -2461,7 +2492,7 @@ impl Synth {
             TriggerMode::Brake => "brake",
             TriggerMode::Throttle => "throttle",
         };
-        if block.trigger.iter().all(|&x| x == 0.0) {
+        if block.trigger.iter().all(|&x| x == 0.0) && block.ticks.as_ref().is_none_or(|t| t[2].iter().all(|&x| x == 0.0)) {
             block.route = Route::Mute;
             return block;
         }

@@ -241,6 +241,7 @@ impl App {
         ui.set_log_dir_tip(format!("{}\n{}", t!("디버그 기록이 쌓이는 폴더를 엽니다."), log_dir().display()).into());
         ui.set_auto_start(self.options.auto_start_on_game);
         ui.set_debug_log(self.options.debug_log);
+        ui.set_output_2k(self.options.output_2k);
         // the loaded tuning takes the sliders' steps, as setting each slider does in gui.py
         for group in 0..4 {
             for spec in specs(group) {
@@ -346,6 +347,7 @@ impl App {
         on!(on_save, |app| app.save());
         on!(on_reset, |app| app.apply(&Gains::default()));
         on!(on_debug_log_toggled, |app, on: bool| app.set_debug_log(on));
+        on!(on_output_2k_toggled, |app, on: bool| app.set_output_2k(on));
         on!(on_open_log_dir, |_app| platform::open_folder(&log_dir()));
         on!(on_prompt_done, |app, ok: bool| app.prompt_done(ok));
         let me = self.me.clone();
@@ -452,6 +454,17 @@ impl App {
         if let Some(worker) = &self.worker {
             worker.log_blocks.store(on, std::sync::atomic::Ordering::Relaxed);
         }
+    }
+
+    fn set_output_2k(&mut self, on: bool) {
+        // saved right away; a running drive switches at its next 8 ms block, a test at its next
+        self.options.output_2k = on;
+        let _ = self.settings.save_app_options(&self.options);
+        self.ui.set_output_2k(on);
+        if let Some(worker) = &self.worker {
+            worker.output_2k.store(on, std::sync::atomic::Ordering::Relaxed);
+        }
+        self.player.set_output_2k(on);
     }
 
     fn save(&mut self) {
@@ -716,7 +729,8 @@ impl App {
         };
         // read at each start: a new calibration applies
         let eq = Equalizer::for_player(&self.settings.load_eq());
-        self.worker = Some(Worker::start(&self.gains, eq, source, self.options.debug_log, self.dry_run, self.exit_with_game));
+        self.worker = Some(Worker::start(&self.gains, eq, source, self.options.debug_log, self.options.output_2k,
+                                         self.dry_run, self.exit_with_game));
         self.had_worker = true;
         self.show_run_state();
     }
@@ -754,7 +768,8 @@ impl App {
             return; // no controller, or it holds it
         }
         self.error = None;
-        self.player.play(Preview::new(effect, &self.gains, Equalizer::for_player(&self.settings.load_eq()), &surfaces));
+        let preview = Preview::new(effect, &self.gains, Equalizer::for_player(&self.settings.load_eq()), &surfaces);
+        self.player.play(preview, self.options.output_2k);
     }
 
     fn open_calibration(&mut self) {

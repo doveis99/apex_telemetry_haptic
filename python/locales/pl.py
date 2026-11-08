@@ -383,4 +383,8 @@ MESSAGES = {
     "이름 바꾸기": "Zmień nazwę",
     "삭제": "Usuń",
     "'{name}' 프리셋을 지울까요? 지금 설정은 그대로 남습니다.": "Usunąć preset „{name}”? Obecne ustawienia zostaną bez zmian.",
+    '2 kHz 출력': 'Wyjście 2 kHz',
+    '켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다.':
+        'Po włączeniu kontroler dostaje co 4 ms próbki 2 kHz zamiast 1 kHz. Wibracja zachowuje siłę, brzęczenie 500–1000 Hz, które pad wydawał przy próbkach 1 kHz, zostaje odfiltrowane, a kliknięcia (tiki) są ostrzejsze. Wyłącz, jeśli bezprzewodowo przerwy stają się częstsze. Działa od razu, także w trakcie jazdy lub testu, zapisywane od razu.',
+    '2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄': 'Wyjście 2 kHz: wysyłanie próbek 2 kHz co 4 ms',
 }

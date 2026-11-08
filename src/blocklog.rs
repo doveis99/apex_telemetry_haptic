@@ -61,8 +61,8 @@ pub fn csv_row(fields: &[String]) -> String {
     line
 }
 
-fn peak(samples: &[f64]) -> String {
-    m::round_int(samples.iter().fold(0.0f64, |p, x| m::max(p, x.abs()))).to_string()
+fn peak(peak: f64) -> String {
+    m::round_int(peak).to_string()
 }
 
 fn flag(on: bool) -> String {
@@ -217,9 +217,11 @@ impl BlockLog {
         row[1] = format!("{gap:.1}");
         row[2] = new_frame;
         row[3] = side.name().to_string();
-        row[4] = peak(&block.trigger);
-        row[5] = peak(&block.left_grip);
-        row[6] = peak(&block.right_grip);
+        // ticks the 2 kHz output places itself (Block::ticks) count as the samples they were
+        let [left, right, trigger] = block.peaks();
+        row[4] = peak(trigger);
+        row[5] = peak(left);
+        row[6] = peak(right);
         self.file.write_all(csv_row(&row).as_bytes())?;
         if self.flushed.elapsed().as_secs_f64() > FLUSH_S {
             self.file.flush()?;

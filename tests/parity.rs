@@ -138,6 +138,7 @@ fn check(path: &Path) -> Report {
                 route: ats_haptics::apex6::Route::from_u8(row.route).unwrap(),
                 trigger_bit: None,
                 side: row.side.and_then(ats_haptics::apex6::Route::from_u8),
+                ..Default::default()
             };
             if build_realtime(&block, true, true) != build_realtime(&python, true, true) {
                 report.int_blocks += 1;

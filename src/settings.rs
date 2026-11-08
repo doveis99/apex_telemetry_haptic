@@ -30,6 +30,8 @@ pub struct AppOptions {
     pub debug_log: bool,
     /// the preset in use: its button is lit and 저장 writes into it; "" none
     pub preset: String,
+    /// send 2 kHz samples, a report every 4 ms (rate2k.rs); off: 1 kHz every 8 ms
+    pub output_2k: bool,
 }
 
 fn read(path: &Path) -> Map<String, Value> {
@@ -138,6 +140,9 @@ fn set_app_fields(options: &mut AppOptions, stored: &Map<String, Value>) {
     }
     if let Some(v) = stored.get("preset") {
         options.preset = py_str(v);
+    }
+    if let Some(v) = stored.get("output_2k") {
+        options.output_2k = py_bool(v);
     }
 }
 

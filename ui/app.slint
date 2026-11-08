@@ -164,6 +164,7 @@ export component AppWindow inherits Window {
     in property <bool> dirty;
     in property <string> timing;
     in property <bool> debug-log;
+    in property <bool> output-2k;
     in property <string> log-dir-tip;
     // the preset-name prompt
     in property <bool> prompt-visible;
@@ -192,6 +193,7 @@ export component AppWindow inherits Window {
     callback save();
     callback reset();
     callback debug-log-toggled(bool);
+    callback output-2k-toggled(bool);
     callback open-log-dir();
     callback prompt-done(bool);
     // the size the content asks for, for the offscreen snapshot
@@ -738,7 +740,7 @@ export component AppWindow inherits Window {
             }
         }
 
-        // footer: save and defaults on the left; timing, debug log and its folder on the right
+        // footer: save and defaults on the left; 2 kHz, timing, debug log and its folder on the right
         HorizontalLayout {
             spacing: 8px;
             Button {
@@ -764,6 +766,23 @@ export component AppWindow inherits Window {
                 }
             }
             Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                Switch {
+                    checked: root.output-2k;
+                    tint: Theme.accent;
+                    tip: @tr("켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다.");
+                    toggled(on) => { root.output-2k-toggled(on); }
+                }
+            }
+            TipText {
+                text: @tr("2 kHz 출력");
+                color: Theme.text;
+                font-size: Theme.pt9;
+                horizontal-stretch: 0;
+                tip: @tr("켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다.");
+            }
+            Rectangle { width: 10px; }
             VerticalLayout {
                 alignment: center;
                 Switch {

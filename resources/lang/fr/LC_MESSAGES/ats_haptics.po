@@ -9,6 +9,12 @@ msgstr "Supprimer le préréglage « {name} » ? Les réglages actuels restent t
 msgid "'{name}' 프리셋이 이미 있습니다. 덮어쓸까요?"
 msgstr "Le préréglage « {name} » existe déjà. L'écraser ?"
 
+msgid "2 kHz 출력"
+msgstr "Sortie 2 kHz"
+
+msgid "2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄"
+msgstr "Sortie 2 kHz : échantillons à 2 kHz envoyés toutes les 4 ms"
+
 msgid "AMT·수동"
 msgstr "AMT / manuelle"
 
@@ -671,6 +677,9 @@ msgstr "Tenez la manette normalement. Vous pouvez répondre avec les boutons de 
 
 msgid "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 주행 중에도 켜고 끄는 즉시 적용되고 바로 저장됩니다."
 msgstr "Activé, chaque démarrage écrit dans un CSV chaque bloc de 8 ms envoyé à la manette (heure, intervalle, route des gâchettes, intensité par canal, vitesse, revêtement, événements). Si une vibration semble anormale, notez l'heure et cherchez-la dedans. Environ 30 Mo par heure ; les 10 plus récents sont gardés. Pris en compte aussitôt, même en roulant, enregistré aussitôt."
+
+msgid "켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다."
+msgstr "Activée, la manette reçoit des échantillons à 2 kHz toutes les 4 ms au lieu de 1 kHz. La vibration garde sa force, le bourdonnement de 500 à 1000 Hz que la manette produisait avec les échantillons à 1 kHz est filtré et les clics (ticks) sont plus nets. Désactivez-la si les coupures en sans-fil deviennent plus fréquentes. Pris en compte aussitôt, même en roulant ou pendant un test, enregistré aussitôt."
 
 msgid "콘크리트"
 msgstr "Béton"

@@ -45,14 +45,18 @@ pub struct Worker {
     pub shared: Arc<Mutex<Shared>>,
     pub stop: Arc<AtomicBool>,
     pub log_blocks: Arc<AtomicBool>,
+    /// 2 kHz output, followed from the next block on
+    pub output_2k: Arc<AtomicBool>,
     /// the motor curves it started with, for effect tests played in place of the drive
     pub eq: Equalizer,
 }
 
 impl Worker {
-    pub fn start(gains: &Gains, eq: Equalizer, source: Source, log_blocks: bool, dry_run: bool,
+    pub fn start(gains: &Gains, eq: Equalizer, source: Source, log_blocks: bool, output_2k: bool, dry_run: bool,
                  exit_with_game: bool) -> Worker {
         let mut runner = Runner::new(gains, eq.clone(), source, None, log_blocks);
+        runner.output_2k.store(output_2k, Ordering::Relaxed);
+        let two_k = Arc::clone(&runner.output_2k);
         let shared = Arc::new(Mutex::new(Shared::default()));
         let stop = Arc::clone(&runner.stop_requested);
         let log = Arc::clone(&runner.log_blocks);
@@ -112,7 +116,7 @@ impl Worker {
                 }
             })
             .expect("output thread");
-        Worker { thread: Some(thread), shared, stop, log_blocks: log, eq }
+        Worker { thread: Some(thread), shared, stop, log_blocks: log, output_2k: two_k, eq }
     }
 
     pub fn running(&self) -> bool {

@@ -397,4 +397,8 @@ MESSAGES = {
     "삭제": "Eliminar",
     "'{name}' 프리셋을 지울까요? 지금 설정은 그대로 남습니다.":
         "¿Eliminar el preajuste «{name}»? Los ajustes actuales se quedan como están.",
+    '2 kHz 출력': 'Salida a 2 kHz',
+    '켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다.':
+        'Si está activado, el mando recibe muestras de 2 kHz cada 4 ms en lugar de 1 kHz. La vibración conserva su fuerza, se filtra el zumbido de 500–1000 Hz que el mando producía con las muestras de 1 kHz y los clics (ticks) salen más nítidos. Desactívalo si en inalámbrico aumentan los cortes. Cambia al instante, incluso conduciendo o en una prueba, y se guarda al instante.',
+    '2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄': 'Salida a 2 kHz: enviando muestras de 2 kHz cada 4 ms',
 }

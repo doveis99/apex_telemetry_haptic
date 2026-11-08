@@ -9,6 +9,12 @@ msgstr "¿Eliminar el preajuste «{name}»? Los ajustes actuales se quedan como 
 msgid "'{name}' 프리셋이 이미 있습니다. 덮어쓸까요?"
 msgstr "Ya existe el preajuste «{name}». ¿Sobrescribirlo?"
 
+msgid "2 kHz 출력"
+msgstr "Salida a 2 kHz"
+
+msgid "2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄"
+msgstr "Salida a 2 kHz: enviando muestras de 2 kHz cada 4 ms"
+
 msgid "AMT·수동"
 msgstr "AMT / manual"
 
@@ -671,6 +677,9 @@ msgstr "Sujeta el mando como siempre. Puedes responder con los botones del mando
 
 msgid "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 주행 중에도 켜고 끄는 즉시 적용되고 바로 저장됩니다."
 msgstr "Si está activado, cada inicio guarda en un CSV cada bloque de 8 ms enviado al mando (hora, intervalo, ruta del gatillo, intensidad por canal, velocidad, superficie, eventos). Si una vibración se siente rara, anota la hora y búscala ahí. Unos 30 MB por hora; se guardan los 10 más recientes. Se aplica al instante, incluso conduciendo, y se guarda al instante."
+
+msgid "켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다."
+msgstr "Si está activado, el mando recibe muestras de 2 kHz cada 4 ms en lugar de 1 kHz. La vibración conserva su fuerza, se filtra el zumbido de 500–1000 Hz que el mando producía con las muestras de 1 kHz y los clics (ticks) salen más nítidos. Desactívalo si en inalámbrico aumentan los cortes. Cambia al instante, incluso conduciendo o en una prueba, y se guarda al instante."
 
 msgid "콘크리트"
 msgstr "Hormigón"

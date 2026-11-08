@@ -36,6 +36,7 @@ class AppOptions:
     language: str = ""  # i18n code; empty follows the Windows display language
     debug_log: bool = False  # write every output block to a CSV (blocklog.py)
     preset: str = ""  # the preset in use: its button is lit and 저장 writes into it; "" none
+    output_2k: bool = False  # the Rust app's 2 kHz output (src/rate2k.rs); this app always sends 1 kHz
 
 
 def _read(path: Path | None) -> dict:

@@ -397,4 +397,8 @@ MESSAGES = {
     "삭제": "Löschen",
     "'{name}' 프리셋을 지울까요? 지금 설정은 그대로 남습니다.":
         "Preset „{name}“ löschen? Die aktuellen Einstellungen bleiben, wie sie sind.",
+    '2 kHz 출력': '2-kHz-Ausgabe',
+    '켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다.':
+        'Wenn an, bekommt der Controller alle 4 ms 2-kHz-Samples statt 1 kHz. Die Vibration behält ihre Stärke, das Summen bei 500–1000 Hz, das das Pad bei 1-kHz-Samples mit erzeugte, wird herausgefiltert, und Klicks (Ticks) kommen schärfer. Schalten Sie es aus, wenn kabellos die Aussetzer häufiger werden. Wirkt sofort, auch während der Fahrt oder eines Tests, sofort gespeichert.',
+    '2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄': '2-kHz-Ausgabe: sende alle 4 ms 2-kHz-Samples',
 }

@@ -1,6 +1,8 @@
 {
 "'{name}' 프리셋을 지울까요? 지금 설정은 그대로 남습니다.": "Preset „{name}“ löschen? Die aktuellen Einstellungen bleiben, wie sie sind.",
 "'{name}' 프리셋이 이미 있습니다. 덮어쓸까요?": "Ein Preset „{name}“ gibt es schon. Überschreiben?",
+"2 kHz 출력": "2-kHz-Ausgabe",
+"2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄": "2-kHz-Ausgabe: sende alle 4 ms 2-kHz-Samples",
 "AMT·수동": "AMT / manuell",
 "APEX 6 Pro가 아님 (device type 0x{type})": "Kein APEX 6 Pro (device type 0x{type})",
 "ATS 또는 ETS2 설치 폴더": "ATS- oder ETS2-Installationsordner",
@@ -222,6 +224,7 @@
 "컨트롤러를 열 수 없음 ({error})": "Controller kann nicht geöffnet werden ({error})",
 "컨트롤러를 평소처럼 잡으세요. 패드 버튼으로 답할 수 있습니다: 십자키 ← 또는 LB 첫 번째, → 또는 RB 두 번째, X 다시 듣기, B 그만. 키보드는 ← → (또는 1 2) R Esc입니다. 재생 중에 눌러도 바로 반영됩니다.": "Halten Sie den Controller wie gewohnt. Sie können mit den Tasten des Pads antworten: Steuerkreuz ← oder LB der erste, → oder RB der zweite, X wiederholen, B beenden. Tastatur: ← → (oder 1 2) R Esc. Antworten zählen auch, während die Töne laufen.",
 "켜 두면 시작할 때마다 컨트롤러로 보낸 8ms 블록을 하나씩 CSV로 남깁니다(시각, 주기 간격, 트리거 경로, 채널별 세기, 속도·노면·이벤트). 진동이 이상하면 그 시각을 기억해 두고 이 파일을 보세요. 1시간에 약 30MB, 최근 10개만 남깁니다. 주행 중에도 켜고 끄는 즉시 적용되고 바로 저장됩니다.": "Wenn an, schreibt jeder Start jeden an den Controller gesendeten 8-ms-Block in eine CSV (Zeit, Abstand, Trigger-Route, Stärke je Kanal, Tempo, Belag, Ereignisse). Fühlt sich eine Vibration falsch an, merken Sie sich die Uhrzeit und sehen Sie dort nach. Etwa 30 MB pro Stunde; die neuesten 10 bleiben. Wirkt sofort, auch während der Fahrt, sofort gespeichert.",
+"켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다.": "Wenn an, bekommt der Controller alle 4 ms 2-kHz-Samples statt 1 kHz. Die Vibration behält ihre Stärke, das Summen bei 500–1000 Hz, das das Pad bei 1-kHz-Samples mit erzeugte, wird herausgefiltert, und Klicks (Ticks) kommen schärfer. Schalten Sie es aus, wenn kabellos die Aussetzer häufiger werden. Wirkt sofort, auch während der Fahrt oder eines Tests, sofort gespeichert.",
 "콘크리트": "Beton",
 "키보드 {keys}": "Tastatur {keys}",
 "테스트 주행": "Testfahrt",

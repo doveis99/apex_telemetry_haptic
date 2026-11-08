@@ -8,6 +8,7 @@
 //!   ats_haptics --dry-run            no controller; print levels only
 //!   ats_haptics --gain 0.8 --road 0.4 --trigger 0.3 --monitor
 //!   ats_haptics --exit-with-game
+//!   ats_haptics --rate 2k            send 2 kHz samples, a report every 4 ms (src/rate2k.rs)
 //!
 //! The controller is only opened while ATS/ETS2 is running and released when the game quits.
 //! Defaults come from config.json (saved by the window); flags override them. Close the
@@ -30,10 +31,11 @@ const USAGE: &str = "usage: ats_haptics [--simulate] [--sim-fps FPS] [--dry-run]
                    [--engine G] [--road G] [--bumps G] [--rumble G] [--wheelspin G] [--gear G]
                    [--retarder G] [--impact G] [--trigger G] [--throttle-pulse P]
                    [--cylinders N] [--gearbox amt|converter] [--scenario highway|city|mountain]
-                   [--replay LOG] [--from HH:MM:SS] [--to HH:MM:SS] [--log-blocks]
+                   [--replay LOG] [--from HH:MM:SS] [--to HH:MM:SS] [--log-blocks] [--rate 1k|2k]
 
 --scenario and --replay play without the game, as --simulate does. --log-blocks writes every
-output block as CSV under %APPDATA%\\ATSHaptics\\logs.";
+output block as CSV under %APPDATA%\\ATSHaptics\\logs. --rate 2k sends 2 kHz samples, a report
+every 4 ms (default: the window's 2 kHz switch).";
 
 static STOP: AtomicBool = AtomicBool::new(false);
 
@@ -54,6 +56,8 @@ struct Args {
     replay_from: Option<String>,
     replay_to: Option<String>,
     log_blocks: bool,
+    /// None: as the window saved it
+    rate_2k: Option<bool>,
 }
 
 fn fail(message: &str) -> ! {
@@ -74,6 +78,7 @@ fn parse_args(gains: &mut Gains) -> Args {
         replay_from: None,
         replay_to: None,
         log_blocks: false,
+        rate_2k: None,
     };
     let mut items = std::env::args().skip(1);
     while let Some(item) = items.next() {
@@ -120,6 +125,13 @@ fn parse_args(gains: &mut Gains) -> Args {
             "--from" => args.replay_from = Some(value("HH:MM:SS")),
             "--to" => args.replay_to = Some(value("HH:MM:SS")),
             "--log-blocks" => args.log_blocks = true,
+            "--rate" => {
+                args.rate_2k = Some(match value("1k or 2k").as_str() {
+                    "1k" => false,
+                    "2k" => true,
+                    other => fail(&format!("--rate: choose from 1k, 2k, not {other}")),
+                })
+            }
             _ => {
                 let name = flag.trim_start_matches("--").replace('-', "_");
                 let known = ["grip_level", "trigger_level", "engine", "road", "bumps", "rumble", "wheelspin", "gear",
@@ -151,6 +163,11 @@ fn main() {
     };
     let mut runner = Runner::new(&gains, eq, source, args.seconds, args.log_blocks)
         .on_state(Box::new(|state| println!("\n[{}] {state}", ats_haptics::runner::clock_hms())));
+    let rate_2k = args.rate_2k.unwrap_or_else(|| settings.load_app_options().output_2k);
+    runner.output_2k.store(rate_2k, Ordering::Relaxed);
+    if rate_2k {
+        println!("{}", t!("2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄"));
+    }
     // SAFETY: the handler only stores to an atomic.
     unsafe {
         windows_sys::Win32::System::Console::SetConsoleCtrlHandler(Some(on_ctrl), 1);

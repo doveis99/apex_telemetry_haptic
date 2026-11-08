@@ -16,6 +16,7 @@ use crate::effects::{Equalizer, Gains, Synth, FLOAT_FIELDS};
 use crate::gamewatch::GameWatcher;
 use crate::preview::Preview;
 use crate::pymath as m;
+use crate::rate2k::Output2k;
 use crate::replay::LogTelemetry;
 use crate::scenarios::{Scenario, ScenarioTelemetry};
 use crate::t;
@@ -81,6 +82,10 @@ pub struct Runner {
     log_notes: Vec<String>,
     /// an effect test playing in place of the drive
     pub preview: Option<Preview>,
+    /// may be flipped from any thread: from the next 8 ms block on, the output goes out at
+    /// 2 kHz (src/rate2k.rs), a report every 4 ms
+    pub output_2k: Arc<AtomicBool>,
+    rate2k: Option<Output2k>,
 }
 
 impl Runner {
@@ -124,6 +129,8 @@ impl Runner {
             log_here: false,
             log_notes: Vec::new(),
             preview: None,
+            output_2k: Arc::new(AtomicBool::new(false)),
+            rate2k: None,
         }
     }
 
@@ -237,6 +244,7 @@ impl Runner {
     pub fn start_session(&mut self) {
         self.game_ended = false;
         self.synth = Synth::new(self.gains.clone(), self.eq.clone()); // fresh edge detectors: no stale events
+        self.rate2k = None;
         self.last_render_time = None;
         // Map the plugin afresh: the next game may write another plugin's mapping.
         self.source.close();
@@ -287,7 +295,28 @@ impl Runner {
         }
     }
 
+    /// The next block to send: a new 8 ms one, or at 2 kHz each one's two halves in turn.
     pub fn render(&mut self) -> Option<Block> {
+        if let Some(second) = self.rate2k.as_mut().and_then(Output2k::pending) {
+            return Some(second);
+        }
+        // the rate changes between two 8 ms blocks, never inside one
+        let two_k = self.output_2k.load(Ordering::Relaxed);
+        if two_k != self.rate2k.is_some() {
+            self.rate2k = two_k.then(|| Output2k::for_synth(&self.synth));
+        }
+        self.synth.native_ticks = two_k;
+        if let Some(preview) = &mut self.preview {
+            preview.set_native_ticks(two_k);
+        }
+        let block = self.render_block()?;
+        Some(match &mut self.rate2k {
+            Some(output) => output.first(&block),
+            None => block,
+        })
+    }
+
+    fn render_block(&mut self) -> Option<Block> {
         if self.finished() {
             return None;
         }
@@ -314,9 +343,8 @@ impl Runner {
                 None => self.preview = None,
             }
         }
-        for (i, channel) in [&block.left_grip, &block.right_grip, &block.trigger].into_iter().enumerate() {
-            let peak = channel.iter().fold(0.0f64, |p, x| m::max(p, x.abs()));
-            self.peaks[i] = m::max(self.peaks[i], peak / MAX_SAMPLE);
+        for (held, peak) in self.peaks.iter_mut().zip(block.peaks()) {
+            *held = m::max(*held, peak / MAX_SAMPLE);
         }
         self.follow_log_switch();
         let notes = std::mem::take(&mut self.log_notes);
@@ -369,10 +397,8 @@ pub fn run(runner: &mut Runner, dry_run: bool, mut on_connected: impl FnMut(Conn
             loop {
                 let block = runner.render();
                 after_block(runner);
-                if block.is_none() {
-                    break;
-                }
-                deadline += Duration::from_secs_f64(FRAME_PERIOD);
+                let Some(block) = block else { break };
+                deadline += Duration::from_secs_f64(block.period(FRAME_PERIOD));
                 if let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
                     std::thread::sleep(remaining);
                 }

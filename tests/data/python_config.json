@@ -52,6 +52,7 @@
     "auto_start_on_game": false,
     "language": "ja",
     "debug_log": false,
-    "preset": ""
+    "preset": "",
+    "output_2k": false
   }
 }

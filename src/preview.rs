@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 use crate::apex6::{Apex6, Block, PadError, FRAME_PERIOD, MAX_SAMPLE, SAMPLE_RATE, SUBFRAMES};
 use crate::effects::{surface_of, Effect, Equalizer, Gains, Synth, DT, TAU, TOGGLEABLE};
 use crate::pymath as m;
+use crate::rate2k::Output2k;
 use crate::telemetry::{Frame, Wheel};
 
 pub const FADE_S: f64 = 0.1;
@@ -285,6 +286,11 @@ impl Preview {
         Preview { effect, surfaces: surfaces.iter().map(|s| s.to_string()).collect(), step, seconds, gains, synth, blocks: 0 }
     }
 
+    /// Render for the 2 kHz output (Synth::native_ticks).
+    pub fn set_native_ticks(&mut self, on: bool) {
+        self.synth.native_ticks = on;
+    }
+
     fn surface_at(&self, t: f64) -> &str {
         &self.surfaces[((t / self.step) as usize).min(self.surfaces.len() - 1)]
     }
@@ -320,6 +326,11 @@ impl Preview {
             block.trigger[n] *= fade;
             block.left_grip[n] *= fade;
             block.right_grip[n] *= fade;
+            if let Some(ticks) = &mut block.ticks {
+                for channel in ticks.iter_mut() {
+                    channel[n] *= fade;
+                }
+            }
         }
         Some(block)
     }
@@ -336,6 +347,9 @@ struct PlayerState {
     /// the effect last started, and the surface the road test is on now
     name: Option<Effect>,
     surface: String,
+    /// play at 2 kHz (src/rate2k.rs); taken up at the next 8 ms block
+    output_2k: bool,
+    rate2k: Option<Output2k>,
 }
 
 /// Plays previews while the output is stopped, holding the controller only while one plays.
@@ -365,9 +379,11 @@ impl Player {
         std::mem::take(&mut self.state.lock().unwrap().peaks)
     }
 
-    pub fn play(&self, preview: Preview) {
+    /// Play `preview`, at 2 kHz with `output_2k`.
+    pub fn play(&self, preview: Preview, output_2k: bool) {
         {
             let mut state = self.state.lock().unwrap();
+            state.output_2k = output_2k;
             state.name = Some(preview.effect);
             state.pending = Some(preview);
             if state.running {
@@ -378,6 +394,11 @@ impl Player {
         let state = Arc::clone(&self.state);
         let handle = std::thread::spawn(move || Player::work(state));
         *self.thread.lock().unwrap() = Some(handle);
+    }
+
+    /// Switch a test that plays now to 2 kHz or back, at its next 8 ms block.
+    pub fn set_output_2k(&self, on: bool) {
+        self.state.lock().unwrap().output_2k = on;
     }
 
     /// End the preview and wait for the controller to be let go.
@@ -394,8 +415,15 @@ impl Player {
 
     fn next_block(state: &Mutex<PlayerState>) -> Option<Block> {
         let mut state = state.lock().unwrap();
+        if let Some(second) = state.rate2k.as_mut().and_then(Output2k::pending) {
+            return Some(second);
+        }
         if let Some(pending) = state.pending.take() {
             state.current = Some(pending);
+        }
+        let two_k = state.output_2k;
+        if let Some(current) = &mut state.current {
+            current.set_native_ticks(two_k);
         }
         let block = state.current.as_mut().and_then(Preview::render);
         let Some(block) = block else {
@@ -403,11 +431,19 @@ impl Player {
             return None;
         };
         state.surface = state.current.as_ref().map(Preview::surface).unwrap_or_default();
-        for (i, channel) in [&block.left_grip, &block.right_grip, &block.trigger].into_iter().enumerate() {
-            let peak = channel.iter().fold(0.0f64, |p, x| m::max(p, x.abs()));
-            state.peaks[i] = m::max(state.peaks[i], peak / MAX_SAMPLE);
+        for (held, peak) in state.peaks.iter_mut().zip(block.peaks()) {
+            *held = m::max(*held, peak / MAX_SAMPLE);
         }
-        Some(block)
+        if two_k != state.rate2k.is_some() {
+            state.rate2k = match (two_k, &state.current) {
+                (true, Some(current)) => Some(Output2k::for_synth(&current.synth)),
+                _ => None,
+            };
+        }
+        Some(match &mut state.rate2k {
+            Some(output) => output.first(&block),
+            None => block,
+        })
     }
 
     fn work(state: Arc<Mutex<PlayerState>>) {
@@ -420,6 +456,7 @@ impl Player {
                 Err(PadError::Unavailable(e) | PadError::Fatal(e)) => Some(e),
             };
             let mut state = state.lock().unwrap();
+            state.rate2k = None;
             // one started while the controller was let go plays on
             if error.is_some() || state.pending.is_none() {
                 state.error = error;

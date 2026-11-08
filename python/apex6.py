@@ -156,6 +156,13 @@ class Block:
     # set with the 0x53 trigger frame before this block goes out; None leaves
     # it where it is.
     side: Route | None = None
+    # Bit 7 (0x80) of the first payload byte, which Flydigi's engine, ASB and
+    # this app always set. A static read of firmware 9.0.6.8's 0x57 handler
+    # (shared 2026-11-08, not yet measured) says the output runs at 2 kHz: set,
+    # the firmware joins the 8 samples into 16 by straight lines; clear, it
+    # queues the 8 as they are, so a report every 4 ms would carry 2 kHz data.
+    # Only tone.py's rate-2k check and --rate 2k clear it.
+    upsample: bool = True
 
     def is_silent(self) -> bool:
         return not any(self.trigger) and not any(self.left_grip) and not any(self.right_grip)
@@ -167,7 +174,7 @@ def build_realtime(block: Block, enable_trigger: bool = True, enable_grips: bool
     else:
         enable_trigger = enable_trigger and block.route != Route.MUTE
     payload = bytearray(25)
-    payload[0] = (0x80
+    payload[0] = ((0x80 if block.upsample else 0)
                   | (0x10 if enable_grips else 0)
                   | (0x08 if enable_grips else 0)
                   | (0x04 if enable_trigger else 0)
@@ -331,6 +338,7 @@ class StreamStats:
     max_lateness_ms: float = 0.0
     max_write_ms: float = 0.0
     total_write_ms: float = 0.0
+    started: float = 0.0  # perf_counter() when the first block went out
 
     def summary(self) -> str:
         avg = self.total_write_ms / self.frames if self.frames else 0.0
@@ -492,13 +500,20 @@ class Apex6:
         self._write(build_realtime(block))
 
     def stream(self, render: Callable[[int], Block | None], max_seconds: float | None = None,
-               period: float = FRAME_PERIOD) -> StreamStats:
+               period: float = FRAME_PERIOD, primers: int = 0,
+               sent: list[float] | None = None) -> StreamStats:
         """Call render(first_sample_index) every period (8 ms) and send its block.
 
         render returns None to stop. Writes are scheduled on absolute
         deadlines so one late frame does not shift every later one. A shorter
-        period is only for tone.py's report-rate check: Flydigi's engine and
-        this app always send 8 ms.
+        period and primers are only for tone.py's diagnostics: Flydigi's engine
+        and this app always send 8 ms. Primers are blocks sent ahead: the first
+        block and that many more go out back to back, then the pace runs from
+        the start, so every later block leaves primers periods early. Blocks
+        whose turn passed while the primers were going out (each write takes
+        ~2 ms, so a few outlast a 4 ms period) follow at once until one is on
+        time, instead of counting as late and resetting the pace, which would
+        throw the spare away. sent, when given, gets each block's perf_counter().
         """
         if not self._enabled:
             self.enable()
@@ -506,8 +521,10 @@ class Apex6:
         sample_index = 0
         silent_streak = 0
         start = time.perf_counter()
+        stats.started = start
         deadline = start
         last_reassert = start
+        catching_up = True  # the first blocks and the primers, until one goes out on time
         with _time_critical():
             while max_seconds is None or deadline - start < max_seconds:
                 block = render(sample_index)
@@ -515,10 +532,14 @@ class Apex6:
                     break
                 now = time.perf_counter()
                 lateness = (now - deadline) * 1000.0
-                stats.max_lateness_ms = max(stats.max_lateness_ms, lateness)
-                if lateness > period * 1000.0:
-                    stats.late_frames += 1
-                    deadline = now  # resync instead of bursting to catch up
+                if catching_up and stats.frames > primers and (
+                        lateness < period * 500.0 or stats.frames > 2 * (primers + 1)):
+                    catching_up = False
+                if not catching_up:
+                    stats.max_lateness_ms = max(stats.max_lateness_ms, lateness)
+                    if lateness > period * 1000.0:
+                        stats.late_frames += 1
+                        deadline = now  # resync instead of bursting to catch up
                 # Every block goes out, silence too. ASB thinned a run of silence to
                 # a keepalive every ~48 ms to spare the 2.4 GHz link, but the pad
                 # then plays whatever comes next without slack: wired, a 250 Hz tone
@@ -526,6 +547,8 @@ class Apex6:
                 # late frame on this side; after silence sent every 8 ms it did not.
                 if block.side is not None:
                     self.set_trigger_side(block.side)
+                if sent is not None:
+                    sent.append(time.perf_counter())
                 self.write_block(block)
                 write_ms = (time.perf_counter() - now) * 1000.0
                 stats.total_write_ms += write_ms
@@ -536,7 +559,8 @@ class Apex6:
                     self.reassert()
                     last_reassert = now
                 sample_index += SUBFRAMES
-                deadline += period
+                if stats.frames > primers:
+                    deadline += period
                 remaining = deadline - time.perf_counter()
                 if remaining > 0:
                     time.sleep(remaining)

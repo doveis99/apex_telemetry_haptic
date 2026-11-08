@@ -16,6 +16,10 @@ Examples:
   python tone.py report-model                blind X/Y check: are those reports played faster, or cut off at 1 kHz
   python tone.py calibrate                  match each frequency's strength by feel, for the synth's eq
   python tone.py pad-sound                  sines and taps to record with a microphone: what the pad sounds like
+  python tone.py rate-2k --record DEVICE    the same tones at 1 kHz and in the 2 kHz mode (bit 7 clear, 4 ms), recorded
+  python tone.py tone --freq 700 --rate 2k  any tone or sweep in that 2 kHz mode, by ear
+  python tone.py dropout --record DEVICE    long tones per mode and primer count, recorded: how often the tone drops out
+  python tone.py placement --record DEVICE  the app's 1k tone with the dongle moved between runs (A B A B), recorded
   python tone.py strength                   blind check whether grips stronger than 20% feel stronger, or only rougher
 """
 
@@ -23,10 +27,11 @@ from __future__ import annotations
 
 import argparse
 import math
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from apex6 import (DEFAULT_TRIGGER_MODE, DEFAULT_TRIGGER_SIDE, DEFAULT_TRIGGER_TARGET, FRAME_PERIOD, MAX_SAMPLE,
-                   RAM_MOTOR, SAMPLE_RATE, SUBFRAMES, Apex6, Block, Route)
+                   RAM_MOTOR, SAMPLE_LIMIT, SAMPLE_RATE, SUBFRAMES, Apex6, Block, Route)
 
 TARGETS = {
     "left": (False, True, False, Route.MUTE),
@@ -40,10 +45,32 @@ TARGETS = {
 FADE_SECONDS = 0.015  # avoids a click at start and end
 
 
-def tone_renderer(target: str, freq_from: float, freq_to: float, amp_percent: float, seconds: float):
+@dataclass(frozen=True)
+class RateMode:
+    """How samples reach the pad: data rate, report period, bit 7 and primer reports."""
+
+    rate: int        # samples per second in the data
+    period: float    # seconds between reports
+    upsample: bool   # bit 7 of the first payload byte
+    primers: int = 0  # reports sent back to back first (Apex6.stream)
+
+
+# "1k" is what the app sends. "2k" is the firmware reading of 2026-11-08: bit 7 clear, a report
+# every 4 ms after 2 primers. "old4" is report-rate's 4 ms run of 2026-10-27, bit 7 still set,
+# which by that reading overfills the queue.
+RATE_MODES = {
+    "1k": RateMode(SAMPLE_RATE, FRAME_PERIOD, True),
+    "2k": RateMode(2 * SAMPLE_RATE, FRAME_PERIOD / 2, False, primers=2),
+    "old4": RateMode(2 * SAMPLE_RATE, FRAME_PERIOD / 2, True),
+}
+
+
+def tone_renderer(target: str, freq_from: float, freq_to: float, amp_percent: float, seconds: float,
+                  mode: RateMode = RATE_MODES["1k"]):
     use_trigger, use_left, use_right, route = TARGETS[target]
-    total = int(seconds * SAMPLE_RATE)
-    fade = max(1, int(FADE_SECONDS * SAMPLE_RATE))
+    rate = mode.rate
+    total = int(seconds * rate)
+    fade = max(1, int(FADE_SECONDS * rate))
     peak = MAX_SAMPLE * max(0.0, min(100.0, amp_percent)) / 100.0
     phase = 0.0
 
@@ -61,13 +88,14 @@ def tone_renderer(target: str, freq_from: float, freq_to: float, amp_percent: fl
             freq = freq_from * (freq_to / freq_from) ** progress
             envelope = min(1.0, n / fade, (total - n) / fade)
             samples.append(math.sin(2 * math.pi * phase) * peak * envelope)
-            phase = (phase + freq / SAMPLE_RATE) % 1.0
+            phase = (phase + freq / rate) % 1.0
         silent = [0.0] * SUBFRAMES
         return Block(
             trigger=samples if use_trigger else silent,
             left_grip=samples if use_left else silent,
             right_grip=samples if use_right else silent,
             route=route if use_trigger else Route.MUTE,
+            upsample=mode.upsample,
         )
 
     return render
@@ -1191,6 +1219,411 @@ def run_sound(pad: Apex6, target: str, amps: tuple[float, ...], tap_amp: float, 
         print(f"녹음: {wav}")
 
 
+# 2 kHz check, for a microphone. A static read of firmware 9.0.6.8's 0x57 handler (shared
+# 2026-11-08, not yet run on a pad by its author) says the output stage already runs at 2 kHz:
+# bit 7 of the first payload byte joins a report's 8 samples into 16 by straight lines and 16
+# play per 8 ms; with it clear the 8 samples queue as they are. A report every 4 ms with bit 7
+# clear, after 2 primer reports, would carry 2 kHz data (Nyquist 1 kHz), the output stage's own
+# straight lines costing about 3.6 dB at 700 Hz and 6 dB at 900. The same reading explains
+# report-rate's rough 4 ms tones: bit 7 set at 4 ms pushes 4 kHz into a 2 kHz drain, the
+# 96-sample queue is full after ~45 ms and the overflow is dropped.
+#
+# The same tones play in each mode, one unbroken stream per mode so the queue is primed once:
+# 1k (as the app sends), 2k, 1k again (whether the hold moved), then old4, last because it leaves
+# the queue full. Sent at 1 kHz, 700 Hz is the very samples of 300 Hz (and 900 of 100); at 2 kHz
+# it is itself. By ear 2k's 700 sits well above 1k's; tools/rate2k_analyze.py compares each
+# frequency across modes, where the room and the shell cancel, and against a simulation of the
+# firmware reading.
+RATE2K_TONES = (700.0, 900.0, 300.0, 160.0)
+RATE2K_OLD4_TONES = (160.0, 700.0)
+RATE2K_SWEEP = (200.0, 950.0)
+RATE2K_SECTIONS = (("1k", RATE2K_TONES, True), ("2k", RATE2K_TONES, True), ("1k", RATE2K_TONES, True),
+                   ("old4", RATE2K_OLD4_TONES, False))  # (mode, tones, sweep)
+RATE2K_LEAD_S = 0.3
+RATE2K_TONE_S = 1.5
+RATE2K_SWEEP_S = 4.0
+RATE2K_GAP_S = 0.7
+RATE2K_CLICKS = 4
+RATE2K_CLICK_SPACING_S = 0.3
+RATE2K_CLICK_S = 0.008  # report-rate's click: 4 ms up, 4 ms down
+RATE2K_AMP = 25.0
+
+
+def rate2k_items(tones, sweep: bool, clicks: bool, amp: float, tap_amp: float,
+                 tone_s: float = RATE2K_TONE_S, clicks_after: bool = False) -> list[dict]:
+    """One section's timeline in seconds of its own data: lead silence, clicks, tones, a sweep,
+    and clicks again at the end when asked (a long run checks the microphone's clock on them)."""
+    items, at = [], RATE2K_LEAD_S
+
+    def add(kind: str, length: float, gap: float, **extra) -> None:
+        nonlocal at
+        items.append({"kind": kind, "start": round(at, 6), "length": length, **extra})
+        at += length + gap
+
+    def add_clicks() -> None:
+        add("clicks", RATE2K_CLICKS * RATE2K_CLICK_SPACING_S, RATE2K_GAP_S, count=RATE2K_CLICKS,
+            spacing=RATE2K_CLICK_SPACING_S, amp=tap_amp)
+
+    if clicks:
+        add_clicks()
+    for freq in tones:
+        add("sine", tone_s, RATE2K_GAP_S, freq=freq, amp=amp)
+    if sweep:
+        add("sweep", RATE2K_SWEEP_S, RATE2K_GAP_S, freq_from=RATE2K_SWEEP[0], freq_to=RATE2K_SWEEP[1], amp=amp)
+    if clicks_after:
+        add_clicks()
+    items.append({"kind": "end", "start": round(at, 6), "length": 0.0})
+    return items
+
+
+def rate2k_sample(item: dict, t: float) -> float:
+    """The value t seconds into one item."""
+    peak = MAX_SAMPLE * max(0.0, min(100.0, item.get("amp", 0.0))) / 100.0
+    kind, length = item["kind"], item["length"]
+    if kind == "clicks":
+        at = t % item["spacing"]
+        return 0.0 if at >= RATE2K_CLICK_S else peak if at < RATE2K_CLICK_S / 2 else -peak
+    if kind not in ("sine", "sweep"):
+        return 0.0
+    envelope = max(0.0, min(1.0, t / FADE_SECONDS, (length - t) / FADE_SECONDS))
+    if kind == "sine":
+        phase = item["freq"] * t
+    else:  # linear in frequency, so a spectrogram draws it as a straight line
+        f0, f1 = item["freq_from"], item["freq_to"]
+        phase = f0 * t + (f1 - f0) * t * t / (2 * length)
+    return math.sin(2 * math.pi * phase) * peak * envelope
+
+
+def rate2k_renderer(items: list[dict], mode: RateMode, target: str):
+    use_trigger, use_left, use_right, route = TARGETS[target]
+    total = round(items[-1]["start"] * mode.rate)
+    silent = [0.0] * SUBFRAMES
+
+    def sample(n: int) -> float:
+        t = n / mode.rate
+        for item in items:
+            if item["start"] <= t < item["start"] + item["length"]:
+                return rate2k_sample(item, t - item["start"])
+        return 0.0
+
+    def render(first: int) -> Block | None:
+        if first >= total:
+            return None
+        samples = [sample(n) for n in range(first, first + SUBFRAMES)]
+        return Block(trigger=samples if use_trigger else silent,
+                     left_grip=samples if use_left else silent,
+                     right_grip=samples if use_right else silent,
+                     route=route if use_trigger else Route.MUTE,
+                     upsample=mode.upsample)
+
+    return render
+
+
+def _rate2k_label(item: dict) -> str:
+    if item["kind"] == "sine":
+        return f"{item['freq']:g}"
+    if item["kind"] == "sweep":
+        return f"스윕 {item['freq_from']:g}→{item['freq_to']:g}"
+    return "딸깍" if item["kind"] == "clicks" else ""
+
+
+def rate2k_sections(amp: float, tap_amp: float, primers: int) -> list[dict]:
+    """The check's sections in play order, each a mode's settings and its items."""
+    modes = {**RATE_MODES, "2k": replace(RATE_MODES["2k"], primers=primers)}
+    return [{"mode": name, **asdict(modes[name]), "items": rate2k_items(tones, sweep, number == 0, amp, tap_amp)}
+            for number, (name, tones, sweep) in enumerate(RATE2K_SECTIONS)]
+
+
+def _section_mode(section: dict) -> RateMode:
+    return RateMode(section["rate"], section["period"], section["upsample"], section["primers"])
+
+
+def play_rate2k(pad: Apex6, sections: list[dict], target: str, rest: float = 0.0) -> None:
+    """Play the sections in turn, keeping in each when every report went out and what it carried.
+
+    With rest, nothing is sent for that long between sections, so the pad's queue runs dry and the
+    next section starts from its own primers instead of what the last one left."""
+    import time
+
+    origin = None
+    for number, section in enumerate(sections):
+        if number and rest > 0:
+            time.sleep(rest)
+        mode = _section_mode(section)
+        print(f"  {section['mode']} 프라이머 {section['primers']}: "
+              + ", ".join(filter(None, map(_rate2k_label, section["items"]))))
+        sent: list[float] = []
+        played: list[int] = []  # the samples as encoded, for the analysis's simulation
+        render = rate2k_renderer(section["items"], mode, target)
+
+        def keep(first: int, render=render, played=played) -> Block | None:
+            block = render(first)
+            if block is not None:
+                channel = block.trigger if target.startswith("trigger") else block.left_grip
+                played.extend(max(-SAMPLE_LIMIT, min(SAMPLE_LIMIT, round(v))) for v in channel)
+            return block
+
+        stats = pad.stream(keep, period=mode.period, primers=mode.primers, sent=sent)
+        origin = sent[0] if origin is None else origin
+        section["sent"] = [round(t - origin, 6) for t in sent]
+        section["samples"] = played
+        section["stats"] = stats.summary()
+        section["late"] = stats.late_frames
+        print(f"    {stats.summary()}")
+
+
+def run_rate2k(pad: Apex6, target: str, amp: float, tap_amp: float, primers: int, device: str | None,
+               out: Path = SOUND_OUT) -> None:
+    import calibrate
+
+    sections = rate2k_sections(amp, tap_amp, primers)
+    seconds = sum(s["items"][-1]["start"] for s in sections)
+    buttons = calibrate.PadButtons()
+    info = pad.info
+    print(f"펌웨어: {_firmware_text(info)}")
+    print("2 kHz 모드 확인 (0x57 첫 바이트 bit 7을 끄고 4 ms마다, 마이크로 녹음)")
+    print(f"  대상 {target}, 사인 {amp:g}%, 약 {seconds:.0f}초. 같은 톤을 모드마다 차례로 울립니다:")
+    for section in sections:
+        print(f"   {section['mode']:>4}: {section['period'] * 1000:g} ms마다, bit 7 {int(section['upsample'])}, "
+              f"프라이머 {section['primers']}개 / " + ", ".join(filter(None, map(_rate2k_label, section["items"]))))
+    print("\n1. 게임과 음악을 끄고 조용한 곳에서, 플레이할 때처럼 패드를 쥐세요.")
+    if device:
+        print(f"2. 마이크({device})를 패드 뒷면 쪽 30 cm쯤에 두세요. 녹음은 이 프로그램이 합니다.")
+    else:
+        print("2. 녹음기를 패드 뒷면 쪽 30 cm쯤에 두고 녹음을 시작하세요.")
+    print("3. 패드 A (또는 Enter)를 누르면 시작합니다. 재생 중에는 손을 움직이거나 말하지 마세요. B / q 취소.")
+    print("   귀로는: 1k의 700·900 Hz는 300·100 Hz로 내려앉고, 2k에서 제 높이로 들리면 맞는 것입니다.")
+    if _wait_event(buttons, START, STOP) == STOP:
+        return
+    _record_sections(pad, "rate-2k", "rate2k_analyze.py", sections, target, device, out,
+                     {"amp": amp, "tap_amp": tap_amp})
+
+
+def _record_sections(pad: Apex6, check: str, analyzer: str, sections: list[dict], target: str,
+                     device: str | None, out: Path, extra: dict, rest: float = 0.0) -> None:
+    """Play the sections while ffmpeg records, then write CHECK-STAMP.json beside the wav."""
+    import json
+    import subprocess
+    import time
+    from datetime import datetime
+
+    from version import __version__
+
+    info = pad.info
+    stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
+    out.mkdir(parents=True, exist_ok=True)
+    wav = out / f"{check}-{stamp}.wav"
+    recorder = None
+    if device:
+        recorder = subprocess.Popen(ffmpeg_record_command(device, wav), stdin=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+        time.sleep(RECORD_SETTLE_S)
+        if recorder.poll() is not None:
+            print(f"녹음을 시작하지 못했습니다: {recorder.stderr.read().decode(errors='replace').strip()}")
+            return
+    try:
+        play_rate2k(pad, sections, target, rest)
+        if recorder:
+            time.sleep(RECORD_TAIL_S)
+    finally:
+        if recorder:
+            recorder.communicate(b"q", timeout=10)
+    path = out / f"{check}-{stamp}.json"
+    path.write_text(json.dumps({
+        "check": check, "version": __version__, "target": target, **extra,
+        "max_sample": MAX_SAMPLE, "subframes": SUBFRAMES, "connection_mode": info.connection_mode,
+        "firmware": info.firmware, "device": device, "recording": wav.name if device else None,
+        "sections": sections,
+    }, ensure_ascii=False), encoding="utf-8")
+    print(f"\n끝. 타임라인: {path}")
+    if device:
+        print(f"녹음: {wav}")
+        print(f"분석: python tools/{analyzer} \"{wav}\"")
+
+
+# Dropout check (2026-11-08). Recorded over the 2.4 GHz dongle, the tone itself falls out for
+# 4-20 ms at a time, in 1k (the app) as well as 2k; wired never. Each gap clicks and rings the
+# actuator near 66 Hz. Likely the pad's queue running dry when the radio hands a report over
+# late: the app sends one report per 8 ms with no spare, so any late one leaves the pad nothing
+# to play. Primers (reports sent back to back first) give it spare, 8 ms each at 1k and 4 ms at
+# 2k, as long as the pad's clock drains no faster than the PC sends; if it does, the spare melts
+# and the gaps come back later in each section. One long tone per section, nothing sent between
+# sections so each starts dry, every mode twice (the second round in reverse);
+# tools/dropout_analyze.py counts the gaps per mode and over time, and reads the pad's clock
+# against the PC's from the tone's pitch and the clicks at both ends. First run (12:28): the gaps
+# lose their reports outright (the tone keeps its length) and spare sent ahead does not stay in
+# the pad's queue, so no primer count helps; the pad's clock is only +16 ppm off the PC's.
+DROPOUT_MODES = (("1k", 0), ("1k", 1), ("1k", 2), ("2k", 2), ("2k", 4), ("2k", 6))
+DROPOUT_FREQ = 310.0     # off the 50 and 60 Hz hum lines; plays alike at 1 and 2 kHz
+DROPOUT_SECONDS = 20.0
+DROPOUT_ROUNDS = 2
+DROPOUT_REST_S = 0.3     # nothing sent: longer than the 48 ms the queue holds
+DROPOUT_QUEUE = 96       # samples, per the firmware reading
+DROPOUT_CLICK_PRIMERS = 4  # 32 ms spare under the clicks; 1k holds at most 5
+
+
+def dropout_modes(text: str) -> list[tuple[str, int]]:
+    """'1k:0,2k:4' -> [('1k', 0), ('2k', 4)]; each must fit the pad's queue with its primers."""
+    modes = []
+    for part in filter(None, (p.strip() for p in text.split(","))):
+        name, _, primers = part.partition(":")
+        if name not in ("1k", "2k") or not primers.strip().isdigit():
+            raise argparse.ArgumentTypeError(f"{part!r}: write MODE:PRIMERS with MODE 1k or 2k, e.g. 1k:0,2k:4")
+        count = int(primers)
+        per_report = 2 * SUBFRAMES if name == "1k" else SUBFRAMES
+        if (count + 1) * per_report > DROPOUT_QUEUE:
+            most = DROPOUT_QUEUE // per_report - 1
+            raise argparse.ArgumentTypeError(f"{part!r}: {name} holds at most {most} primers")
+        modes.append((name, count))
+    if not modes:
+        raise argparse.ArgumentTypeError("no modes given")
+    return modes
+
+
+def dropout_sections(modes, freq: float, seconds: float, rounds: int, amp: float,
+                     tap_amp: float) -> list[dict]:
+    """Every mode once per round, odd rounds reversed, with a section of clicks alone (round 0)
+    before, between and after them.
+
+    The analysis sets the microphone's clock against the PC's from the clicks, so each set must
+    sound as long after it was sent as the others. A gap shifts all that follows it, so the
+    clicks get primers enough to ride over the radio's late reports; a set that still comes out
+    late (its first report delayed) is outvoted by the rest."""
+    order = [(r, m) for r in range(rounds) for m in (modes if r % 2 == 0 else list(reversed(modes)))]
+
+    def clicks() -> dict:
+        return {"mode": "1k", **asdict(replace(RATE_MODES["1k"], primers=DROPOUT_CLICK_PRIMERS)), "round": 0,
+                "items": rate2k_items((), False, True, amp, tap_amp)}
+
+    sections = [clicks()]
+    for round_, (name, primers) in order:
+        mode = replace(RATE_MODES[name], primers=primers)
+        items = rate2k_items((freq,), False, False, amp, tap_amp, tone_s=seconds)
+        sections += [{"mode": name, **asdict(mode), "round": round_ + 1, "items": items}, clicks()]
+    return sections
+
+
+def run_dropout(pad: Apex6, modes, freq: float, seconds: float, rounds: int, amp: float, tap_amp: float,
+                target: str, device: str | None, out: Path = SOUND_OUT) -> None:
+    import calibrate
+
+    sections = dropout_sections(modes, freq, seconds, rounds, amp, tap_amp)
+    total = sum(s["items"][-1]["start"] for s in sections) + DROPOUT_REST_S * (len(sections) - 1)
+    buttons = calibrate.PadButtons()
+    info = pad.info
+    print(f"펌웨어: {_firmware_text(info)}, connection_mode={info.connection_mode}")
+    if info.connection_mode == 0:
+        print("!! 유선 연결입니다. 끊김은 무선에서만 나왔으니 이번 녹음은 대조용입니다.")
+    print(f"끊김 확인: {freq:g} Hz {amp:g}%를 {seconds:g}초씩, 모드마다 {rounds}번 (약 {total / 60:.1f}분)")
+    print("  순서 (사이사이 딸깍 4번): " + " → ".join(f"{s['mode']} 프라이머 {s['primers']}"
+                                               for s in sections if s["round"]))
+    print("\n1. 게임과 음악을 끄고 조용한 곳에서. 무선(동글)이 기본, 유선은 대조용입니다.")
+    print("2. 패드는 손에 쥐거나 수건 위에 두세요. 책상에 바로 두면 그립이 덜덜거려 톤이 방 잡음에 묻힙니다"
+          "(분석이 그런 구간을 빼고 경고). 끝날 때까지 같은 자세로.")
+    if device:
+        print(f"3. 마이크({device})를 그립 쪽을 향해 20~30 cm에 두세요. 녹음은 이 프로그램이 합니다.")
+    else:
+        print("3. 녹음기를 그립 쪽을 향해 20~30 cm에 두고 녹음을 시작하세요.")
+    print("4. 패드 A (또는 Enter)를 누르면 시작합니다. 재생 중에는 말하지 마세요. B / q 취소.")
+    if _wait_event(buttons, START, STOP) == STOP:
+        return
+    _record_sections(pad, "dropout", "dropout_analyze.py", sections, target, device, out,
+                     {"amp": amp, "tap_amp": tap_amp, "freq": freq, "seconds": seconds, "rounds": rounds,
+                      "rest": DROPOUT_REST_S}, rest=DROPOUT_REST_S)
+
+
+# Dongle placement (2026-11-08). With the gaps losing their reports outright, what is left to
+# change is the radio's path. One series plays the dropout check's tone in the app's mode (1k,
+# no primers) with the dongle at each place in turn, A B A B: the radio's bad spells come and go
+# over seconds, so one pair could land a spell on one side. The pad and the microphone stay put
+# and only the dongle moves; the pad finds it again within seconds, and A starts the next run.
+# tools/dropout_compare.py sets the places side by side.
+PLACEMENT_PLACES = ("지금 자리", "가까이")
+PLACEMENT_CYCLES = 2
+PLACEMENT_ROUNDS = 4
+PLACEMENT_OPEN_S = 15.0
+
+
+def placement_places(text: str) -> list[str]:
+    """'지금 자리,가까이' -> ['지금 자리', '가까이']: two or more distinct names."""
+    places = list(dict.fromkeys(p.strip() for p in text.split(",") if p.strip()))
+    if len(places) < 2:
+        raise argparse.ArgumentTypeError('name at least two places, e.g. "지금 자리,가까이"')
+    return places
+
+
+def placement_order(places: list[str], cycles: int) -> list[str]:
+    return [place for _ in range(cycles) for place in places]
+
+
+def _open_pad(wait_s: float = PLACEMENT_OPEN_S) -> Apex6 | None:
+    """The pad, opened as soon as it shows up within wait_s (it was just moved); None if not."""
+    import time
+
+    from apex6 import DeviceUnavailable
+
+    end = time.monotonic() + wait_s
+    while True:
+        try:
+            return Apex6().__enter__()
+        except DeviceUnavailable as exc:
+            if time.monotonic() >= end:
+                print(f"  패드를 열지 못했습니다: {exc}")
+                return None
+            time.sleep(0.5)
+
+
+def run_placement(places: list[str], cycles: int, freq: float, seconds: float, rounds: int, amp: float,
+                  tap_amp: float, target: str, device: str | None, out: Path = SOUND_OUT) -> None:
+    from datetime import datetime
+
+    import calibrate
+    from apex6 import DeviceUnavailable
+
+    order = placement_order(places, cycles)
+    sections = dropout_sections([("1k", 0)], freq, seconds, rounds, amp, tap_amp)
+    per_run = sum(s["items"][-1]["start"] for s in sections) + DROPOUT_REST_S * (len(sections) - 1)
+    series = f"{datetime.now():%Y%m%d-%H%M%S}"
+    buttons = calibrate.PadButtons()
+    print(f"동글 위치 비교 {series}: {freq:g} Hz {amp:g}%를 앱 모드(1k)로 {seconds:g}초 × {rounds}번씩, "
+          f"회차마다 약 {per_run / 60:.1f}분 (옮기는 시간 빼고 모두 {per_run * len(order) / 60:.0f}분)")
+    print("  순서: " + " → ".join(order))
+    print("\n1. 게임과 음악을 끄고 조용한 곳에서. 패드와 마이크는 끝까지 같은 자리, 같은 자세로 두세요.")
+    print("2. 옮기는 건 동글만입니다. 패드는 손에 쥐거나 수건 위에(책상에 바로 두면 톤이 잡음에 묻힘).")
+    if device:
+        print(f"3. 마이크({device})는 그립 쪽을 향해 20~30 cm. 녹음은 이 프로그램이 합니다.")
+    else:
+        print("3. 녹음기를 그립 쪽을 향해 20~30 cm에 두고 녹음을 시작하세요.")
+    done = 0
+    while done < len(order):
+        place = order[done]
+        print(f"\n[{done + 1}/{len(order)}] 동글을 '{place}'에 꽂으세요. 패드가 다시 붙으면 A (또는 Enter), "
+              "B / q 그만.")
+        if _wait_event(buttons, START, STOP) == STOP:
+            print("그만합니다.")
+            break
+        pad = _open_pad()
+        if pad is None:
+            continue
+        try:
+            info = pad.info
+            print(f"  펌웨어: {_firmware_text(info)}, connection_mode={info.connection_mode}")
+            if info.connection_mode == 0:
+                print("  !! 유선 연결입니다. 케이블을 빼고 동글로 연결한 뒤 다시 A.")
+                continue
+            _record_sections(pad, "dropout", "dropout_analyze.py", sections, target, device, out,
+                             {"amp": amp, "tap_amp": tap_amp, "freq": freq, "seconds": seconds, "rounds": rounds,
+                              "rest": DROPOUT_REST_S, "series": series, "place": place, "run": done + 1,
+                              "order": order}, rest=DROPOUT_REST_S)
+            done += 1
+        except DeviceUnavailable as exc:
+            print(f"  연결이 끊겨 이 회차를 다시 합니다 ({exc})")
+        finally:
+            pad.__exit__(None, None, None)
+    if done:
+        print(f"\n비교: python tools/dropout_compare.py {series}")
+
+
 # Strength check, by feel. Recorded in the air (pad-sound ladder, 2026-11-05), the grips play
 # as sent up to 20%; from 35% the tone itself stops growing off resonance (80-490 Hz 5-10 dB
 # short at 35%, 8-17 at 50%) while its odd harmonics grow, and near resonance (40-65 Hz) it
@@ -1434,8 +1867,11 @@ def main() -> None:
     tone.add_argument("--freq", type=float, default=80.0)
     tone.add_argument("--amp", type=float, default=50.0, help="percent of maximum")
     tone.add_argument("--seconds", type=float, default=2.0)
+    tone.add_argument("--rate", choices=RATE_MODES, default="1k",
+                      help="1k as the app sends; 2k: bit 7 clear, a report every 4 ms (unverified firmware reading)")
 
     sweep = sub.add_parser("sweep", help="frequency sweep")
+    sweep.add_argument("--rate", choices=RATE_MODES, default="1k")
     sweep.add_argument("--target", choices=TARGETS, default="grips")
     sweep.add_argument("--from", dest="freq_from", type=float, default=30.0)
     sweep.add_argument("--to", dest="freq_to", type=float, default=300.0)
@@ -1519,6 +1955,40 @@ def main() -> None:
     sound.add_argument("--record", metavar="DEVICE",
                        help="record it through ffmpeg from this DirectShow input (ffmpeg -list_devices true -f dshow -i x)")
 
+    rate2k = sub.add_parser("rate-2k", help="the same tones at 1 kHz and in the 2 kHz mode, for a microphone")
+    rate2k.add_argument("--target", choices=TARGETS, default="grips")
+    rate2k.add_argument("--amp", type=float, default=RATE2K_AMP, help="sine strength in percent")
+    rate2k.add_argument("--tap-amp", type=float, default=100.0, help="strength of the clicks the analysis aligns on")
+    rate2k.add_argument("--primers", type=int, default=RATE_MODES["2k"].primers,
+                        help="blocks sent ahead before the 2 kHz stream keeps its pace (default 2)")
+    rate2k.add_argument("--record", metavar="DEVICE",
+                        help="record it through ffmpeg from this DirectShow input (ffmpeg -list_devices true -f dshow -i x)")
+
+    dropout = sub.add_parser("dropout", help="long tones per mode and primer count, for a microphone: tone gaps")
+    dropout.add_argument("--modes", type=dropout_modes, default=list(DROPOUT_MODES), metavar="MODE:PRIMERS[,...]",
+                         help="default " + ",".join(f"{m}:{p}" for m, p in DROPOUT_MODES))
+    dropout.add_argument("--freq", type=float, default=DROPOUT_FREQ, help="tone in Hz, below 500 so 1k plays it too")
+    dropout.add_argument("--seconds", type=float, default=DROPOUT_SECONDS, help="length of each section's tone")
+    dropout.add_argument("--rounds", type=int, default=DROPOUT_ROUNDS, help="times through the modes")
+    dropout.add_argument("--target", choices=TARGETS, default="grips")
+    dropout.add_argument("--amp", type=float, default=RATE2K_AMP, help="sine strength in percent")
+    dropout.add_argument("--tap-amp", type=float, default=100.0, help="strength of the clicks the analysis aligns on")
+    dropout.add_argument("--record", metavar="DEVICE",
+                         help="record it through ffmpeg from this DirectShow input (ffmpeg -list_devices true -f dshow -i x)")
+
+    placement = sub.add_parser("placement", help="the app's 1k tone with the dongle moved between runs: gaps per place")
+    placement.add_argument("--places", type=placement_places, default=list(PLACEMENT_PLACES), metavar="NAME,NAME[,...]",
+                           help="where the dongle goes, in turn (default " + ",".join(PLACEMENT_PLACES) + ")")
+    placement.add_argument("--cycles", type=int, default=PLACEMENT_CYCLES, help="times through the places")
+    placement.add_argument("--freq", type=float, default=DROPOUT_FREQ, help="tone in Hz")
+    placement.add_argument("--seconds", type=float, default=DROPOUT_SECONDS, help="length of each tone")
+    placement.add_argument("--rounds", type=int, default=PLACEMENT_ROUNDS, help="tones per run")
+    placement.add_argument("--target", choices=TARGETS, default="grips")
+    placement.add_argument("--amp", type=float, default=RATE2K_AMP, help="sine strength in percent")
+    placement.add_argument("--tap-amp", type=float, default=100.0, help="strength of the clicks the analysis aligns on")
+    placement.add_argument("--record", metavar="DEVICE",
+                           help="record it through ffmpeg from this DirectShow input (ffmpeg -list_devices true -f dshow -i x)")
+
     strength = sub.add_parser("strength", help="blind check whether grips stronger than 20%% feel stronger")
     strength.add_argument("--trials", type=int, default=STRENGTH_TRIALS, help="trials per case")
 
@@ -1531,6 +2001,12 @@ def main() -> None:
     cal.add_argument("--reset", action="store_true", help="forget your calibration (back to the default), no controller needed")
 
     args = parser.parse_args()
+    if args.command == "placement":  # opens the pad itself, again after every move
+        if not 20 <= args.freq < 500 or args.seconds < 5 or args.rounds < 1 or args.cycles < 1:
+            parser.error("placement needs 20 <= --freq < 500, --seconds >= 5, --rounds >= 1 and --cycles >= 1")
+        run_placement(args.places, args.cycles, args.freq, args.seconds, args.rounds, args.amp, args.tap_amp,
+                      args.target, args.record)
+        return
     if args.command == "calibrate" and args.reset:
         from settings import save_eq
         save_eq({})
@@ -1591,6 +2067,15 @@ def main() -> None:
         if args.command == "pad-sound":
             run_sound(pad, args.target, args.amp, args.tap_amp, args.record)
             return
+        if args.command == "rate-2k":
+            run_rate2k(pad, args.target, args.amp, args.tap_amp, max(0, args.primers), args.record)
+            return
+        if args.command == "dropout":
+            if not 20 <= args.freq < 500 or args.seconds < 5 or args.rounds < 1:
+                parser.error("dropout needs 20 <= --freq < 500, --seconds >= 5 and --rounds >= 1")
+            run_dropout(pad, args.modes, args.freq, args.seconds, args.rounds, args.amp, args.tap_amp,
+                        args.target, args.record)
+            return
         if args.command == "calibrate":
             channels = ["grip", "trigger"] if args.channel == "both" else [args.channel]
             run_calibrate(pad, channels, args.amp, args.seconds)
@@ -1609,10 +2094,12 @@ def main() -> None:
         else:
             plan = [(t, args.freq, args.freq, args.seconds)
                     for t in ("left", "right", "trigger-left", "trigger-right")]
+        mode = RATE_MODES[getattr(args, "rate", "1k")]
         for target, f0, f1, seconds in plan:
             label = f"{f0:g} Hz" if f0 == f1 else f"{f0:g} -> {f1:g} Hz"
-            print(f"> {target}: {label}, {args.amp:g}% for {seconds:g}s")
-            stats = pad.stream(tone_renderer(target, f0, f1, args.amp, seconds))
+            print(f"> {target}: {label}, {args.amp:g}% for {seconds:g}s" + (f" ({args.rate})" if mode.rate != SAMPLE_RATE else ""))
+            stats = pad.stream(tone_renderer(target, f0, f1, args.amp, seconds, mode), period=mode.period,
+                               primers=mode.primers)
             print(f"  {stats.summary()}")
             gap = 1000 if args.command == "route-test" else 400  # samples = ms
             pad.stream(lambda first: Block() if first < gap else None)

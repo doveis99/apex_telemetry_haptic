@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import math
 import random
 import unittest
 from unittest import mock
 
 from apex6 import SUBFRAMES, Route, _parse_device_info
-from tone import (BYTE_FIELDS, MAX_SAMPLE, RAM_AREA_SIZE, RAM_RECORDS, SPLIT_FINGERS, SPLIT_ROUTES, UNDO,
+from tone import (BYTE_FIELDS, DROPOUT_CLICK_PRIMERS, MAX_SAMPLE, RATE2K_SECTIONS, RATE_MODES, dropout_modes,
+                  dropout_sections, placement_order, placement_places, play_rate2k, rate2k_renderer,
+                  rate2k_sections, tone_renderer, RAM_AREA_SIZE, RAM_RECORDS, SPLIT_FINGERS, SPLIT_ROUTES, UNDO,
                   _hear_sides, grip_sides_verdict, mode_verdict, model_renderer, model_summary, model_verdict,
                   modes_verdict, motor_ram_lines, name_side, pulsed_tone, ram_changes, ram_record_name, ram_state,
                   ram_target_verdict, rate_summary, rate_verdict, side_plan, side_renderer, side_verdict,
@@ -395,6 +398,125 @@ class ReportModelTest(unittest.TestCase):
         self.assertTrue(model_summary({4.0: preempted, 2.0: preempted}).startswith("패드는 1 kHz로"))
         self.assertTrue(model_summary({4.0: all_played, 2.0: all_played}).startswith("패드가 리포트 간격만큼"))
         self.assertTrue(model_summary({4.0: preempted, 2.0: all_played}).startswith("섞인 결과"))
+
+
+class Rate2kPad:
+    """Runs each stream at once on made-up send times, as Apex6.stream would schedule them."""
+
+    def __init__(self) -> None:
+        self.streams: list[tuple[float, int]] = []
+        self.now = 50.0
+
+    def stream(self, render, period, primers, sent):
+        from apex6 import StreamStats
+
+        self.streams.append((period, primers))
+        stats, first = StreamStats(), 0
+        while render(first) is not None:
+            sent.append(self.now)
+            stats.frames += 1
+            if stats.frames >= primers:
+                self.now += period
+            first += SUBFRAMES
+        return stats
+
+
+class Rate2kTest(unittest.TestCase):
+    def test_modes(self) -> None:
+        self.assertEqual((RATE_MODES["1k"].rate, RATE_MODES["1k"].period, RATE_MODES["1k"].upsample), (1000, 0.008, True))
+        self.assertEqual((RATE_MODES["2k"].rate, RATE_MODES["2k"].period, RATE_MODES["2k"].upsample,
+                          RATE_MODES["2k"].primers), (2000, 0.004, False, 2))
+        self.assertEqual([s["mode"] for s in rate2k_sections(25, 100, 3)], [m for m, _, _ in RATE2K_SECTIONS])
+        self.assertEqual(rate2k_sections(25, 100, 3)[1]["primers"], 3)
+        self.assertEqual(rate2k_sections(25, 100, 3)[-1]["mode"], "old4")  # it leaves the queue full
+
+    def test_2k_carries_the_tone_at_2_khz_and_1k_folds_it(self) -> None:
+        sections = rate2k_sections(25, 100, 2)
+        peak = MAX_SAMPLE * 0.25
+
+        def samples(section: dict) -> tuple[list[float], dict]:
+            mode = RATE_MODES[section["mode"]]
+            render = rate2k_renderer(section["items"], mode, "grips")
+            item = next(i for i in section["items"] if i["kind"] == "sine" and i["freq"] == 700.0)
+            first = round((item["start"] + 0.5) * mode.rate) // SUBFRAMES * SUBFRAMES
+            blocks = [render(first + k * SUBFRAMES) for k in range(10)]
+            self.assertTrue(all(b.upsample == mode.upsample for b in blocks))
+            return [v for b in blocks for v in b.left_grip], {"first": first, "item": item, "rate": mode.rate}
+
+        raw, at = samples(sections[1])
+        t0 = at["first"] / at["rate"] - at["item"]["start"]
+        expected = [math.sin(2 * math.pi * 700 * (t0 + n / 2000)) * peak for n in range(len(raw))]
+        self.assertLess(max(abs(a - b) for a, b in zip(raw, expected)), 1e-6)
+        folded, at = samples(sections[0])
+        t0 = at["first"] / at["rate"] - at["item"]["start"]
+        as_300 = [-math.sin(2 * math.pi * 300 * (t0 + n / 1000)) * peak for n in range(len(folded))]
+        self.assertLess(max(abs(a - b) for a, b in zip(folded, as_300)), 1e-6)
+
+    def test_play_keeps_send_times_and_samples(self) -> None:
+        sections = rate2k_sections(25, 100, 2)
+        for section in sections:  # shorten: the first two items and the end
+            section["items"] = section["items"][:2] + [{"kind": "end", "start": section["items"][1]["start"] + 0.1,
+                                                         "length": 0.0}]
+        pad = Rate2kPad()
+        play_rate2k(pad, sections, "grips")
+        for section, (period, primers) in zip(sections, pad.streams):
+            self.assertEqual(len(section["samples"]), SUBFRAMES * len(section["sent"]))
+            self.assertEqual((period, primers), (section["period"], section["primers"]))
+        self.assertEqual(sections[0]["sent"][0], 0.0)
+
+    def test_tone_renderer_in_2k(self) -> None:
+        block = tone_renderer("grips", 700, 700, 50, 1.0, RATE_MODES["2k"])(800)
+        self.assertFalse(block.upsample)
+        peak = MAX_SAMPLE * 0.5
+        self.assertAlmostEqual(block.left_grip[1], math.sin(2 * math.pi * 700 * 801 / 2000) * peak, places=6)
+
+
+class DropoutTest(unittest.TestCase):
+    def test_modes_parse_and_fit_the_queue(self) -> None:
+        import argparse
+
+        self.assertEqual(dropout_modes("1k:0, 2k:6"), [("1k", 0), ("2k", 6)])
+        self.assertEqual(dropout_modes("1k:5,2k:11"), [("1k", 5), ("2k", 11)])  # 96 samples exactly
+        for bad in ("1k:6", "2k:12", "old4:0", "1k", "2k:x", ""):
+            with self.assertRaises(argparse.ArgumentTypeError, msg=bad):
+                dropout_modes(bad)
+
+    def test_sections_alternate_rounds_between_clicks(self) -> None:
+        sections = dropout_sections([("1k", 0), ("2k", 4)], 310, 20, 2, 25, 100)
+        tones = [(s["mode"], s["primers"], s["round"]) for s in sections if s["round"]]
+        self.assertEqual(tones, [("1k", 0, 1), ("2k", 4, 1), ("2k", 4, 2), ("1k", 0, 2)])
+        clicks = sections[0::2]
+        self.assertEqual(len(clicks), 5)
+        for section in clicks:
+            self.assertEqual((section["round"], section["mode"], section["primers"]), (0, "1k", DROPOUT_CLICK_PRIMERS))
+            self.assertEqual([i["kind"] for i in section["items"]], ["clicks", "end"])
+        for section in sections[1::2]:
+            sine = section["items"][0]
+            self.assertEqual((sine["kind"], sine["freq"], sine["length"]), ("sine", 310, 20))
+            self.assertEqual(section["upsample"], section["mode"] == "1k")
+        self.assertEqual([s["period"] for s in sections[1::2]], [0.008, 0.004, 0.004, 0.008])
+
+    def test_play_rests_between_sections(self) -> None:
+        sections = dropout_sections([("2k", 2)], 310, 5, 1, 25, 100)
+        pad = Rate2kPad()
+        with mock.patch("time.sleep", lambda s: setattr(pad, "now", pad.now + s)):
+            play_rate2k(pad, sections, "grips", rest=0.3)
+        self.assertEqual(pad.streams, [(0.008, DROPOUT_CLICK_PRIMERS), (0.004, 2), (0.008, DROPOUT_CLICK_PRIMERS)])
+        # each section starts 0.3 s after the last one's final report went out
+        for before, after in zip(sections, sections[1:]):
+            self.assertAlmostEqual(after["sent"][0] - before["sent"][-1], before["period"] + 0.3, places=6)
+
+
+class PlacementTest(unittest.TestCase):
+    def test_places_parse_and_take_turns(self) -> None:
+        import argparse
+
+        places = placement_places(" 지금 자리, 가까이 ,지금 자리")
+        self.assertEqual(places, ["지금 자리", "가까이"])
+        self.assertEqual(placement_order(places, 2), ["지금 자리", "가까이", "지금 자리", "가까이"])
+        for bad in ("", "하나", "a, a"):
+            with self.assertRaises(argparse.ArgumentTypeError, msg=bad):
+                placement_places(bad)
 
 
 class DeviceInfoTest(unittest.TestCase):

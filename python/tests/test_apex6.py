@@ -82,6 +82,63 @@ class EncodeTest(unittest.TestCase):
         self.assertEqual((report[7], report[8]), (0x80 + 127, 0x80 - 127))
 
 
+class UpsampleBitTest(unittest.TestCase):
+    def test_bit_7_is_set_unless_a_block_clears_it(self) -> None:
+        tone = [10.0] * SUBFRAMES
+        joined = build_realtime(Block(left_grip=tone, right_grip=tone))
+        raw = build_realtime(Block(left_grip=tone, right_grip=tone, upsample=False))
+        self.assertEqual(joined[5], 0x9B)
+        self.assertEqual(raw[5], 0x1B)
+        self.assertEqual(raw[6:32], joined[6:32])
+        self.assertEqual(SILENT_REPORT[5] & 0x80, 0x80)
+
+
+class PrimerTest(unittest.TestCase):
+    def test_primers_go_out_ahead_then_one_per_period(self) -> None:
+        clock = FakeClock()
+        pad = Apex6.__new__(Apex6)
+        pad._dev, pad._enabled, pad._trigger_mode, pad._trigger_target = FakeDevice(), True, 0x02, 0x12
+        pad._trigger_side = 0x02
+        sent: list[float] = []
+        with mock.patch("apex6.time", clock):
+            stats = pad.stream(lambda first: Block() if first < 5 * SUBFRAMES else None, period=0.004,
+                               primers=2, sent=sent)
+        self.assertEqual(stats.frames, 5)
+        self.assertEqual([round(t * 1000, 6) for t in sent], [0.0, 0.0, 0.0, 4.0, 8.0])
+        self.assertEqual(stats.started, 0.0)
+
+    def test_slow_writes_during_the_primers_keep_the_spare(self) -> None:
+        # The 2026-11-08 dropout run: writes take ~2 ms, so after a few primers the 4 ms pace
+        # had passed; counting that as late reset the pace and threw away 10 of 24 ms.
+        clock = FakeClock()
+
+        class SlowDevice(FakeDevice):
+            def write(self, report: bytes) -> int:
+                clock.now += 0.002
+                return super().write(report)
+
+        pad = Apex6.__new__(Apex6)
+        pad._dev, pad._enabled, pad._trigger_mode, pad._trigger_target = SlowDevice(), True, 0x02, 0x12
+        pad._trigger_side = 0x02
+        sent: list[float] = []
+        with mock.patch("apex6.time", clock):
+            stats = pad.stream(lambda first: Block() if first < 20 * SUBFRAMES else None, period=0.004,
+                               primers=6, sent=sent)
+        spare = [round((k * 0.004 - t) * 1000, 6) for k, t in enumerate(sent)]
+        self.assertEqual(spare[-8:], [24.0] * 8)
+        self.assertEqual(stats.late_frames, 0)
+
+    def test_no_primers_keeps_the_pace(self) -> None:
+        clock = FakeClock()
+        pad = Apex6.__new__(Apex6)
+        pad._dev, pad._enabled, pad._trigger_mode, pad._trigger_target = FakeDevice(), True, 0x02, 0x12
+        pad._trigger_side = 0x02
+        sent: list[float] = []
+        with mock.patch("apex6.time", clock):
+            pad.stream(lambda first: Block() if first < 3 * SUBFRAMES else None, sent=sent)
+        self.assertEqual([round(t * 1000, 6) for t in sent], [0.0, 8.0, 16.0])
+
+
 class FakeClock:
     """Stands in for the time module: sleeping moves the clock."""
 

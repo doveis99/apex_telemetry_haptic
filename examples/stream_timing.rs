@@ -51,8 +51,8 @@ fn main() {
         .collect();
 
     let mut synth = Synth::new(Gains::default(), Equalizer::for_player(&Default::default()));
-    synth.native_ticks = two_k;
-    let mut output = two_k.then(|| Output2k::for_synth(&synth));
+    synth.set_events_2k(two_k);
+    let mut output = two_k.then(Output2k::new);
     let mut source = SimulatedTelemetry::new(Some(60.0));
     let mut pad = Apex6::with_link(Discard, RealClock::default());
     let mut render_us = Vec::new();

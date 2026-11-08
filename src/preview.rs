@@ -207,7 +207,7 @@ fn blinker(t: f64) -> Frame {
     f
 }
 
-fn script(effect: Effect, t: f64, gains: &Gains) -> Frame {
+pub(crate) fn script(effect: Effect, t: f64, gains: &Gains) -> Frame {
     match effect {
         Effect::Engine => engine(t),
         Effect::Road => road(t),
@@ -286,9 +286,9 @@ impl Preview {
         Preview { effect, surfaces: surfaces.iter().map(|s| s.to_string()).collect(), step, seconds, gains, synth, blocks: 0 }
     }
 
-    /// Render for the 2 kHz output (Synth::native_ticks).
-    pub fn set_native_ticks(&mut self, on: bool) {
-        self.synth.native_ticks = on;
+    /// Render for the 2 kHz output (Synth::set_events_2k).
+    pub fn set_events_2k(&mut self, on: bool) {
+        self.synth.set_events_2k(on);
     }
 
     fn surface_at(&self, t: f64) -> &str {
@@ -326,9 +326,10 @@ impl Preview {
             block.trigger[n] *= fade;
             block.left_grip[n] *= fade;
             block.right_grip[n] *= fade;
-            if let Some(ticks) = &mut block.ticks {
-                for channel in ticks.iter_mut() {
-                    channel[n] *= fade;
+            if let Some(events) = &mut block.events {
+                for channel in events.iter_mut() {
+                    channel[2 * n] *= fade;
+                    channel[2 * n + 1] *= fade;
                 }
             }
         }
@@ -423,7 +424,7 @@ impl Player {
         }
         let two_k = state.output_2k;
         if let Some(current) = &mut state.current {
-            current.set_native_ticks(two_k);
+            current.set_events_2k(two_k);
         }
         let block = state.current.as_mut().and_then(Preview::render);
         let Some(block) = block else {
@@ -436,7 +437,7 @@ impl Player {
         }
         if two_k != state.rate2k.is_some() {
             state.rate2k = match (two_k, &state.current) {
-                (true, Some(current)) => Some(Output2k::for_synth(&current.synth)),
+                (true, Some(_)) => Some(Output2k::new()),
                 _ => None,
             };
         }

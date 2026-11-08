@@ -217,7 +217,7 @@ impl BlockLog {
         row[1] = format!("{gap:.1}");
         row[2] = new_frame;
         row[3] = side.name().to_string();
-        // ticks the 2 kHz output places itself (Block::ticks) count as the samples they were
+        // the events the 2 kHz output lays over the line (Block::events) count, at their 2 kHz peak
         let [left, right, trigger] = block.peaks();
         row[4] = peak(trigger);
         row[5] = peak(left);

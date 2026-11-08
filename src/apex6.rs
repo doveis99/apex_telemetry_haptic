@@ -124,9 +124,12 @@ fn encode(sample: f64) -> u8 {
     (value + 128) as u8 // 0x80 is electrical zero
 }
 
-/// One sample at 1 kHz per channel (left grip, right grip, trigger) where a tick fired, to be
-/// placed at 2 kHz instead of being joined into the line (src/rate2k.rs).
-pub type Ticks = [[f64; SUBFRAMES]; 3];
+/// 2 kHz samples in one 8 ms block.
+pub const FINE: usize = 2 * SUBFRAMES;
+
+/// The events drawn at 2 kHz (left grip, right grip, trigger), each sample what it adds on top
+/// of the line through the block's 1 kHz samples; src/rate2k.rs lays them over it.
+pub type Events = [[f64; FINE]; 3];
 
 /// Eight subframes for the three output channels: 1 kHz, or 2 kHz when upsample is off.
 #[derive(Clone, Debug, PartialEq)]
@@ -144,8 +147,8 @@ pub struct Block {
     /// joins the eight samples into sixteen by straight lines; clear, they are 2 kHz samples
     /// and the block lasts 4 ms.
     pub upsample: bool,
-    /// The synth's ticks, kept out of the samples, when it renders for the 2 kHz output.
-    pub ticks: Option<Box<Ticks>>,
+    /// The synth's events, kept out of the samples, when it renders for the 2 kHz output.
+    pub events: Option<Box<Events>>,
 }
 
 impl Default for Block {
@@ -158,7 +161,7 @@ impl Default for Block {
             trigger_bit: None,
             side: None,
             upsample: true,
-            ticks: None,
+            events: None,
         }
     }
 }
@@ -166,7 +169,7 @@ impl Default for Block {
 impl Block {
     pub fn is_silent(&self) -> bool {
         self.trigger.iter().chain(&self.left_grip).chain(&self.right_grip).all(|&x| x == 0.0)
-            && self.ticks.as_ref().is_none_or(|t| t.iter().flatten().all(|&x| x == 0.0))
+            && self.events.as_ref().is_none_or(|e| e.iter().flatten().all(|&x| x == 0.0))
     }
 
     /// How long the pad plays it, with a report period of `period` for 1 kHz blocks.
@@ -174,13 +177,20 @@ impl Block {
         if self.upsample { period } else { period / 2.0 }
     }
 
-    /// Strongest sample of each channel (left grip, right grip, trigger), ticks included.
+    /// Strongest sample of each channel (left grip, right grip, trigger), events included.
     pub fn peaks(&self) -> [f64; 3] {
-        let ticks = self.ticks.as_deref().copied().unwrap_or([[0.0; SUBFRAMES]; 3]);
         let mut peaks = [0.0f64; 3];
         for (i, channel) in [&self.left_grip, &self.right_grip, &self.trigger].into_iter().enumerate() {
-            for (x, t) in channel.iter().zip(&ticks[i]) {
-                peaks[i] = crate::pymath::max(peaks[i], crate::pymath::max(x.abs(), t.abs()));
+            for x in channel {
+                peaks[i] = crate::pymath::max(peaks[i], x.abs());
+            }
+            if let Some(events) = &self.events {
+                for (k, e) in events[i].iter().enumerate() {
+                    // over the line through the samples (the last block's is not known here)
+                    let n = k / 2;
+                    let under = if k % 2 == 1 || n == 0 { channel[n] } else { (channel[n - 1] + channel[n]) / 2.0 };
+                    peaks[i] = crate::pymath::max(peaks[i], (under + e).abs());
+                }
             }
         }
         peaks

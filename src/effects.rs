@@ -19,7 +19,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::apex6::{Block, Route, MAX_SAMPLE, SAMPLE_LIMIT, SAMPLE_RATE, SUBFRAMES};
+use crate::apex6::{Block, Events, Route, FINE, MAX_SAMPLE, SAMPLE_LIMIT, SAMPLE_RATE, SUBFRAMES};
 use crate::i18n::n_;
 use crate::pymath as m;
 use crate::pyrandom::PyRandom;
@@ -27,6 +27,9 @@ use crate::t;
 use crate::telemetry::{Frame, Wheel};
 
 const SR: f64 = SAMPLE_RATE as f64;
+const RATE_2K: f64 = crate::rate2k::RATE;
+/// how much shorter, and higher, a tick is at 2 kHz
+const STRETCH: f64 = RATE_2K / SR;
 pub const DT: f64 = SUBFRAMES as f64 / SAMPLE_RATE as f64; // 8 ms per telemetry update
 pub const CEILING_GRIP: f64 = SAMPLE_LIMIT as f64;
 pub const CEILING_TRIGGER: f64 = 102.0; // round(0.8 * SAMPLE_LIMIT)
@@ -900,6 +903,8 @@ pub struct Resonator {
     y2: f64,
     pub center: f64,
     pub q: f64,
+    /// samples per second it is tuned for
+    rate: f64,
     b0: f64,
     b2: f64,
     a1: f64,
@@ -908,18 +913,42 @@ pub struct Resonator {
 
 impl Resonator {
     pub fn new(center: f64, q: f64) -> Resonator {
-        let mut r = Resonator { x1: 0.0, x2: 0.0, y1: 0.0, y2: 0.0, center: 0.0, q: 0.0, b0: 0.0, b2: 0.0, a1: 0.0, a2: 0.0 };
+        let mut r = Resonator {
+            x1: 0.0,
+            x2: 0.0,
+            y1: 0.0,
+            y2: 0.0,
+            center: 0.0,
+            q: 0.0,
+            rate: SR,
+            b0: 0.0,
+            b2: 0.0,
+            a1: 0.0,
+            a2: 0.0,
+        };
         r.tune(center, q);
         r
     }
 
+    /// The same band for samples at `rate` Hz, ringing on from where it was.
+    pub fn set_rate(&mut self, rate: f64) {
+        if rate != self.rate {
+            self.rate = rate;
+            let (center, q) = (self.center, self.q);
+            self.center = 0.0;
+            self.tune(center, q);
+        }
+    }
+
+    /// center and q as at 1 kHz; at another rate the band keeps the edges it has there.
     pub fn tune(&mut self, center: f64, q: f64) {
         if center == self.center && q == self.q {
             return;
         }
         self.center = center;
         self.q = q;
-        let w = TAU * center / SR;
+        let (center, q) = if self.rate == SR { (center, q) } else { same_band(center, q, self.rate) };
+        let w = TAU * center / self.rate;
         let alpha = m::sin(w) / (2.0 * q);
         let a0 = 1.0 + alpha;
         self.b0 = alpha / a0;
@@ -941,7 +970,7 @@ impl Resonator {
     pub fn impulse_peak(&self) -> f64 {
         let (mut x1, mut x2, mut y1, mut y2) = (0.0, 0.0, 0.0, 0.0);
         let mut peak = 0.0;
-        for n in 0..((SR / self.center) as i64 + 2) {
+        for n in 0..((self.rate / self.center) as i64 + 2) {
             let x = if n == 0 { 1.0 } else { 0.0 };
             let y = self.b0 * x + self.b2 * x2 - self.a1 * y1 - self.a2 * y2;
             x2 = x1;
@@ -953,6 +982,17 @@ impl Resonator {
         let _ = x1;
         peak
     }
+}
+
+/// (centre, Q) at `rate` of the band a (centre, Q) plays at 1 kHz. Near 500 Hz the 1 kHz band
+/// is squeezed (350 Hz at Q 1.2 spans 292-396 Hz there, 247-473 at 2 kHz with the same Q), and
+/// the effects were tuned as they played. The same centre, where the 1 kHz band peaks, and the
+/// same skirt below it, where the motors are felt: within 0.7 dB of the 1 kHz band up to 300 Hz
+/// for every band the events use. Above, only the 1 kHz null at 500 Hz is gone (350 Hz, Q 1.2:
+/// 282-427 Hz).
+fn same_band(center: f64, q: f64, rate: f64) -> (f64, f64) {
+    // well under the band, either rises as pi f / rate / (tan(pi centre / rate) Q)
+    (center, q * (m::PI * center / SR).tan() * SR / (rate * (m::PI * center / rate).tan()))
 }
 
 /// White noise through a band-pass.
@@ -970,6 +1010,17 @@ impl BandNoise {
     pub fn next(&mut self) -> f64 {
         let x = self.rng.uniform(-1.0, 1.0);
         self.filter.next(x) * 2.5
+    }
+
+    /// One sample at `rate` Hz. Faster, the same noise spreads over a wider band and less of
+    /// it falls in the filter's: it is raised to keep its level within the band.
+    pub fn next_at(&mut self, rate: f64) -> f64 {
+        self.filter.set_rate(rate);
+        if rate == SR {
+            return self.next();
+        }
+        let x = self.rng.uniform(-1.0, 1.0);
+        self.filter.next(x) * 2.5 * (rate / SR).sqrt()
     }
 }
 
@@ -1211,6 +1262,8 @@ pub struct Burst {
     pub age: f64,
     phase: f64,
     carrier: Carrier,
+    /// sounded yet (the Synth makes up at 2 kHz for the line the pad drew up to its first sample)
+    begun: bool,
 }
 
 impl Burst {
@@ -1225,6 +1278,7 @@ impl Burst {
             age: 0.0,
             phase: 0.0,
             carrier: Carrier::Sine,
+            begun: false,
         }
     }
 
@@ -1299,32 +1353,44 @@ impl Burst {
     }
 
     pub fn next(&mut self) -> f64 {
+        self.next_at(SR)
+    }
+
+    /// One sample at `rate` Hz: the same burst, drawn finer. A tick's one sample is as much
+    /// higher as it is shorter, so it pushes the motor as hard.
+    pub fn next_at(&mut self, rate: f64) -> f64 {
         if let Carrier::Tick { fired } = &mut self.carrier {
             if self.age < 0.0 {
-                self.age += 1.0 / SR;
+                self.age += 1.0 / rate;
                 return 0.0;
             }
-            let value = if *fired { 0.0 } else { self.amplitude };
+            let value = if *fired { 0.0 } else { self.amplitude * (rate / SR) };
             *fired = true;
-            self.age += 1.0 / SR;
+            self.age += 1.0 / rate;
             return value;
         }
         if self.age < 0.0 {
-            self.age += 1.0 / SR;
+            self.age += 1.0 / rate;
             return 0.0;
         }
         let carrier = match &mut self.carrier {
             Carrier::Sine => {
                 let value = m::sin(TAU * self.phase);
-                self.phase = m::rem(self.phase + self.freq / SR, 1.0);
+                self.phase = m::rem(self.phase + self.freq / rate, 1.0);
                 value
             }
-            Carrier::Noise(noise) => noise.next(),
+            Carrier::Noise(noise) => noise.next_at(rate),
             Carrier::Tick { .. } => unreachable!(),
         };
         let value = carrier * self.envelope();
-        self.age += 1.0 / SR;
+        self.begun = true;
+        self.age += 1.0 / rate;
         value
+    }
+
+    /// The next sample is its first.
+    pub fn starts(&self) -> bool {
+        !self.begun && self.age >= 0.0
     }
 
     pub fn done(&self) -> bool {
@@ -1518,10 +1584,15 @@ pub struct Synth {
     /// left grip, right grip, trigger; 0 = no ducking
     pub duck: [f64; 3],
     pub levels: Levels,
-    /// Render for the 2 kHz output: ticks stay out of the samples and go in Block::ticks, at
-    /// their 1 kHz strength, for src/rate2k.rs to place at 2 kHz. Off, the output is the
-    /// Python app's to the bit.
-    pub native_ticks: bool,
+    /// Render for the 2 kHz output (set_events_2k). Off, the output is the Python app's to the bit.
+    events_2k: bool,
+    /// the motors' resonance cuts at 2 kHz for the events (left, right, trigger), one for the
+    /// bursts and one for the ticks, which go through the soft limit apart
+    cuts_2k: [[Option<ResonanceCut>; 2]; 3],
+    /// each channel's last sample ahead of the soft limit, where the pad's line starts
+    line_from: [f64; 3],
+    /// what a burst's start gives back in the next 2 kHz sample, each channel
+    onset_carry: [f64; 3],
 }
 
 impl Synth {
@@ -1593,8 +1664,30 @@ impl Synth {
             fresh: [1.0; 3],
             duck: [0.0; 3],
             levels: Levels { trigger_mode: "-", ..Levels::default() },
-            native_ticks: false,
+            events_2k: false,
+            cuts_2k: Default::default(),
+            line_from: [0.0; 3],
+            onset_carry: [0.0; 3],
         }
+    }
+
+    /// Render the events (every burst and tick) at 2 kHz for the 2 kHz output, from the next
+    /// block on. The continuous effects stay at 1 kHz in the samples, where src/rate2k.rs
+    /// joins them as the pad does and filters their images; the events go in Block::events,
+    /// drawn at 2 kHz, to be laid over that: a knock's crest-first edge in half a millisecond
+    /// instead of the line's whole one, a 3 ms click in six samples instead of three, the
+    /// hisses' noise without a fold at 500 Hz and the 420 Hz filter taking their top half.
+    /// The felt part stays as it was.
+    pub fn set_events_2k(&mut self, on: bool) {
+        if on && !self.events_2k {
+            self.cuts_2k = [0, 0, 1].map(|c| [(); 2].map(|_| self.eq.cut_at(c, RATE_2K)));
+            self.onset_carry = [0.0; 3];
+        }
+        self.events_2k = on;
+    }
+
+    pub fn events_2k(&self) -> bool {
+        self.events_2k
     }
 
     fn push(&mut self, effect: Effect, side: Side, burst: Burst) -> u64 {
@@ -2324,8 +2417,8 @@ impl Synth {
         let duck_release = duck_release();
         let mut block = Block::default();
         let mut heard = [false; 5]; // the TRIGGER_SLOTS something played in
-        let native_ticks = self.native_ticks;
-        let mut ticks = [[0.0; SUBFRAMES]; 3]; // left grip, right grip, trigger
+        let events_2k = self.events_2k;
+        let mut events: Events = [[0.0; FINE]; 3]; // left grip, right grip, trigger
         let p = self.prev_amp;
         for n in 0..SUBFRAMES {
             let k = (n + 1) as f64 / SUBFRAMES as f64;
@@ -2416,7 +2509,9 @@ impl Synth {
                 mix(&mut out, routes[Effect::Bumps.index()], wl * c, wr * c, 0.7 * (wl + wr) * c, eq_sway, BOTH_TRIGGERS);
             }
             let mut drive = [0.0; 5];
-            let mut tick = [0.0; 5]; // native_ticks: the ticks, apart from out
+            // events_2k: the bursts at 2 kHz, two to this sample, the ticks apart, and the first
+            // samples of the bursts that start on them
+            let (mut fine, mut taps, mut starts) = ([[0.0; 5]; 2], [[0.0; 5]; 2], [[0.0; 5]; 2]);
             for (entry, &burst_eq) in self.bursts.iter_mut().zip(&eq_bursts) {
                 let route = routes[entry.effect.index()];
                 let slot = entry.burst.trigger_slot;
@@ -2425,17 +2520,30 @@ impl Synth {
                     let (l, r) = side_pair(entry.side, d);
                     mix(&mut drive, route, l, r, d, FLAT, slot);
                 }
-                let b = entry.burst.next();
-                let (l, r) = side_pair(entry.side, b);
-                let into = if native_ticks && entry.burst.is_tick() { &mut tick } else { &mut out };
-                mix(into, route, l, r, b, burst_eq, slot);
+                if events_2k {
+                    let tick = entry.burst.is_tick();
+                    for h in 0..2 {
+                        let first = !tick && entry.burst.starts();
+                        let b = entry.burst.next_at(RATE_2K);
+                        let (l, r) = side_pair(entry.side, b);
+                        mix(if tick { &mut taps[h] } else { &mut fine[h] }, route, l, r, b, burst_eq, slot);
+                        if first {
+                            mix(&mut starts[h], route, l, r, b, burst_eq, slot);
+                        }
+                    }
+                } else {
+                    let b = entry.burst.next();
+                    let (l, r) = side_pair(entry.side, b);
+                    mix(&mut out, route, l, r, b, burst_eq, slot);
+                }
             }
             for slot in TRIGGER_SLOTS {
-                if out[slot] != 0.0 || bed[slot] != 0.0 || tick[slot] != 0.0 {
+                if out[slot] != 0.0 || bed[slot] != 0.0 || fine.iter().chain(&taps).any(|half| half[slot] != 0.0) {
                     heard[slot] = true;
                 }
             }
-            for mix in [&mut out, &mut bed, &mut drive, &mut tick] {
+            let ([f0, f1], [t0, t1], [s0, s1]) = (&mut fine, &mut taps, &mut starts);
+            for mix in [&mut out, &mut bed, &mut drive, f0, f1, t0, t1, s0, s1] {
                 // one trigger channel from here on
                 mix[BOTH_TRIGGERS] += mix[BRAKE_TRIGGER] + mix[THROTTLE_TRIGGER];
             }
@@ -2454,16 +2562,51 @@ impl Synth {
             block.left_grip[n] = self.out(out[0], g.grip_level, CEILING_GRIP);
             block.right_grip[n] = self.out(out[1], g.grip_level, CEILING_GRIP);
             block.trigger[n] = self.out(out[2], g.trigger_level, CEILING_TRIGGER);
-            if native_ticks {
-                // what the tick adds through the soft limit, on top of what plays with it: the
-                // sum is the sample the 1 kHz output sends (bar the resonance cut's first step)
-                ticks[0][n] = self.out(out[0] + tick[0], g.grip_level, CEILING_GRIP) - block.left_grip[n];
-                ticks[1][n] = self.out(out[1] + tick[1], g.grip_level, CEILING_GRIP) - block.right_grip[n];
-                ticks[2][n] = self.out(out[2] + tick[2], g.trigger_level, CEILING_TRIGGER) - block.trigger[n];
+            if events_2k {
+                for (i, (level, ceiling)) in
+                    [(g.grip_level, CEILING_GRIP), (g.grip_level, CEILING_GRIP), (g.trigger_level, CEILING_TRIGGER)]
+                        .into_iter()
+                        .enumerate()
+                {
+                    // where the pad's line runs at the two 2 kHz samples: halfway from the last
+                    // sample, then this one
+                    let under = [(self.line_from[i] + out[i]) / 2.0, out[i]];
+                    for h in 0..2 {
+                        let [burst, tick] = [fine[h][i], taps[h][i]];
+                        let [cut_burst, cut_tick] = &mut self.cuts_2k[i];
+                        let burst = cut_burst.as_mut().map_or(burst, |cut| cut.next(burst));
+                        // a tick is one sample as much higher as it is shorter: it goes through
+                        // the soft limit at the height it had at 1 kHz, which it pushes with
+                        let tick = cut_tick.as_mut().map_or(tick, |cut| cut.next(tick)) / STRETCH;
+                        let carried = std::mem::take(&mut self.onset_carry[i]);
+                        if burst != 0.0 || tick != 0.0 || carried != 0.0 {
+                            // what the events add through the soft limit, on top of what plays under them
+                            let (u, with) = (under[h], under[h] + burst);
+                            let limit = |x: f64| self.out(x, level, ceiling);
+                            // The pad's line rose to a burst's first 1 kHz sample over the
+                            // millisecond before it, so a burst that starts on its crest pushed
+                            // half a sample more than its own shape. At 2 kHz that rise takes half
+                            // as long: the first two samples give the rest back, of the sample as
+                            // limited, which is what the line was drawn through (given ahead of
+                            // the limit, the gear's clack still lost a quarter of its push under
+                            // 50 Hz). Spread over two, it adds little over 500 Hz.
+                            let first = starts[h][i];
+                            let onset = if first == 0.0 {
+                                0.0
+                            } else {
+                                (limit(with) - limit(with - first)) * (STRETCH - 1.0) / 4.0
+                            };
+                            events[i][2 * n + h] =
+                                limit(with) - limit(u) + onset + carried + STRETCH * (limit(with + tick) - limit(with));
+                            self.onset_carry[i] = onset;
+                        }
+                    }
+                }
             }
+            self.line_from = [out[0], out[1], out[2]];
         }
-        if ticks.iter().flatten().any(|&x| x != 0.0) {
-            block.ticks = Some(Box::new(ticks));
+        if events.iter().flatten().any(|&x| x != 0.0) {
+            block.events = Some(Box::new(events));
         }
         self.prev_amp = Amps {
             engine: engine_amp,
@@ -2492,7 +2635,7 @@ impl Synth {
             TriggerMode::Brake => "brake",
             TriggerMode::Throttle => "throttle",
         };
-        if block.trigger.iter().all(|&x| x == 0.0) && block.ticks.as_ref().is_none_or(|t| t[2].iter().all(|&x| x == 0.0)) {
+        if block.trigger.iter().all(|&x| x == 0.0) && block.events.as_ref().is_none_or(|e| e[2].iter().all(|&x| x == 0.0)) {
             block.route = Route::Mute;
             return block;
         }

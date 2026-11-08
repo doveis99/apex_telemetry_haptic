@@ -303,11 +303,11 @@ impl Runner {
         // the rate changes between two 8 ms blocks, never inside one
         let two_k = self.output_2k.load(Ordering::Relaxed);
         if two_k != self.rate2k.is_some() {
-            self.rate2k = two_k.then(|| Output2k::for_synth(&self.synth));
+            self.rate2k = two_k.then(Output2k::new);
         }
-        self.synth.native_ticks = two_k;
+        self.synth.set_events_2k(two_k);
         if let Some(preview) = &mut self.preview {
-            preview.set_native_ticks(two_k);
+            preview.set_events_2k(two_k);
         }
         let block = self.render_block()?;
         Some(match &mut self.rate2k {

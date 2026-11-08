@@ -409,6 +409,51 @@ mod tests {
         assert!(b > 10.0 * a, "450-650 Hz: {a} vs {b}");
     }
 
+    /// The road test on one surface, rendered for the 1 kHz output or the 2 kHz one.
+    fn surface_blocks(surface: &str, events_2k: bool) -> Vec<Block> {
+        let mut preview = Preview::with_synth(Effect::Road, &Gains::default(), &[surface], |gains| {
+            Synth::with_seeds(gains, Equalizer::for_player(&Default::default()), PyRandom::new(1))
+        });
+        preview.set_events_2k(events_2k);
+        std::iter::from_fn(|| preview.render()).collect()
+    }
+
+    /// Where in (lo, hi) Hz the most is, every 5 Hz.
+    fn loudest(x: &[f64], lo: f64, hi: f64) -> f64 {
+        let freqs = (0..).map(|n| lo + 5.0 * n as f64).take_while(|f| *f <= hi);
+        freqs.max_by(|a, b| level(x, *a).total_cmp(&level(x, *b))).unwrap()
+    }
+
+    #[test]
+    fn clicks_ring_on_above_500_hz_at_their_recorded_pitch() {
+        // the gear shift's clack rings at the Eaton gearbox's 690 Hz, the turn signal's relay at
+        // its 730 Hz; at 1 kHz there was no such ring
+        for (effect, pitch) in [(Effect::Gear, 690.0), (Effect::Blinker, 730.0)] {
+            let (old, sent) = (sent_2k(&test_blocks(effect, false, 1)), sent_2k(&test_blocks(effect, true, 1)));
+            let at = loudest(&sent, 500.0, 950.0);
+            assert!((at - pitch).abs() <= 10.0, "{effect:?} loudest at {at} Hz");
+            let (a, b) = (band(&old, pitch - 30.0, pitch + 30.0), band(&sent, pitch - 30.0, pitch + 30.0));
+            assert!(b > 4.0 * a, "{effect:?} around {pitch} Hz: {a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn stones_click_above_500_hz_on_loose_ground_only() {
+        // gravel's stones give the band most of what it had nowhere at 1 kHz
+        let (old, sent) = (sent_2k(&surface_blocks("gravel", false)), sent_2k(&surface_blocks("gravel", true)));
+        let (a, b) = (band(&old, 500.0, 950.0), band(&sent, 500.0, 950.0));
+        assert!(b > 20.0 * a, "gravel 500-950 Hz: {a} vs {b}");
+        // and the felt part stays as it was
+        for (lo, hi) in FELT {
+            let ratio = (band(&sent, lo, hi) / band(&old, lo, hi)).sqrt();
+            assert!((ratio - 1.0).abs() < 0.02, "gravel {lo}-{hi} Hz: {ratio}");
+        }
+        // asphalt has no stones: nothing is drawn at 2 kHz, the output is the 1 kHz one's
+        let blocks = surface_blocks("road", true);
+        assert!(blocks.iter().all(|b| b.events.is_none()));
+        assert_eq!(sent_2k(&blocks), sent_2k(&surface_blocks("road", false)));
+    }
+
     #[test]
     fn silence_comes_back_exact() {
         let mut output = Output2k::new();

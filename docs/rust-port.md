@@ -41,7 +41,7 @@ cargo는 저장소 안 어디서 실행해도 `.cargo/config.toml`을 읽음 (`r
 | `app.py` | `src/launch.rs`, `src/bin/app/main.rs` | `--launch`(Steam), `--selftest` |
 | `gui.py`, `widgets.py` | `ui/*.slint`, `src/bin/app/*.rs` | 창, 보정 창, 플러그인 창 |
 | `i18n.py`, `locales/*.py` | `src/i18n.rs`, `resources/locales/*.json`, `resources/lang/*/LC_MESSAGES/*.po` | 언어 10개. 표는 `tools/export_locales.py`가 파이썬 표에서 만듦 |
-| — | `src/rate2k.rs` | 2 kHz 출력(2026-11-08, `docs/xhaptics-engine-notes.md` 12절). Rust 앱에만 있음. 켜면 합성기가 짧은 효과(버스트·틱)를 2 kHz로 따로 그려 내놓음(`Synth::set_events_2k`, `Block::events`, 13절), 끄면 파이썬과 비트 단위로 같음 |
+| — | `src/rate2k.rs` | 2 kHz 출력(2026-11-08, `docs/xhaptics-engine-notes.md` 12절). Rust 앱에만 있음. 켜면 합성기가 짧은 효과(버스트·틱)를 2 kHz로 따로 그려 내놓음(`Synth::set_events_2k`, `Block::events`, 13절). 딸깍 뒤의 울림과 돌 튀는 클릭(14절)도 이때만 그림. 끄면 파이썬과 비트 단위로 같음 |
 | — | `src/pymath.rs`, `src/pyrandom.rs` | 파이썬과 같은 결과를 내기 위한 것: CRT 수학 함수, `sum()`, `math.hypot`, `%`, `**`, 복소수, MT19937 |
 
 ## 창: Slint

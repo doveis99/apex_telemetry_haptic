@@ -188,6 +188,49 @@ const BLINKER_HZ: f64 = 190.0;
 const BLINKER_DECAY: f64 = 0.003;
 const TICK_SHARE: f64 = 1.0;
 const TICK_EDGE: f64 = 0.005;
+
+/// A click's ring above 500 Hz, drawn only at 2 kHz (set_events_2k): a sine from zero at `hz`,
+/// falling by e every `decay` s, carrying `db` more energy in 500-1000 Hz than its tick would
+/// alone (one sample at twice the tick's 1 kHz height).
+#[derive(Clone, Copy, Debug)]
+struct Ring {
+    hz: f64,
+    decay: f64,
+    db: f64,
+}
+
+// In the sound mods' clips a cab click does not stop at its edge: its 500-1000 Hz band rings on
+// for tens of milliseconds, where a tick at 2 kHz stops after its half millisecond. Around the
+// band's loudest 2 ms (from 20 ms before to 150 ms after) it holds 6-9 dB more energy than within
+// them (median: shift 8.0, range 6.2, splitter 6.9, relay 6.1, coupling 8.7); the 2 kHz output
+// held -7 to +6.5 (shift -6.8, relay -8.9). At 1 kHz the band was out of reach; at 2 kHz each
+// tick gets its ring, `db` fitted so the effect tests measure the clips' median within 0.5 dB
+// (the splitter's is high as its clacks' ticks are 12 dB under its knob's, which is the loudest
+// edge). The coupling's knocks come every 20-40 ms, so its ring is fitted knock by knock over
+// 15 ms instead (75 recorded knocks: 3.2 dB median) and decays as one knock's does. The other
+// decays are energy-weighted over the 100 ms after the band's peak (1 ms envelope). The Eaton shifts ring at 680-709 Hz in all 12 clips, 7-16 dB over the rest of the
+// band; the range shift goes through the same gearbox (its two clips peak at 527 and 750 Hz,
+// either side). The splitter's two clips ring at 861 and 885 Hz. The relays (16 clips of three
+// packs) each ring at their own pitch, 511-996 Hz, so the blinker takes their median; the fifth
+// wheel's knocks (11 clips) at 504-926 Hz, so each knock takes one of its own.
+const SHIFT_RING: Ring = Ring { hz: 690.0, decay: 0.038, db: 2.9 };
+const RANGE_RING: Ring = Ring { hz: 690.0, decay: 0.028, db: 2.0 };
+const SPLIT_RING: Ring = Ring { hz: 870.0, decay: 0.030, db: 17.1 };
+const BLINKER_RING: Ring = Ring { hz: 730.0, decay: 0.020, db: 5.2 };
+const COUPLE_RING_HZ: (f64, f64) = (504.0, 926.0);
+const COUPLE_RING: Ring = Ring { hz: 700.0, decay: 0.013, db: 2.1 };
+
+// At 2 kHz the stones click above 500 Hz too. In Sound Fixes Pack's five gravel loops the stones
+// stand out in 500-1000 Hz 9-17 times a second and hold 20-57% of its energy, while 40-250 Hz
+// stays plain noise (kurtosis 2-4) and peaks with only 0-48% of them: what tells gravel apart
+// lies up there. Each click is flat from 400 to 1000 Hz within 6 dB, 8-12 dB down at 1.5 kHz,
+// and falls by e in 4-5 ms. The stones' body rings at the surface's pitch inside the bed's
+// 300 Hz low-pass, so each stone now also strikes a burst of noise through a band-pass over that
+// band, as strong against its body as STONE_HI says.
+const STONE_HZ: f64 = 700.0;
+const STONE_Q: f64 = 0.9;
+const STONE_DECAY: f64 = 0.0045;
+const STONE_HI: f64 = 0.14;
 const COUPLE_S: f64 = 0.6;
 const COUPLE_GAP: (f64, f64) = (0.02, 0.04);
 const COUPLE_MAIN: (f64, f64) = (0.15, 0.45);
@@ -940,6 +983,14 @@ impl Resonator {
         }
     }
 
+    /// A band at `rate` Hz as given there, not as it would play at 1 kHz (for bands above 500 Hz).
+    pub fn native(center: f64, q: f64, rate: f64) -> Resonator {
+        let mut r = Resonator::new(center, q);
+        r.rate = rate;
+        r.coefficients(center, q);
+        r
+    }
+
     /// center and q as at 1 kHz; at another rate the band keeps the edges it has there.
     pub fn tune(&mut self, center: f64, q: f64) {
         if center == self.center && q == self.q {
@@ -948,6 +999,10 @@ impl Resonator {
         self.center = center;
         self.q = q;
         let (center, q) = if self.rate == SR { (center, q) } else { same_band(center, q, self.rate) };
+        self.coefficients(center, q);
+    }
+
+    fn coefficients(&mut self, center: f64, q: f64) {
         let w = TAU * center / self.rate;
         let alpha = m::sin(w) / (2.0 * q);
         let a0 = 1.0 + alpha;
@@ -955,6 +1010,10 @@ impl Resonator {
         self.b2 = -alpha / a0;
         self.a1 = -2.0 * m::cos(w) / a0;
         self.a2 = (1.0 - alpha) / a0;
+    }
+
+    fn reset(&mut self) {
+        (self.x1, self.x2, self.y1, self.y2) = (0.0, 0.0, 0.0, 0.0);
     }
 
     pub fn next(&mut self, x: f64) -> f64 {
@@ -1031,6 +1090,8 @@ struct Grains {
     rng: PyRandom,
     rate: f64,
     gain: f64,
+    /// the click struck on the last sample, before the band-pass (0 when none)
+    last: f64,
 }
 
 const GRAINS_Q: f64 = 1.5;
@@ -1039,7 +1100,7 @@ impl Grains {
     fn new(seed: u64, center: f64) -> Grains {
         let filter = Resonator::new(center, GRAINS_Q);
         let gain = 1.0 / filter.impulse_peak();
-        Grains { filter, rng: PyRandom::new(seed), rate: 0.0, gain }
+        Grains { filter, rng: PyRandom::new(seed), rate: 0.0, gain, last: 0.0 }
     }
 
     fn tune(&mut self, center: f64, rate: f64) {
@@ -1057,6 +1118,7 @@ impl Grains {
             let sign = self.rng.choice(&[-1.0, 1.0]);
             click = (0.2 + 0.8 * m::pow(r, 3.0)) * self.gain * sign;
         }
+        self.last = click / self.gain;
         self.filter.next(click)
     }
 }
@@ -1190,6 +1252,8 @@ struct Texture {
     hiss: f64,
     seam_gain: f64,
     pitch: f64,
+    /// the stone struck on the last sample, as strong as its body rings (0 when none)
+    stone_hit: f64,
 }
 
 const STONE_GAIN: f64 = 5.0;
@@ -1209,6 +1273,7 @@ impl Texture {
             hiss: 1.0,
             seam_gain: 0.0,
             pitch: DEFAULT_SURFACE.pitch,
+            stone_hit: 0.0,
         }
     }
 
@@ -1231,14 +1296,59 @@ impl Texture {
 
     fn next(&mut self) -> f64 {
         let mut value = (1.0 - self.crunch) * self.hiss * self.noise_gain * self.noise.next();
+        let mut stone = 0.0;
         if self.crunch != 0.0 {
             value += self.crunch * STONE_GAIN * self.stones.next();
+            stone = self.crunch * STONE_GAIN * self.stones.last;
         }
         if self.seam_gain != 0.0 {
             value += self.seam_gain * self.seams.next();
         }
         value += RATTLE_GAIN * self.rattle.next(); // also while the last knock rings out
-        value * self.swell.next() / self.swell.rms
+        let swell = self.swell.next();
+        self.stone_hit = stone * swell / self.swell.rms;
+        value * swell / self.swell.rms
+    }
+}
+
+/// A stone's click above 500 Hz at 2 kHz: noise through a band-pass over 400-1000 Hz, falling
+/// by e in STONE_DECAY. Its strength is the noise's RMS as it is struck.
+#[derive(Clone)]
+struct StoneClick {
+    filter: Resonator,
+    rng: PyRandom,
+    level: f64,
+    fade: f64,
+    /// makes the band-passed uniform noise come out at unit RMS
+    scale: f64,
+}
+
+impl StoneClick {
+    fn new(seed: u64) -> StoneClick {
+        let filter = Resonator::native(STONE_HZ, STONE_Q, RATE_2K);
+        // white noise's power through the band-pass: its impulse response's energy
+        let mut probe = filter.clone();
+        let power: f64 = (0..4000).map(|n| probe.next(if n == 0 { 1.0 } else { 0.0 }).powi(2)).sum();
+        let scale = 1.0 / (power / 3.0).sqrt(); // uniform(-1, 1) has a variance of 1/3
+        StoneClick { filter, rng: PyRandom::new(seed), level: 0.0, fade: m::exp(-1.0 / (STONE_DECAY * RATE_2K)), scale }
+    }
+
+    fn strike(&mut self, strength: f64) {
+        self.level = m::max(self.level, strength.abs());
+    }
+
+    /// One 2 kHz sample; exactly 0 once rung out.
+    fn next(&mut self) -> f64 {
+        if self.level < 1e-6 {
+            self.level = 0.0;
+            if self.filter.y1.abs() < 1e-9 && self.filter.y2.abs() < 1e-9 {
+                self.filter.reset();
+                return 0.0;
+            }
+        }
+        let x = self.level * self.scale * self.rng.uniform(-1.0, 1.0);
+        self.level *= self.fade;
+        self.filter.next(x)
     }
 }
 
@@ -1593,6 +1703,10 @@ pub struct Synth {
     line_from: [f64; 3],
     /// what a burst's start gives back in the next 2 kHz sample, each channel
     onset_carry: [f64; 3],
+    /// the stones' clicks above 500 Hz at 2 kHz, left and right
+    stones_2k: [StoneClick; 2],
+    /// the coupling rings' pitches; only drawn from at 2 kHz, so the 1 kHz output stays as it was
+    ring_rng: PyRandom,
 }
 
 impl Synth {
@@ -1668,6 +1782,8 @@ impl Synth {
             cuts_2k: Default::default(),
             line_from: [0.0; 3],
             onset_carry: [0.0; 3],
+            stones_2k: [StoneClick::new(21), StoneClick::new(22)],
+            ring_rng: PyRandom::new(23),
         }
     }
 
@@ -1682,6 +1798,7 @@ impl Synth {
         if on && !self.events_2k {
             self.cuts_2k = [0, 0, 1].map(|c| [(); 2].map(|_| self.eq.cut_at(c, RATE_2K)));
             self.onset_carry = [0.0; 3];
+            self.stones_2k = [StoneClick::new(21), StoneClick::new(22)];
         }
         self.events_2k = on;
     }
@@ -1699,6 +1816,19 @@ impl Synth {
 
     fn both(&mut self, effect: Effect, burst: Burst) {
         self.push(effect, Side::C, burst);
+    }
+
+    /// At 2 kHz, the ring above 500 Hz that follows a tick of `tick` (its 1 kHz height), on `side`.
+    /// Its energy in 500-1000 Hz is ring.db over the tick's: the tick is one 2 kHz sample twice
+    /// as high, so half its 4 tick^2 lies there; the ring's is amplitude^2 decay 2000 / 4. It is
+    /// drawn as flat as the tick, the motor eq taken back out at its pitch.
+    fn ring(&mut self, effect: Effect, side: Side, tick: f64, delay: f64, ring: Ring) {
+        if !self.events_2k || tick == 0.0 {
+            return;
+        }
+        let share = m::pow(10.0, ring.db / 10.0);
+        let amplitude = tick * (2.0 * share / (500.0 * ring.decay)).sqrt() / self.eq.pair(ring.hz).0;
+        self.push(effect, side, Burst::new(ring.hz, amplitude, ring.decay).delay(delay).no_duck());
     }
 
     /// A NoiseBurst: its noise is seeded from the shared seed source as it is made.
@@ -1948,6 +2078,7 @@ impl Synth {
                     self.both(Effect::Gear, Burst::new(SHIFT_HZ, strength * gear, decay).delay(delay).phase(0.25));
                     if decay <= TICK_EDGE {
                         self.both(Effect::Gear, Burst::tick(TICK_SHARE * strength * gear, delay));
+                        self.ring(Effect::Gear, Side::C, TICK_SHARE * strength * gear, delay, SHIFT_RING);
                     }
                 }
             }
@@ -2063,6 +2194,7 @@ impl Synth {
                 let strength = if on { 1.0 } else { 0.7 } * g.blinker;
                 self.push(Effect::Blinker, side, Burst::new(BLINKER_HZ, strength, BLINKER_DECAY).phase(0.25));
                 self.push(Effect::Blinker, side, Burst::tick(TICK_SHARE * strength, 0.0));
+                self.ring(Effect::Blinker, side, TICK_SHARE * strength, 0.0, BLINKER_RING);
                 if self.blinker_idle > 1.5 {
                     self.levels.events.push(if key == "blinker_l" { t!("방향지시등 좌") } else { t!("방향지시등 우") });
                 }
@@ -2097,6 +2229,11 @@ impl Synth {
                     if decay <= TICK_EDGE {
                         // the knob, and each clack's edge
                         self.both(Effect::Shifter, Burst::tick(TICK_SHARE * strength * g.shifter, delay));
+                        if delay > 0.1 {
+                            // the gearbox's clacks ring; the knob in the hand does not
+                            let ring = if i == 0 { RANGE_RING } else { SPLIT_RING };
+                            self.ring(Effect::Shifter, Side::C, TICK_SHARE * strength * g.shifter, delay, ring);
+                        }
                     }
                 }
                 self.levels.events.push(if i == 0 { t!("레인지 셀렉터") } else { t!("스플리터") });
@@ -2140,6 +2277,10 @@ impl Synth {
             let freq = self.rng.uniform(COUPLE_HZ.0, COUPLE_HZ.1);
             self.both(Effect::Trailer, Burst::new(freq, level * strength, COUPLE_DECAY).delay(at).phase(0.25));
             self.both(Effect::Trailer, Burst::tick(TICK_SHARE * level * strength, at));
+            if self.events_2k {
+                let hz = self.ring_rng.uniform(COUPLE_RING_HZ.0, COUPLE_RING_HZ.1);
+                self.ring(Effect::Trailer, Side::C, TICK_SHARE * level * strength, at, Ring { hz, ..COUPLE_RING });
+            }
         }
     }
 
@@ -2458,6 +2599,14 @@ impl Synth {
             // Independent noises: 0.7 keeps their sum near one side's strength.
             let noise_l = rl * self.texture[0].next();
             let noise_r = rr * self.texture[1].next();
+            if events_2k {
+                for (side, amp) in [(0, rl), (1, rr)] {
+                    let hit = self.texture[side].stone_hit;
+                    if hit != 0.0 {
+                        self.stones_2k[side].strike(STONE_HI * amp * hit);
+                    }
+                }
+            }
             let ((grip_l, trig_l), (grip_r, trig_r)) = (eq_road[0], eq_road[1]);
             mix(
                 &mut bed,
@@ -2535,6 +2684,14 @@ impl Synth {
                     let b = entry.burst.next();
                     let (l, r) = side_pair(entry.side, b);
                     mix(&mut out, route, l, r, b, burst_eq, slot);
+                }
+            }
+            if events_2k {
+                for half in &mut fine {
+                    let (l, r) = (self.stones_2k[0].next(), self.stones_2k[1].next());
+                    if l != 0.0 || r != 0.0 {
+                        mix(half, routes[Effect::Road.index()], l, r, 0.7 * (l + r), FLAT, BOTH_TRIGGERS);
+                    }
                 }
             }
             for slot in TRIGGER_SLOTS {

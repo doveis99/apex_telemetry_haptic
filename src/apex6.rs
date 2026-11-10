@@ -39,6 +39,15 @@ pub const FEATURE_TRIGGER_HAPTIC: u8 = 0x10;
 pub const FIRMWARE_OFFSETS: [(&str, usize); 7] =
     [("controller", 15), ("dongle", 17), ("si", 19), ("trigger", 21), ("screen", 23), ("adc", 25), ("rf", 27)];
 
+/// From controller firmware 9.0.7.6 on, every 0x57 report switches on the motors it names: the
+/// triggers with the trigger bit, the grips with their bits (read from the firmware image and
+/// checked on the pad 2026-11-11, wired and wireless: grips played from 0x57 reports alone). Each
+/// trigger then plays while its finger pulls it, whatever side a 0x53 frame asks for, and the
+/// pad switches the motors off by itself 10 s after the last 0x57. So the 0x53 frames (the
+/// route, its reassert, the trigger side) do nothing there, except that wired the pad takes no
+/// report for about 5.2 ms after each one and a side change clicks: they are not sent.
+pub const SELF_ARMING_FIRMWARE: [u8; 4] = [9, 0, 7, 6];
+
 pub const SAMPLE_RATE: u32 = 1000;
 pub const SUBFRAMES: usize = 8;
 pub const FRAME_PERIOD: f64 = SUBFRAMES as f64 / SAMPLE_RATE as f64; // 8 ms
@@ -243,6 +252,18 @@ impl DeviceInfo {
                 (*name, digits.chars().map(String::from).collect::<Vec<_>>().join("."))
             })
             .collect()
+    }
+
+    /// The controller firmware as its four digits, None when the reply leaves it out.
+    pub fn controller_firmware(&self) -> Option<[u8; 4]> {
+        let i = FIRMWARE_OFFSETS[0].1;
+        let (high, low) = (*self.raw.get(i)?, *self.raw.get(i + 1)?);
+        (high != 0 || low != 0).then_some([high >> 4, high & 0xF, low >> 4, low & 0xF])
+    }
+
+    /// Whether a 0x57 report switches the motors on by itself, so that no 0x53 frame is needed.
+    pub fn realtime_arms_motors(&self) -> bool {
+        self.controller_firmware().is_some_and(|version| version >= SELF_ARMING_FIRMWARE)
     }
 
     pub fn name(&self) -> String {
@@ -455,8 +476,8 @@ impl Clock for RealClock {
     }
 }
 
-/// A 0x53 frame that waits for a free slot between 2 kHz blocks; built when it goes out, so it
-/// carries the route as it is then.
+/// A 0x53 frame that waits for its turn beside a block (stream sends one per block); built when
+/// it goes out, so it carries the route as it is then.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Deferred {
     /// the two frames of reassert()
@@ -576,8 +597,17 @@ impl<L: Link, C: Clock> Apex6<L, C> {
         Ok(())
     }
 
-    /// Send the motor route again; harmless when it is still in place.
+    /// Whether the controller's 0x57 reports switch its motors on (SELF_ARMING_FIRMWARE).
+    fn self_arming(&self) -> bool {
+        self.info.as_ref().is_some_and(DeviceInfo::realtime_arms_motors)
+    }
+
+    /// Send the motor route again; harmless when it is still in place. Nothing on a controller
+    /// whose 0x57 reports switch the motors on.
     pub fn reassert(&mut self) -> Result<(), PadError> {
+        if self.self_arming() {
+            return Ok(());
+        }
         for report in motor_enable_reports(self.trigger_mode, self.trigger_target, self.trigger_side) {
             self.write(&report)?;
         }
@@ -606,6 +636,9 @@ impl<L: Link, C: Clock> Apex6<L, C> {
         }
         let old = self.trigger_side;
         self.trigger_side = side;
+        if self.self_arming() {
+            return Ok(false); // the finger on the trigger picks the side there
+        }
         self.write(&trigger_side_report(side))?;
         for one in [Route::Left as u8, Route::Right as u8] {
             if plays_on(old, one) && !plays_on(side, one) {
@@ -672,10 +705,16 @@ impl<L: Link, C: Clock> Apex6<L, C> {
     /// Call render(first_sample_index) every period (8 ms) and send its block; None stops.
     /// Writes are scheduled on absolute deadlines so one late frame does not shift every later one.
     ///
-    /// A 2 kHz block (upsample off) lasts half a period, so the next is due 4 ms later. The link
-    /// takes one report per 2 ms slot, which leaves room for one more frame between two such
-    /// blocks: the route's reassert and the side a trigger change leaves go out one per block
-    /// then, instead of together, which would hold the next block back past its turn.
+    /// A 2 kHz block (upsample off) lasts half a period, so the next is due 4 ms later.
+    ///
+    /// One 0x53 frame at most goes out beside a block: the route's reassert and the side a
+    /// trigger change leaves wait their turn, one per block, instead of going out together.
+    /// Between 2 kHz blocks the link's 2 ms slots leave room for just one. At 1 kHz there was
+    /// room for more until controller firmware 9.0.7.6, which wired takes no report for about
+    /// 5.2 ms after one: the reassert's two frames together left 14-18 ms between blocks
+    /// (measured silent, 2026-11-10), one frame leaves 10-12 and the stream is back on time a
+    /// block later. So at 1 kHz the block after a frame goes alone, or the two would add up.
+    /// From that firmware on no 0x53 frame goes out at all (SELF_ARMING_FIRMWARE).
     pub fn stream<F>(&mut self, mut render: F, max_seconds: Option<f64>, period: f64) -> Result<StreamStats, PadError>
     where
         F: FnMut(usize) -> Option<Block>,
@@ -689,11 +728,11 @@ impl<L: Link, C: Clock> Apex6<L, C> {
         let start = self.clock.now();
         let mut deadline = start;
         let mut last_reassert = start;
+        let mut rest = false; // the last block had a 0x53 frame beside it, at 1 kHz
         let _priority = TimeCritical::raise();
         while max_seconds.is_none_or(|max| deadline - start < max) {
             let Some(block) = render(sample_index) else { break };
             let lasts = block.period(period);
-            let spread = !block.upsample;
             let now = self.clock.now();
             let lateness = (now - deadline) * 1000.0;
             stats.max_lateness_ms = crate::pymath::max(stats.max_lateness_ms, lateness);
@@ -701,10 +740,10 @@ impl<L: Link, C: Clock> Apex6<L, C> {
                 stats.late_frames += 1;
                 deadline = now; // resync instead of bursting to catch up
             }
-            let mut slots_used = 1;
-            if let Some(side) = block.side {
-                slots_used += self.change_trigger_side(side, spread)? as u32;
-            }
+            let side_changed = match block.side {
+                Some(side) => self.change_trigger_side(side, true)?,
+                None => false,
+            };
             self.write_block(&block)?;
             let write_ms = (self.clock.now() - now) * 1000.0;
             stats.total_write_ms += write_ms;
@@ -712,23 +751,14 @@ impl<L: Link, C: Clock> Apex6<L, C> {
             stats.frames += 1;
             silent_streak = if block.is_silent() { silent_streak + 1 } else { 0 };
             let every = if silent_streak > 0 { REASSERT_IDLE_S } else { REASSERT_ACTIVE_S };
-            if now - last_reassert >= every {
-                if spread {
-                    self.defer(Deferred::Side);
-                    self.defer(Deferred::Target);
-                } else {
-                    self.reassert()?;
-                }
+            if now - last_reassert >= every && !self.self_arming() {
+                self.defer(Deferred::Side);
+                self.defer(Deferred::Target);
                 last_reassert = now;
             }
-            if spread {
-                // the side frame already took this block's spare slot
-                if slots_used == 1 {
-                    self.send_deferred()?;
-                }
-            } else {
-                while self.send_deferred()? {}
-            }
+            // a side frame was this block's one
+            let framed = side_changed || (!rest && self.send_deferred()?);
+            rest = framed && block.upsample;
             sample_index += SUBFRAMES;
             deadline += lasts;
             let remaining = deadline - self.clock.now();
@@ -852,20 +882,27 @@ mod tests {
     }
 
     #[test]
-    fn between_2k_blocks_goes_one_route_frame_at_most() {
+    fn between_blocks_goes_one_route_frame_at_most() {
+        for upsample in [false, true] {
+            one_route_frame_between_blocks(upsample);
+        }
+    }
+
+    /// At 2 kHz (upsample off) and at 1 kHz alike.
+    fn one_route_frame_between_blocks(upsample: bool) {
         let mut pad = pad();
         let tone = |side| Block {
             trigger: [20.0; SUBFRAMES],
             route: Route::Both,
             side: Some(side),
-            upsample: false,
+            upsample,
             ..Block::default()
         };
-        // a side change each block for a while, then 2 s of silence (a reassert falls due)
+        // a side change each block for a while, then 2 s or more of silence (a reassert falls due)
         let blocks: Vec<Block> = [Route::Left, Route::Right, Route::Left, Route::Both, Route::Left]
             .into_iter()
             .map(tone)
-            .chain(std::iter::repeat_n(Block { upsample: false, ..Block::default() }, 500))
+            .chain(std::iter::repeat_n(Block { upsample, ..Block::default() }, 500))
             .collect();
         pad.stream(|first| blocks.get(first / SUBFRAMES).cloned(), None, FRAME_PERIOD).unwrap();
         let reports = pad.link().reports.clone();
@@ -876,16 +913,24 @@ mod tests {
         // one frame at most between two blocks: a deferred one, or the next block's own side
         let mut since_block = 0;
         let mut realtime = 0;
+        let mut frames_after = Vec::new(); // per block, the frames before the next
         for (i, r) in reports.iter().enumerate() {
             if route(r) {
                 since_block += 1;
                 assert!(since_block <= 1, "report {i}: {since_block} frames");
+                if let Some(last) = frames_after.last_mut() {
+                    *last += 1;
+                }
             } else {
                 since_block = 0;
                 realtime += 1;
+                frames_after.push(0);
             }
         }
         assert_eq!(realtime, blocks.len());
+        // at 1 kHz the block after a frame goes alone, once the side stops changing
+        let crowded = frames_after[5..].windows(2).filter(|pair| pair[0] + pair[1] > 1).count();
+        assert_eq!(crowded > 0, !upsample);
         // the sides left wait for a free slot, once each; the channel ended on Left, so Left's
         // own release had gone stale by then and only Right is let go
         let release = |one: Route| build_command(CMD_MOTOR_ROUTE, &[0x01, one as u8, 0x00]).to_vec();
@@ -919,6 +964,51 @@ mod tests {
         let reports = pad.link().reports.clone();
         assert_eq!(&reports[..3], &[silent_report().to_vec(), silent_report().to_vec(), silent_report().to_vec()]);
         assert_eq!(reports[3..].to_vec(), motor_disable().iter().map(|r| r.to_vec()).collect::<Vec<_>>());
+    }
+
+    fn info_with_firmware(high: u8, low: u8) -> DeviceInfo {
+        let mut raw = vec![0u8; 32];
+        raw[15] = high;
+        raw[16] = low;
+        DeviceInfo { device_type: 0x96, connection_mode: 0, features: 0x9F, raw }
+    }
+
+    #[test]
+    fn the_controller_firmware_says_whether_0x57_switches_the_motors_on() {
+        assert_eq!(info_with_firmware(0x90, 0x76).controller_firmware(), Some([9, 0, 7, 6]));
+        assert!(info_with_firmware(0x90, 0x76).realtime_arms_motors());
+        assert!(info_with_firmware(0x90, 0x80).realtime_arms_motors());
+        assert!(info_with_firmware(0x91, 0x00).realtime_arms_motors());
+        assert!(!info_with_firmware(0x90, 0x68).realtime_arms_motors());
+        assert!(!info_with_firmware(0x00, 0x00).realtime_arms_motors());
+        let mut short = info_with_firmware(0x90, 0x76);
+        short.raw.truncate(10);
+        assert_eq!(short.controller_firmware(), None);
+    }
+
+    #[test]
+    fn a_self_arming_controller_gets_no_route_frames() {
+        let mut pad = Apex6::with_link(FakeLink::default(), FakeClock::default());
+        pad.info = Some(info_with_firmware(0x90, 0x76));
+        let tone = |side| Block {
+            trigger: [20.0; SUBFRAMES],
+            route: Route::Both,
+            side: Some(side),
+            ..Block::default()
+        };
+        // side changes, then 4 s of silence, past the time a reassert would fall due
+        let blocks: Vec<Block> = [Route::Left, Route::Right, Route::Left, Route::Both]
+            .into_iter()
+            .map(tone)
+            .chain(std::iter::repeat_n(Block::default(), 500))
+            .collect();
+        pad.stream(|first| blocks.get(first / SUBFRAMES).cloned(), None, FRAME_PERIOD).unwrap();
+        let reports = &pad.link().reports;
+        assert!(reports.iter().all(|r| r[3] == CMD_REALTIME_MOTOR), "only 0x57 reports");
+        let wait = crate::pymath::round_int(ENABLE_DELAY / FRAME_PERIOD) as usize;
+        assert_eq!(reports.len(), wait + blocks.len());
+        assert!(reports[..wait].iter().all(|r| *r == silent_report().to_vec()));
+        pad.set_enabled(false);
     }
 
     #[test]

@@ -48,6 +48,16 @@ pub const FIRMWARE_OFFSETS: [(&str, usize); 7] =
 /// report for about 5.2 ms after each one and a side change clicks: they are not sent.
 pub const SELF_ARMING_FIRMWARE: [u8; 4] = [9, 0, 7, 6];
 
+/// A byte of the report after the 0x57 payload, which the pad does not read. The wireless link
+/// passes a report that is byte for byte the one before only about every 32 ms: silence sent
+/// every 8 ms reached the pad at 500 samples a second instead of 2000 and it held its last value
+/// three quarters of the time (the pad's own log, 2026-11-11, dongle 0.5.0.9), so a quiet
+/// stretch was thinned after all and the sound after it started on an empty buffer. Flipping
+/// this byte every report got all 2000 through with no gaps. Checked on controller firmware
+/// 9.0.7.6 only (the pad took the reports; wired takes identical ones anyway), so sent from
+/// SELF_ARMING_FIRMWARE on.
+pub const REPORT_TAG: usize = 31;
+
 pub const SAMPLE_RATE: u32 = 1000;
 pub const SUBFRAMES: usize = 8;
 pub const FRAME_PERIOD: f64 = SUBFRAMES as f64 / SAMPLE_RATE as f64; // 8 ms
@@ -501,6 +511,7 @@ pub struct Apex6<L: Link = HidLink, C: Clock = RealClock> {
     trigger_target: u8,
     trigger_side: u8,
     deferred: std::collections::VecDeque<Deferred>,
+    tag: u8, // REPORT_TAG of the last 0x57 report
 }
 
 impl Apex6<HidLink, RealClock> {
@@ -530,6 +541,7 @@ impl<L: Link, C: Clock> Apex6<L, C> {
             trigger_target: DEFAULT_TRIGGER_TARGET,
             trigger_side: DEFAULT_TRIGGER_SIDE as u8,
             deferred: Default::default(),
+            tag: 0,
         }
     }
 
@@ -589,9 +601,8 @@ impl<L: Link, C: Clock> Apex6<L, C> {
         self.reassert()?;
         self.enabled = true;
         // Silence every 8 ms through the wait, as stream() sends it.
-        let silent = silent_report();
         for _ in 0..crate::pymath::round_int(ENABLE_DELAY / FRAME_PERIOD) {
-            self.write(&silent)?;
+            self.write_realtime(silent_report())?;
             self.clock.sleep(FRAME_PERIOD);
         }
         Ok(())
@@ -678,9 +689,8 @@ impl<L: Link, C: Clock> Apex6<L, C> {
 
     pub fn disable(&mut self) -> Result<(), PadError> {
         self.deferred.clear();
-        let silent = silent_report();
         for _ in 0..3 {
-            self.write(&silent)?;
+            self.write_realtime(silent_report())?;
             self.clock.sleep(FRAME_PERIOD);
         }
         // a side or an experimental target is released by name too, then the usual frames
@@ -699,7 +709,17 @@ impl<L: Link, C: Clock> Apex6<L, C> {
     }
 
     pub fn write_block(&mut self, block: &Block) -> Result<(), PadError> {
-        self.write(&build_realtime(block, true, true))
+        self.write_realtime(build_realtime(block, true, true))
+    }
+
+    /// Write a 0x57 report, its REPORT_TAG flipped from the last one's where the pad takes it.
+    fn write_realtime(&mut self, mut report: Report) -> Result<(), PadError> {
+        if self.self_arming() {
+            self.tag ^= 1;
+            report[REPORT_TAG] = self.tag;
+            report[REPORT_SIZE - 1] = checksum(&report);
+        }
+        self.write(&report)
     }
 
     /// Call render(first_sample_index) every period (8 ms) and send its block; None stops.
@@ -1007,8 +1027,46 @@ mod tests {
         assert!(reports.iter().all(|r| r[3] == CMD_REALTIME_MOTOR), "only 0x57 reports");
         let wait = crate::pymath::round_int(ENABLE_DELAY / FRAME_PERIOD) as usize;
         assert_eq!(reports.len(), wait + blocks.len());
-        assert!(reports[..wait].iter().all(|r| *r == silent_report().to_vec()));
+        assert!(reports[..wait].iter().all(|r| untagged(r) == silent_report()));
         pad.set_enabled(false);
+    }
+
+    /// The report with its REPORT_TAG cleared, as build_realtime makes it.
+    fn untagged(report: &[u8]) -> Report {
+        let mut report: Report = report.try_into().unwrap();
+        report[REPORT_TAG] = 0;
+        report[REPORT_SIZE - 1] = checksum(&report);
+        report
+    }
+
+    #[test]
+    fn a_self_arming_controller_never_gets_the_same_report_twice() {
+        let mut pad = Apex6::with_link(FakeLink::default(), FakeClock::default());
+        pad.info = Some(info_with_firmware(0x90, 0x76));
+        let tone = Block { left_grip: [30.0; SUBFRAMES], ..Block::default() };
+        // silence on both sides of the same block twice: identical reports but for the tag
+        let blocks = [Block::default(), Block::default(), tone.clone(), tone, Block::default(), Block::default()];
+        pad.stream(|first| blocks.get(first / SUBFRAMES).cloned(), None, FRAME_PERIOD).unwrap();
+        pad.disable().unwrap();
+        let realtime: Vec<&Vec<u8>> = pad.link().reports.iter().filter(|r| r[3] == CMD_REALTIME_MOTOR).collect();
+        let wait = crate::pymath::round_int(ENABLE_DELAY / FRAME_PERIOD) as usize;
+        assert_eq!(realtime.len(), wait + blocks.len() + 3); // the wait, the blocks, the silence of disable()
+        for pair in realtime.windows(2) {
+            assert_ne!(pair[0], pair[1]);
+            assert_ne!(pair[0][REPORT_TAG], pair[1][REPORT_TAG]);
+        }
+        for (report, block) in realtime[wait..].iter().zip(&blocks) {
+            assert_eq!(untagged(report), build_realtime(block, true, true));
+            assert_eq!(report[REPORT_SIZE - 1], checksum(&(*report).as_slice().try_into().unwrap()));
+        }
+        // a controller from before keeps the reports as they always were
+        let mut older = Apex6::with_link(FakeLink::default(), FakeClock::default());
+        older.info = Some(info_with_firmware(0x90, 0x68));
+        older.set_enabled(true);
+        older.write_block(&Block::default()).unwrap();
+        older.write_block(&Block::default()).unwrap();
+        assert_eq!(older.link().reports, vec![silent_report().to_vec(); 2]);
+        older.set_enabled(false);
     }
 
     #[test]

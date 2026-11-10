@@ -21,9 +21,9 @@ use ats_haptics::i18n::{self, LANGUAGES};
 use ats_haptics::platform::{self, Icon, LaunchEvent};
 use ats_haptics::preview::{Player, Preview, ROAD_SURFACES, SURFACE_STEP_S};
 use ats_haptics::pymath::round_int;
-use ats_haptics::runner::Source;
+use ats_haptics::runner::{clock_hms, Source};
 use ats_haptics::scenarios;
-use ats_haptics::settings::{AppOptions, Settings};
+use ats_haptics::settings::{damaged_copy, AppOptions, Settings};
 use ats_haptics::t;
 use ats_haptics::telemetry::{format_g, SIMULATED_FPS};
 use ats_haptics::updater::{self, Release};
@@ -101,6 +101,8 @@ pub struct App {
     calibration: Option<Calibration>,
     plugins: Option<Plugins>,
     error: Option<String>,
+    /// shown as the status while nothing runs: config.json could not be read
+    notice: Option<String>,
     tested: bool,
     meter_values: [f64; 3],
     watcher: GameWatcher,
@@ -167,6 +169,7 @@ impl App {
             calibration: None,
             plugins: None,
             error: None,
+            notice: None,
             tested: false,
             meter_values: [0.0; 3],
             watcher: GameWatcher::new(),
@@ -192,8 +195,46 @@ impl App {
             a.me = me.clone();
             a.wire();
             a.build();
+            a.warn_damaged();
         }
         app
+    }
+
+    /// Say so when config.json could not be read: the window opened on defaults, which is
+    /// otherwise the only sign that the presets and the calibration in it were not taken.
+    fn warn_damaged(&mut self) {
+        if !self.settings.damaged() {
+            return;
+        }
+        let copy = damaged_copy(&self.settings.path);
+        let name = copy.file_name().unwrap_or_default().to_string_lossy().into_owned();
+        let line =
+            t!("설정 파일을 읽을 수 없어 기본값으로 시작했습니다. 저장하면 원래 파일은 {name}(으)로 남습니다.", name = name);
+        self.add_event(&line);
+        self.status = line.clone();
+        self.status_color = WARN;
+        self.notice = Some(line);
+        self.show_status();
+    }
+
+    /// A line of the window's own in the event list, stamped as the drive's are.
+    fn add_event(&mut self, line: &str) {
+        self.events.push_front(format!("{} {line}", clock_hms()));
+        self.show_events();
+    }
+
+    fn show_events(&mut self) {
+        self.events.truncate(EVENTS_SHOWN);
+        self.events_model.set_vec(self.events.iter().map(|e| SharedString::from(e.as_str())).collect::<Vec<_>>());
+    }
+
+    /// The 2 kHz output went back to 1 kHz on its own (rate2k::Pace): the switch follows, and
+    /// stays off for the next start, as if it had been switched off by hand.
+    fn output_2k_gave_way(&mut self) {
+        self.options.output_2k = false;
+        self.ui.set_output_2k(false);
+        self.player.set_output_2k(false);
+        self.stored(self.settings.save_app_options(&self.options));
     }
 
     /// Start polling, and look for a newer release in the background.
@@ -368,7 +409,7 @@ impl App {
             return;
         }
         self.options.language = code.to_string();
-        let _ = self.settings.save_app_options(&self.options);
+        let stored = self.settings.save_app_options(&self.options);
         crate::select_language(code);
         self.build();
         if let Some(calibration) = &mut self.calibration {
@@ -377,6 +418,7 @@ impl App {
         if let Some(plugins) = &mut self.plugins {
             plugins.render();
         }
+        self.stored(stored);
     }
 
     // -- controls -------------------------------------------------------------------
@@ -390,6 +432,16 @@ impl App {
         self.ui.set_dirty(dirty);
         self.ui.set_save_state(if dirty { t!("변경됨 · 저장 안 됨") } else { String::new() }.into());
         self.ui.set_save_state_color(rgb(WARN));
+    }
+
+    /// True when a write to config.json went through; a failed one (a full disk, a folder that
+    /// may not be written) is said beside 저장 instead of passing for saved.
+    fn stored(&self, result: std::io::Result<()>) -> bool {
+        if let Err(error) = &result {
+            self.ui.set_save_state(t!("저장하지 못했습니다: {error}", error = error).into());
+            self.ui.set_save_state_color(rgb(STOP));
+        }
+        result.is_ok()
     }
 
     fn slider_moved(&mut self, key: &str, value: f64) {
@@ -441,7 +493,7 @@ impl App {
     fn set_auto_start(&mut self, on: bool) {
         // an app option, not a tuning value: saved right away
         self.options.auto_start_on_game = on;
-        let _ = self.settings.save_app_options(&self.options);
+        self.stored(self.settings.save_app_options(&self.options));
         self.ui.set_auto_start(on);
         self.last_game = None; // a game that is already running counts as newly detected
     }
@@ -449,7 +501,7 @@ impl App {
     fn set_debug_log(&mut self, on: bool) {
         // saved right away, and a running drive starts or stops its log on the next block
         self.options.debug_log = on;
-        let _ = self.settings.save_app_options(&self.options);
+        self.stored(self.settings.save_app_options(&self.options));
         self.ui.set_debug_log(on);
         if let Some(worker) = &self.worker {
             worker.log_blocks.store(on, std::sync::atomic::Ordering::Relaxed);
@@ -459,7 +511,7 @@ impl App {
     fn set_output_2k(&mut self, on: bool) {
         // saved right away; a running drive switches at its next 8 ms block, a test at its next
         self.options.output_2k = on;
-        let _ = self.settings.save_app_options(&self.options);
+        self.stored(self.settings.save_app_options(&self.options));
         self.ui.set_output_2k(on);
         if let Some(worker) = &self.worker {
             worker.output_2k.store(on, std::sync::atomic::Ordering::Relaxed);
@@ -467,11 +519,16 @@ impl App {
         self.player.set_output_2k(on);
     }
 
-    fn save(&mut self) {
-        let _ = self.settings.save_gains(&self.gains);
+    /// Write the tuning to config.json, and into the preset in use. False when it could not be
+    /// written: the changes stay unsaved and the reason shows beside 저장.
+    fn save(&mut self) -> bool {
         let preset = self.active_preset();
-        if !preset.is_empty() {
-            let _ = self.settings.save_preset(&preset, &self.gains);
+        let mut result = self.settings.save_gains(&self.gains);
+        if result.is_ok() && !preset.is_empty() {
+            result = self.settings.save_preset(&preset, &self.gains);
+        }
+        if !self.stored(result) {
+            return false;
         }
         self.saved = self.gains.clone();
         self.changed();
@@ -479,6 +536,7 @@ impl App {
             if preset.is_empty() { t!("✓ 저장됨") } else { t!("✓ '{name}'에 저장됨", name = preset) }.into(),
         );
         self.ui.set_save_state_color(rgb(GO));
+        true
     }
 
     /// Set every slider, switch, route, cylinder count and gearbox to these gains; saving stays separate.
@@ -541,8 +599,8 @@ impl App {
         }
         let answer =
             platform::ask_yes_no_cancel(self.hwnd(), &t!("프리셋 전환"), &t!("저장하지 않은 변경이 있습니다. 바꾸기 전에 저장할까요?"));
-        if answer == Some(true) {
-            self.save();
+        if answer == Some(true) && !self.save() {
+            return false; // not written: stay on this tuning rather than lose the changes
         }
         answer.is_some()
     }
@@ -564,18 +622,20 @@ impl App {
     /// Make this preset the tuning in use, and the one the next start opens with.
     fn use_preset(&mut self, name: &str, gains: &Gains) {
         self.apply(gains);
-        self.set_active_preset(name);
-        let _ = self.settings.save_gains(&self.gains);
-        self.saved = self.gains.clone();
+        let stored = self.set_active_preset(name).and_then(|_| self.settings.save_gains(&self.gains));
+        self.saved = self.gains.clone(); // what the preset holds
         self.changed();
-        self.ui.set_save_state(t!("✓ '{name}'(으)로 바꿈", name = name).into());
-        self.ui.set_save_state_color(rgb(GO));
+        if self.stored(stored) {
+            self.ui.set_save_state(t!("✓ '{name}'(으)로 바꿈", name = name).into());
+            self.ui.set_save_state_color(rgb(GO));
+        }
     }
 
-    fn set_active_preset(&mut self, name: &str) {
+    fn set_active_preset(&mut self, name: &str) -> std::io::Result<()> {
         self.options.preset = name.to_string();
-        let _ = self.settings.save_app_options(&self.options);
+        let stored = self.settings.save_app_options(&self.options);
         self.build_presets();
+        stored
     }
 
     fn ask_preset_name(&mut self, prompt: Prompt) {
@@ -608,16 +668,22 @@ impl App {
         }
         match prompt {
             Prompt::New => {
-                let _ = self.settings.save_preset(&name, &self.gains);
-                self.set_active_preset(&name);
-                self.save(); // the startup tuning follows it
+                let stored = self.settings.save_preset(&name, &self.gains).and_then(|_| self.set_active_preset(&name));
+                if self.stored(stored) {
+                    self.save(); // the startup tuning follows it
+                }
             }
             Prompt::Rename(old) => {
                 let Some((_, gains)) = presets.into_iter().find(|(n, _)| *n == old) else { return };
-                let _ = self.settings.save_preset(&name, &gains);
-                let _ = self.settings.delete_preset(&old);
+                // the old name goes only once the new one is written
+                let stored = self.settings.save_preset(&name, &gains).and_then(|_| self.settings.delete_preset(&old));
+                if !self.stored(stored) {
+                    self.build_presets();
+                    return;
+                }
                 if self.options.preset == old {
-                    self.set_active_preset(&name);
+                    let stored = self.set_active_preset(&name);
+                    self.stored(stored);
                 } else if self.options.preset == name {
                     // it replaced the preset in use: the window takes what that holds now
                     self.use_preset(&name, &gains);
@@ -633,9 +699,12 @@ impl App {
         if !platform::ask_yes_no(self.hwnd(), &t!("삭제"), &question) {
             return;
         }
-        let _ = self.settings.delete_preset(name);
+        if !self.stored(self.settings.delete_preset(name)) {
+            return;
+        }
         if self.options.preset == name {
-            self.set_active_preset("");
+            let stored = self.set_active_preset("");
+            self.stored(stored);
         } else {
             self.build_presets();
         }
@@ -812,7 +881,13 @@ impl App {
         if self.gains != self.saved {
             match platform::ask_yes_no_cancel(self.hwnd(), &t!("저장"), &t!("바뀐 설정을 저장할까요?")) {
                 None => return,
-                Some(true) => self.save(),
+                Some(true) => {
+                    if !self.save() {
+                        // closing now would lose the changes without a word
+                        platform::show(self.hwnd(), &t!("저장"), &self.ui.get_save_state(), Icon::Error);
+                        return;
+                    }
+                }
                 Some(false) => {}
             }
         }
@@ -950,10 +1025,20 @@ impl App {
             for line in &status.events {
                 self.events.push_front(line.clone());
             }
-            self.events.truncate(EVENTS_SHOWN);
             if !status.events.is_empty() {
-                self.events_model.set_vec(self.events.iter().map(|e| SharedString::from(e.as_str())).collect::<Vec<_>>());
+                self.show_events();
             }
+        }
+        // only the output switches it off by itself: the drive says why in its events
+        let gave_way = self.worker.as_ref().is_some_and(|w| !w.output_2k.load(std::sync::atomic::Ordering::Relaxed));
+        if self.options.output_2k && gave_way {
+            self.output_2k_gave_way();
+        }
+        if let Some(share) = self.player.take_gave_way() {
+            let [what, why] = ats_haptics::rate2k::gave_way_lines(share);
+            self.add_event(&why);
+            self.add_event(&what);
+            self.output_2k_gave_way();
         }
         if running {
             let status = status.unwrap_or_default();
@@ -989,6 +1074,10 @@ impl App {
             } else if let Some(error) = &self.error {
                 self.status = t!("오류: {error}", error = error);
                 self.status_color = STOP;
+            } else if let Some(notice) = &self.notice {
+                self.status = notice.clone();
+                self.status_color = WARN;
+                self.tested = false;
             } else {
                 if self.had_worker || self.tested {
                     self.status = t!("정지됨");

@@ -43,6 +43,8 @@ struct Progress {
     finished: Vec<String>,
     curves: BTreeMap<String, BTreeMap<String, f64>>,
     error: String,
+    /// why a finished motor's curve could not be written to config.json
+    save_error: Option<String>,
 }
 
 impl Default for Progress {
@@ -56,6 +58,7 @@ impl Default for Progress {
             finished: Vec::new(),
             curves: BTreeMap::new(),
             error: String::new(),
+            save_error: None,
         }
     }
 }
@@ -277,6 +280,9 @@ impl Calibration {
     fn render_end(inner: &Inner, progress: &Progress) {
         let text = if progress.phase == Phase::Error {
             t!("보정하지 못했습니다: {error}", error = progress.error)
+        } else if let Some(error) = &progress.save_error {
+            // measured, but not kept: the curves below are all there is of it
+            t!("저장하지 못했습니다: {error}", error = error)
         } else if !progress.finished.is_empty() {
             let names: Vec<String> = progress.finished.iter().map(|c| name(c)).collect();
             t!("보정을 저장했습니다: {channels}. 다음 시작부터 적용됩니다.", channels = names.join(", "))
@@ -382,7 +388,9 @@ impl Calibration {
     fn reset(&self) {
         let hwnd = crate::hwnd(self.0.borrow().dialog.window());
         if platform::ask_yes_no(hwnd, &t!("모터 보정"), &t!("저장된 보정을 지우고 기본값으로 되돌릴까요?")) {
-            let _ = Settings::default().save_eq(&serde_json::Map::new());
+            if let Err(error) = Settings::default().save_eq(&serde_json::Map::new()) {
+                platform::show(hwnd, &t!("모터 보정"), &t!("저장하지 못했습니다: {error}", error = error), platform::Icon::Error);
+            }
             self.0.borrow_mut().shown.clear(); // redraw "지금 보정"
         }
     }
@@ -429,7 +437,9 @@ fn work(mut session: Session, answers: mpsc::Receiver<Answer>, progress: Arc<Mut
                 break;
             }
             if session.answer(answer).is_some() {
-                let _ = calibrate::save(&session, &settings);
+                // each motor is kept as it is finished; the next one's save tries again
+                let saved = calibrate::save(&session, &settings);
+                progress.lock().unwrap().save_error = saved.err().map(|error| error.to_string());
             }
         }
         report(&session, Phase::Done, &progress);

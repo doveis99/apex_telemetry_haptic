@@ -16,7 +16,7 @@ use crate::effects::{Equalizer, Gains, Synth, FLOAT_FIELDS};
 use crate::gamewatch::GameWatcher;
 use crate::preview::Preview;
 use crate::pymath as m;
-use crate::rate2k::Output2k;
+use crate::rate2k::{gave_way_lines, Output2k, Pace};
 use crate::replay::LogTelemetry;
 use crate::scenarios::{Scenario, ScenarioTelemetry};
 use crate::t;
@@ -83,9 +83,11 @@ pub struct Runner {
     /// an effect test playing in place of the drive
     pub preview: Option<Preview>,
     /// may be flipped from any thread: from the next 8 ms block on, the output goes out at
-    /// 2 kHz (src/rate2k.rs), a report every 4 ms
+    /// 2 kHz (src/rate2k.rs), a report every 4 ms. The output clears it itself when the link
+    /// does not take the reports that fast (watch_pace).
     pub output_2k: Arc<AtomicBool>,
     rate2k: Option<Output2k>,
+    pace: Pace,
 }
 
 impl Runner {
@@ -131,6 +133,7 @@ impl Runner {
             preview: None,
             output_2k: Arc::new(AtomicBool::new(false)),
             rate2k: None,
+            pace: Pace::default(),
         }
     }
 
@@ -245,6 +248,7 @@ impl Runner {
         self.game_ended = false;
         self.synth = Synth::new(self.gains.clone(), self.eq.clone()); // fresh edge detectors: no stale events
         self.rate2k = None;
+        self.pace = Pace::default();
         self.last_render_time = None;
         // Map the plugin afresh: the next game may write another plugin's mapping.
         self.source.close();
@@ -298,6 +302,7 @@ impl Runner {
     /// The next block to send: a new 8 ms one, or at 2 kHz each one's two halves in turn.
     pub fn render(&mut self) -> Option<Block> {
         if let Some(second) = self.rate2k.as_mut().and_then(Output2k::pending) {
+            self.watch_pace();
             return Some(second);
         }
         // the rate changes between two 8 ms blocks, never inside one
@@ -310,10 +315,30 @@ impl Runner {
             preview.set_events_2k(two_k);
         }
         let block = self.render_block()?;
+        if self.rate2k.is_some() {
+            self.watch_pace();
+        } else {
+            self.pace = Pace::default();
+        }
         Some(match &mut self.rate2k {
             Some(output) => output.first(&block),
             None => block,
         })
+    }
+
+    /// A 2 kHz report is about to go out. When the link has shown that it does not take one
+    /// every 4 ms, the output goes back to 1 kHz from the next 8 ms block, where it plays whole,
+    /// and says so; whoever shows the switch finds output_2k cleared.
+    fn watch_pace(&mut self) {
+        if let Some(share) = self.pace.report_now() {
+            self.output_2k.store(false, Ordering::Relaxed);
+            let [what, why] = gave_way_lines(share);
+            self.log_notes.push(format!("{what}: {why}"));
+            // the newest event is listed first: the reason goes in under what happened
+            let stamp = clock_hms();
+            self.push_event(format!("{stamp} {why}"));
+            self.push_event(format!("{stamp} {what}"));
+        }
     }
 
     fn render_block(&mut self) -> Option<Block> {
@@ -449,4 +474,55 @@ pub fn run(runner: &mut Runner, dry_run: bool, mut on_connected: impl FnMut(Conn
         runner.set_state(t!("게임 종료됨, 컨트롤러 해제"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::apex6::{Link, RealClock};
+
+    /// A link that holds every write, as the wired pad did on 2026-11-08 (rate2k::Pace).
+    struct SlowLink(Duration);
+
+    impl Link for SlowLink {
+        fn write(&mut self, report: &[u8]) -> Result<usize, String> {
+            std::thread::sleep(self.0);
+            Ok(report.len())
+        }
+
+        fn read(&mut self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize, String> {
+            Ok(0)
+        }
+    }
+
+    #[test]
+    fn a_link_that_holds_each_write_sends_the_drive_back_to_1_khz() {
+        let mut runner = Runner::new(&Gains::default(), Equalizer::default(), Source::Simulated(Some(60.0)), None, false);
+        runner.output_2k.store(true, Ordering::Relaxed);
+        let mut pad = Apex6::with_link(SlowLink(Duration::from_micros(5100)), RealClock::default());
+        pad.set_enabled(true);
+        // on the real clock: 2.5 s of the stream as the app runs it, each write taking 5.1 ms
+        let mut rates = Vec::new();
+        let stats = pad
+            .stream(
+                |_| {
+                    let block = runner.render().filter(|_| rates.len() < 420)?;
+                    rates.push(block.upsample);
+                    Some(block)
+                },
+                None,
+                FRAME_PERIOD,
+            )
+            .unwrap();
+        pad.set_enabled(false);
+        assert!(!rates[0], "it starts at 2 kHz");
+        assert!(!runner.output_2k.load(Ordering::Relaxed), "the switch is cleared for whoever shows it");
+        let back = rates.iter().position(|upsample| *upsample).expect("back at 1 kHz");
+        assert!(rates[back..].iter().all(|upsample| *upsample), "and stays there");
+        assert!(stats.late_frames > 20, "{}", stats.summary());
+        // what happened and why, a line each (rate2k::gave_way_lines)
+        for part in ["1 kHz", "4 ms"] {
+            assert_eq!(runner.events.iter().filter(|line| line.contains(part)).count(), 1, "{part}: {:?}", runner.events);
+        }
+    }
 }

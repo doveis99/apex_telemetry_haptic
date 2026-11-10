@@ -401,4 +401,10 @@ MESSAGES = {
     '켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다.':
         'Wenn an, bekommt der Controller alle 4 ms 2-kHz-Samples statt 1 kHz. Die Vibration behält ihre Stärke, das Summen bei 500–1000 Hz, das das Pad bei 1-kHz-Samples mit erzeugte, wird herausgefiltert, und Klicks (Ticks) kommen schärfer. Schalten Sie es aus, wenn kabellos die Aussetzer häufiger werden. Wirkt sofort, auch während der Fahrt oder eines Tests, sofort gespeichert.',
     '2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄': '2-kHz-Ausgabe: sende alle 4 ms 2-kHz-Samples',
+    "저장하지 못했습니다: {error}":
+        "Speichern fehlgeschlagen: {error}",
+    "설정 파일을 읽을 수 없어 기본값으로 시작했습니다. 저장하면 원래 파일은 {name}(으)로 남습니다.":
+        "Die Einstellungsdatei konnte nicht gelesen werden; es wurde mit den Standardwerten gestartet. Beim Speichern bleibt die ursprüngliche Datei als {name} erhalten.",
+    "2 kHz 출력을 끄고 1 kHz로 돌아감": "2-kHz-Ausgabe aus, zurück zu 1 kHz",
+    "4 ms마다 리포트를 못 받음 (보낸 것 {percent})": "Kein Report alle 4 ms angenommen ({percent} gesendet)",
 }

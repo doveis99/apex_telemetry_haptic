@@ -34,18 +34,56 @@ pub struct AppOptions {
     pub output_2k: bool,
 }
 
-fn read(path: &Path) -> Map<String, Value> {
-    // missing, unreadable, not UTF-8 or not JSON: start from defaults
-    let Ok(text) = std::fs::read_to_string(path) else { return Map::new() };
-    match serde_json::from_str::<Value>(text.trim_start_matches('\u{feff}')) {
-        Ok(Value::Object(map)) => map,
-        _ => Map::new(),
+/// What is at the config's path.
+enum Stored {
+    /// no file, or an empty one
+    Missing,
+    Settings(Map<String, Value>),
+    /// a file that is not settings: unreadable, not UTF-8, not JSON or not a JSON object (a
+    /// hand edit with a comma too many, a file cut short)
+    Damaged,
+}
+
+fn load(path: &Path) -> Stored {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Stored::Missing,
+        Err(_) => return Stored::Damaged,
+    };
+    let text = text.trim_start_matches('\u{feff}');
+    if text.trim().is_empty() {
+        return Stored::Missing;
     }
+    match serde_json::from_str::<Value>(text) {
+        Ok(Value::Object(map)) => Stored::Settings(map),
+        _ => Stored::Damaged,
+    }
+}
+
+fn read(path: &Path) -> Map<String, Value> {
+    // missing or damaged: start from defaults
+    match load(path) {
+        Stored::Settings(map) => map,
+        Stored::Missing | Stored::Damaged => Map::new(),
+    }
+}
+
+/// Where a config that could not be read is kept when a save replaces it.
+pub fn damaged_copy(path: &Path) -> PathBuf {
+    let mut copy = path.as_os_str().to_owned();
+    copy.push(".bad");
+    PathBuf::from(copy)
 }
 
 fn write(path: &Path, data: &Map<String, Value>) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
+    }
+    if matches!(load(path), Stored::Damaged) {
+        // Every save starts from what read() gave, which was nothing: this one would leave only
+        // its own part and drop the presets and the motor calibration. Keep the file as it is
+        // first, and do not replace it if it cannot be kept.
+        std::fs::copy(path, damaged_copy(path))?;
     }
     // Write beside it and swap in, so a crash mid-write never leaves a truncated file.
     let mut temp = path.as_os_str().to_owned();
@@ -166,6 +204,12 @@ impl Default for Settings {
 impl Settings {
     pub fn at(path: impl Into<PathBuf>) -> Settings {
         Settings { path: path.into() }
+    }
+
+    /// The file is there but cannot be read as settings, so everything loads as its default.
+    /// The next save keeps it as damaged_copy() before writing over it.
+    pub fn damaged(&self) -> bool {
+        matches!(load(&self.path), Stored::Damaged)
     }
 
     pub fn load_gains(&self) -> Gains {
@@ -315,6 +359,37 @@ mod tests {
         settings.delete_preset("car").unwrap();
         assert!(settings.load_presets().is_empty());
         assert_eq!(settings.load_gains().road, 0.33);
+    }
+
+    #[test]
+    fn a_damaged_file_is_kept_when_a_save_replaces_it() {
+        let path = temp_config("damaged");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        // a hand edit that left a comma too many: the presets and the calibration are still in it
+        let broken = r#"{"road": 0.25, "presets": {"car": {"road": 0.1}}, "eq": {"grip": {"65": 1.0}},}"#;
+        std::fs::write(&path, broken).unwrap();
+        let settings = Settings::at(&path);
+        assert!(settings.damaged());
+        assert_eq!(settings.load_gains(), Gains::default());
+        assert!(!damaged_copy(&path).exists(), "only a save moves it aside");
+        settings.save_app_options(&AppOptions { debug_log: true, ..AppOptions::default() }).unwrap();
+        assert_eq!(std::fs::read_to_string(damaged_copy(&path)).unwrap(), broken);
+        assert!(!settings.damaged());
+        assert!(settings.load_app_options().debug_log);
+        // the saves after it leave the copy alone
+        settings.save_gains(&Gains::default()).unwrap();
+        assert_eq!(std::fs::read_to_string(damaged_copy(&path)).unwrap(), broken);
+    }
+
+    #[test]
+    fn an_empty_file_is_not_damage() {
+        let path = temp_config("empty");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "\u{feff}  \r\n").unwrap();
+        let settings = Settings::at(&path);
+        assert!(!settings.damaged());
+        settings.save_gains(&Gains::default()).unwrap();
+        assert!(!damaged_copy(&path).exists());
     }
 
     #[test]

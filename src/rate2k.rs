@@ -173,6 +173,87 @@ impl Output2k {
     }
 }
 
+/// A 2 kHz report lasts this long: the pad needs one every 4 ms.
+const REPORT_S: f64 = crate::apex6::FRAME_PERIOD / 2.0;
+const PACE_WINDOW_S: f64 = 0.5;
+/// a gap this long is the stream stopping or stalling, not the link running slow
+const PACE_STALL_S: f64 = 0.05;
+const PACE_SHARE: f64 = 0.95;
+const PACE_WINDOWS: u32 = 3;
+
+/// Tells when the link does not take a report every 4 ms, so the 2 kHz output can give way to
+/// the 1 kHz one instead of playing with gaps.
+///
+/// A link may hold every write a little longer than that: wired, each took 5.1 ms on
+/// 2026-11-08 (docs/xhaptics-engine-notes.md section 17; the same cable had taken them in
+/// 1.3 ms that morning, the dongle did all along). The stream then falls behind, drops what
+/// it cannot catch up (Apex6::stream's late frames, 23% there) and the pad runs out of
+/// samples many times a second, all the time. It shows as fewer reports going out than the
+/// time needed: about 200 a second there where 250 were due, against all of them on a link
+/// that keeps up, whose reports leave on absolute deadlines however each one's own start wavers.
+///
+/// Counted over windows of PACE_WINDOW_S; PACE_WINDOWS short ones running give the verdict.
+/// A window the stream stopped in is left out, and the ones either side of it still count
+/// together, so effect tests of a second or two add up across tests.
+#[derive(Clone, Debug, Default)]
+pub struct Pace {
+    /// when the window began and the last report went, s
+    window: Option<(f64, f64)>,
+    reports: u32,
+    short: u32,
+}
+
+impl Pace {
+    /// A 2 kHz report goes out at `now` (s on any steady clock). Some(share of the reports the
+    /// pad needed that went out) once the link has shown it does not keep up; the count then
+    /// starts over.
+    pub fn report(&mut self, now: f64) -> Option<f64> {
+        let Some((start, last)) = self.window else {
+            self.window = Some((now, now));
+            self.reports = 0;
+            return None;
+        };
+        if now - last > PACE_STALL_S || now < last {
+            self.window = Some((now, now));
+            self.reports = 0;
+            return None;
+        }
+        self.reports += 1;
+        self.window = Some((start, now));
+        if now - start < PACE_WINDOW_S {
+            return None;
+        }
+        let share = self.reports as f64 * REPORT_S / (now - start);
+        self.window = Some((now, now));
+        self.reports = 0;
+        if share >= PACE_SHARE {
+            self.short = 0;
+            return None;
+        }
+        self.short += 1;
+        if self.short < PACE_WINDOWS {
+            return None;
+        }
+        self.short = 0;
+        Some(share)
+    }
+
+    /// report() on the process's own clock.
+    pub fn report_now(&mut self) -> Option<f64> {
+        static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        self.report(START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64())
+    }
+}
+
+/// The event lines for a 2 kHz output that gave way: what happened, then why, with the share
+/// Pace found. Two short ones, as the window's event list cuts a long line off.
+pub fn gave_way_lines(share: f64) -> [String; 2] {
+    [
+        crate::t!("2 kHz 출력을 끄고 1 kHz로 돌아감"),
+        crate::t!("4 ms마다 리포트를 못 받음 (보낸 것 {percent})", percent = format!("{:.0}%", share * 100.0)),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -468,5 +549,68 @@ mod tests {
         let ringing: Vec<&Block> = halves[20..].iter().take_while(|h| !h.is_silent()).collect();
         assert!(ringing.len() <= 8, "{} halves", ringing.len());
         assert!(ringing.iter().skip(4).flat_map(|h| h.left_grip).all(|x| x.abs() < 0.5));
+    }
+
+    /// Reports `every` s apart from `from` for `seconds`; the verdicts and when the last went.
+    fn paced(pace: &mut Pace, from: f64, every: f64, seconds: f64) -> (Vec<f64>, f64) {
+        let mut verdicts = Vec::new();
+        let mut now = from;
+        while now - from < seconds {
+            verdicts.extend(pace.report(now));
+            now += every;
+        }
+        (verdicts, now - every)
+    }
+
+    #[test]
+    fn a_link_that_keeps_up_never_gives_way() {
+        let mut pace = Pace::default();
+        assert!(paced(&mut pace, 3.0, REPORT_S, 60.0).0.is_empty());
+        // each report up to 2 ms late or early of its deadline, the deadlines themselves kept
+        let mut pace = Pace::default();
+        let mut rng = PyRandom::new(9);
+        for n in 0..15_000 {
+            let now = n as f64 * REPORT_S + rng.uniform(0.0, 0.002);
+            assert_eq!(pace.report(now), None, "report {n}");
+        }
+    }
+
+    #[test]
+    fn a_link_that_holds_each_write_gives_way_within_two_seconds() {
+        // 5.1 ms a write, as the wired pad took them on 2026-11-08
+        let mut pace = Pace::default();
+        let (verdicts, _) = paced(&mut pace, 0.0, 0.0051, 1.6);
+        assert_eq!(verdicts.len(), 1, "{verdicts:?}");
+        assert!((verdicts[0] - 4.0 / 5.1).abs() < 0.01, "{verdicts:?}");
+        // 4.5 ms: 11% short, still not kept up with
+        assert_eq!(paced(&mut Pace::default(), 0.0, 0.0045, 1.6).0.len(), 1);
+    }
+
+    #[test]
+    fn short_tests_add_up_and_a_stall_is_not_a_slow_link() {
+        // effect tests of 0.7 s each on a slow link, the controller let go between them
+        let mut pace = Pace::default();
+        let mut verdicts = Vec::new();
+        let mut from = 0.0;
+        for _ in 0..3 {
+            let (found, last) = paced(&mut pace, from, 0.0051, 0.7);
+            verdicts.extend(found);
+            from = last + 2.0;
+        }
+        assert_eq!(verdicts.len(), 1, "one short window a test, three tests");
+        // a good link that stalls for 300 ms now and then (the PC, not the pad)
+        let mut pace = Pace::default();
+        let mut from = 0.0;
+        for _ in 0..20 {
+            let (found, last) = paced(&mut pace, from, REPORT_S, 0.8);
+            assert!(found.is_empty());
+            from = last + 0.3;
+        }
+        // and one good window between slow ones starts the count again
+        let mut pace = Pace::default();
+        let (a, last) = paced(&mut pace, 0.0, 0.0051, 1.1);
+        let (b, last) = paced(&mut pace, last + REPORT_S, REPORT_S, 0.6);
+        let (c, _) = paced(&mut pace, last + 0.0051, 0.0051, 1.1);
+        assert!(a.is_empty() && b.is_empty() && c.is_empty(), "{a:?} {b:?} {c:?}");
     }
 }

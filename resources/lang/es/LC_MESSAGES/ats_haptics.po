@@ -15,6 +15,12 @@ msgstr "Salida a 2 kHz"
 msgid "2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄"
 msgstr "Salida a 2 kHz: enviando muestras de 2 kHz cada 4 ms"
 
+msgid "2 kHz 출력을 끄고 1 kHz로 돌아감"
+msgstr "Salida a 2 kHz apagada, vuelta a 1 kHz"
+
+msgid "4 ms마다 리포트를 못 받음 (보낸 것 {percent})"
+msgstr "No aceptó un informe cada 4 ms ({percent} enviados)"
+
 msgid "AMT·수동"
 msgstr "AMT / manual"
 
@@ -360,6 +366,9 @@ msgstr "Nuevo preajuste"
 msgid "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다. 트럭이 평소에 많이 흔들리면 기준이 저절로 그만큼 올라갑니다."
 msgstr "Salta un pulso de bache cuando la suspensión se mueve de golpe más rápido que esto. Bájalo para notar baches pequeños; súbelo para notar solo golpes fuertes. Si el camión va muy movido, el umbral sube solo por encima de este valor."
 
+msgid "설정 파일을 읽을 수 없어 기본값으로 시작했습니다. 저장하면 원래 파일은 {name}(으)로 남습니다."
+msgstr "No se pudo leer el archivo de ajustes; se ha iniciado con los valores predeterminados. Al guardar, el archivo original se conserva como {name}."
+
 msgid "설치"
 msgstr "Instalar"
 
@@ -536,6 +545,9 @@ msgstr "¿Borrar la calibración guardada y volver a la predeterminada?"
 
 msgid "저장된 보정을 지워 기본값으로 되돌립니다."
 msgstr "Borra la calibración guardada y vuelve a la predeterminada."
+
+msgid "저장하지 못했습니다: {error}"
+msgstr "No se pudo guardar: {error}"
 
 msgid "저장하지 않은 변경이 있습니다. 바꾸기 전에 저장할까요?"
 msgstr "Hay cambios sin guardar. ¿Guardarlos antes de cambiar?"

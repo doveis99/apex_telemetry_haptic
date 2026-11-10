@@ -15,6 +15,12 @@ msgstr "2 kHz output"
 msgid "2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄"
 msgstr "2 kHz output: sending 2 kHz samples every 4 ms"
 
+msgid "2 kHz 출력을 끄고 1 kHz로 돌아감"
+msgstr "2 kHz output off, back to 1 kHz"
+
+msgid "4 ms마다 리포트를 못 받음 (보낸 것 {percent})"
+msgstr "A report every 4 ms was not taken ({percent} sent)"
+
 msgid "AMT·수동"
 msgstr "AMT / manual"
 
@@ -360,6 +366,9 @@ msgstr "New preset"
 msgid "서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다. 트럭이 평소에 많이 흔들리면 기준이 저절로 그만큼 올라갑니다."
 msgstr "A bump pulse fires when the suspension suddenly moves faster than this. Lower it to feel small bumps, raise it to feel only big hits. If the truck rides rough, the threshold rises above this by itself."
 
+msgid "설정 파일을 읽을 수 없어 기본값으로 시작했습니다. 저장하면 원래 파일은 {name}(으)로 남습니다."
+msgstr "The settings file could not be read, so this started from the defaults. When you save, the original file is kept as {name}."
+
 msgid "설치"
 msgstr "Install"
 
@@ -536,6 +545,9 @@ msgstr "Clear your saved calibration and go back to the default?"
 
 msgid "저장된 보정을 지워 기본값으로 되돌립니다."
 msgstr "Clears your saved calibration and goes back to the default."
+
+msgid "저장하지 못했습니다: {error}"
+msgstr "Could not save: {error}"
 
 msgid "저장하지 않은 변경이 있습니다. 바꾸기 전에 저장할까요?"
 msgstr "There are unsaved changes. Save them before switching?"

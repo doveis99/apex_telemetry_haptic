@@ -402,4 +402,10 @@ MESSAGES = {
     '켜면 1 kHz 대신 2 kHz 샘플을 4ms마다 컨트롤러로 보냅니다. 진동 세기는 그대로 두고, 1 kHz로 보낼 때 패드가 같이 내던 500~1000 Hz 잔음을 걸러 내며, 딸깍(틱)은 더 날카롭게 냅니다. 무선에서 끊김이 잦아지면 끄세요. 주행이나 테스트 중에도 바로 바뀌고 바로 저장됩니다.':
         'Activée, la manette reçoit des échantillons à 2 kHz toutes les 4 ms au lieu de 1 kHz. La vibration garde sa force, le bourdonnement de 500 à 1000 Hz que la manette produisait avec les échantillons à 1 kHz est filtré et les clics (ticks) sont plus nets. Désactivez-la si les coupures en sans-fil deviennent plus fréquentes. Pris en compte aussitôt, même en roulant ou pendant un test, enregistré aussitôt.',
     '2 kHz 출력: 4 ms마다 2 kHz 샘플을 보냄': 'Sortie 2 kHz : échantillons à 2 kHz envoyés toutes les 4 ms',
+    "저장하지 못했습니다: {error}":
+        "Échec de l'enregistrement : {error}",
+    "설정 파일을 읽을 수 없어 기본값으로 시작했습니다. 저장하면 원래 파일은 {name}(으)로 남습니다.":
+        "Le fichier de réglages est illisible ; démarrage avec les valeurs par défaut. À l'enregistrement, le fichier d'origine est conservé sous le nom {name}.",
+    "2 kHz 출력을 끄고 1 kHz로 돌아감": "Sortie 2 kHz coupée, retour à 1 kHz",
+    "4 ms마다 리포트를 못 받음 (보낸 것 {percent})": "Rapport toutes les 4 ms non accepté ({percent} envoyés)",
 }

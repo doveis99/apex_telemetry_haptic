@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use crate::apex6::{Apex6, Block, PadError, FRAME_PERIOD, MAX_SAMPLE, SAMPLE_RATE, SUBFRAMES};
 use crate::effects::{surface_of, Effect, Equalizer, Gains, Synth, DT, TAU, TOGGLEABLE};
 use crate::pymath as m;
-use crate::rate2k::Output2k;
+use crate::rate2k::{Output2k, Pace};
 use crate::telemetry::{Frame, Wheel};
 
 pub const FADE_S: f64 = 0.1;
@@ -357,6 +357,20 @@ struct PlayerState {
     /// play at 2 kHz (src/rate2k.rs); taken up at the next 8 ms block
     output_2k: bool,
     rate2k: Option<Output2k>,
+    /// whether the link takes the 2 kHz reports as fast as they are due, over the tests played
+    pace: Pace,
+    /// the 2 kHz output went back to 1 kHz by itself: the share of its reports that went out
+    gave_way: Option<f64>,
+}
+
+impl PlayerState {
+    /// A 2 kHz report is about to go out (Runner::watch_pace).
+    fn watch_pace(&mut self) {
+        if let Some(share) = self.pace.report_now() {
+            self.output_2k = false;
+            self.gave_way = Some(share);
+        }
+    }
 }
 
 /// Plays previews while the output is stopped, holding the controller only while one plays.
@@ -384,6 +398,12 @@ impl Player {
 
     pub fn take_peaks(&self) -> [f64; 3] {
         std::mem::take(&mut self.state.lock().unwrap().peaks)
+    }
+
+    /// Some(share of the 2 kHz reports that went out), once, after a test went back to 1 kHz
+    /// because the link did not take them every 4 ms (rate2k::Pace).
+    pub fn take_gave_way(&self) -> Option<f64> {
+        self.state.lock().unwrap().gave_way.take()
     }
 
     /// Play `preview`, at 2 kHz with `output_2k`.
@@ -423,6 +443,7 @@ impl Player {
     fn next_block(state: &Mutex<PlayerState>) -> Option<Block> {
         let mut state = state.lock().unwrap();
         if let Some(second) = state.rate2k.as_mut().and_then(Output2k::pending) {
+            state.watch_pace();
             return Some(second);
         }
         if let Some(pending) = state.pending.take() {
@@ -446,6 +467,9 @@ impl Player {
                 (true, Some(_)) => Some(Output2k::new()),
                 _ => None,
             };
+        }
+        if state.rate2k.is_some() {
+            state.watch_pace();
         }
         Some(match &mut state.rate2k {
             Some(output) => output.first(&block),

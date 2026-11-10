@@ -1418,6 +1418,8 @@ pub struct Burst {
     carrier: Carrier,
     /// sounded yet (the Synth makes up at 2 kHz for the line the pad drew up to its first sample)
     begun: bool,
+    /// played as it is on every output, the motor eq left out (a ring above 500 Hz)
+    flat: bool,
 }
 
 impl Burst {
@@ -1433,6 +1435,7 @@ impl Burst {
             phase: 0.0,
             carrier: Carrier::Sine,
             begun: false,
+            flat: false,
         }
     }
 
@@ -1471,6 +1474,11 @@ impl Burst {
 
     fn no_duck(mut self) -> Burst {
         self.ducks = false;
+        self
+    }
+
+    fn flat(mut self) -> Burst {
+        self.flat = true;
         self
     }
 
@@ -1882,18 +1890,20 @@ impl Synth {
     /// At 2 kHz, the ring above 500 Hz that follows a tick of `tick` (its 1 kHz height), on `side`.
     /// Its energy in 500-1000 Hz is ring.db over the tick's: the tick is one 2 kHz sample twice
     /// as high, so half its 4 tick^2 lies there; the ring's is amplitude^2 decay 2000 / 4. It is
-    /// drawn as flat as the tick, the motor eq taken back out at its pitch.
+    /// drawn as flat as the tick, the motor eq left out (Burst::flat) on the grips and the trigger
+    /// alike: divided out by the grips' eq only, a ring routed to the trigger came out as much
+    /// stronger as the trigger's eq is the higher up there (1.6 times with the default curves).
     fn ring(&mut self, effect: Effect, side: Side, tick: f64, delay: f64, ring: Ring) {
         if !self.events_2k || tick == 0.0 || self.hi_trim == 0.0 {
             return;
         }
         let share = m::pow(10.0, ring.db / 10.0);
-        let amplitude = self.hi_trim * tick * (2.0 * share / (500.0 * ring.decay)).sqrt() / self.eq.pair(ring.hz).0;
+        let amplitude = self.hi_trim * tick * (2.0 * share / (500.0 * ring.decay)).sqrt();
         let tone = Burst::new(ring.hz, amplitude * RING_TONAL.sqrt(), ring.decay);
-        self.push(effect, side, tone.delay(delay).no_duck());
+        self.push(effect, side, tone.delay(delay).no_duck().flat());
         let seed = self.ring_rng.randrange(1 << 30) as u64;
         let spread = Burst::ring_noise(ring.hz, amplitude * (1.0 - RING_TONAL).sqrt(), ring.decay, RING_Q, seed);
-        self.push(effect, side, spread.delay(delay).no_duck());
+        self.push(effect, side, spread.delay(delay).no_duck().flat());
     }
 
     /// A NoiseBurst: its noise is seeded from the shared seed source as it is made.
@@ -2616,8 +2626,8 @@ impl Synth {
         let eq_sway = self.eq.pair(CAB_SWAY_HZ);
         let eq_trigger =
             self.bed_pair(if trigger_mode == TriggerMode::Brake && lock > 0.0 { 110.0 } else { 100.0 });
-        let freqs: Vec<f64> = self.bursts.iter().map(|e| e.burst.freq).collect();
-        let eq_bursts: Vec<(f64, f64)> = freqs.into_iter().map(|f| self.eq.pair(f)).collect();
+        let freqs: Vec<Option<f64>> = self.bursts.iter().map(|e| (!e.burst.flat).then_some(e.burst.freq)).collect();
+        let eq_bursts: Vec<(f64, f64)> = freqs.into_iter().map(|f| f.map_or(FLAT, |f| self.eq.pair(f))).collect();
         let jake_mean = jake_mean();
         let duck_attack = duck_attack();
         let duck_release = duck_release();

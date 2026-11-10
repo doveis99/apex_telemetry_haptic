@@ -12,14 +12,15 @@
 //!
 //! The controller is only opened while ATS/ETS2 is running and released when the game quits.
 //! Defaults come from config.json (saved by the window); flags override them. Close the
-//! X-Haptics engine first: it streams to the same motors. Ctrl+C stops and releases the motors.
+//! X-Haptics engine first: it streams to the same motors. Ctrl+C stops and releases the motors,
+//! and so does closing the console window.
 
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use ats_haptics::effects::{Equalizer, Gains, GEARBOXES};
+use ats_haptics::effects::{Equalizer, Gains, FLOAT_FIELDS, GEARBOXES};
 use ats_haptics::runner::{run, Connection, Runner, Source};
 use ats_haptics::scenarios::{scenario, scenarios};
 use ats_haptics::settings::Settings;
@@ -29,18 +30,35 @@ use ats_haptics::telemetry::SIMULATED_FPS;
 const USAGE: &str = "usage: ats_haptics [--simulate] [--sim-fps FPS] [--dry-run] [--monitor] [--seconds S]
                    [--exit-with-game] [--gain G] [--grip-level G] [--trigger-level G]
                    [--engine G] [--road G] [--bumps G] [--rumble G] [--wheelspin G] [--gear G]
-                   [--retarder G] [--impact G] [--trigger G] [--throttle-pulse P]
+                   [--retarder G] [--impact G] [--trigger G] [--throttle-pulse P] [--steady-fade F]
+                   [--pedal G] [--squeal G] [--trailer G] [--park-brake G] [--engine-start G]
+                   [--shifter G] [--air-brake G] [--blinker G] [--game-events G] [--ducking D]
+                   [--bump-threshold M/S] [--impact-threshold M/S2]
                    [--cylinders N] [--gearbox amt|converter] [--scenario highway|city|mountain]
                    [--replay LOG] [--from HH:MM:SS] [--to HH:MM:SS] [--log-blocks] [--rate 1k|2k]
 
---scenario and --replay play without the game, as --simulate does. --log-blocks writes every
-output block as CSV under %APPDATA%\\ATSHaptics\\logs. --rate 2k sends 2 kHz samples, a report
-every 4 ms (default: the window's 2 kHz switch).";
+Every strength and threshold config.json keeps can be set for one run, by its name there with
+dashes (--gain is master). --scenario and --replay play without the game, as --simulate does.
+--log-blocks writes every output block as CSV under %APPDATA%\\ATSHaptics\\logs. --rate 2k sends
+2 kHz samples, a report every 4 ms (default: the window's 2 kHz switch).";
 
 static STOP: AtomicBool = AtomicBool::new(false);
+/// main has run to its end: the stream stopped and the motors were released
+static DONE: AtomicBool = AtomicBool::new(false);
+const CTRL_CLOSE_EVENT: u32 = 2;
+/// Windows ends the process 5 s after a close, logoff or shutdown at the latest.
+const CLOSE_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
 
-unsafe extern "system" fn on_ctrl(_kind: u32) -> i32 {
+unsafe extern "system" fn on_ctrl(kind: u32) -> i32 {
     STOP.store(true, Ordering::Relaxed);
+    if kind >= CTRL_CLOSE_EVENT {
+        // The console window closed, or the user logs off or shuts down: Windows ends the
+        // process as soon as this returns, so it waits here for the motors to be released.
+        let until = Instant::now() + CLOSE_WAIT;
+        while !DONE.load(Ordering::Relaxed) && Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
     1 // handled: let the stream stop and release the motors
 }
 
@@ -133,13 +151,12 @@ fn parse_args(gains: &mut Gains) -> Args {
                 })
             }
             _ => {
+                // any strength or threshold config.json keeps, by its name there
                 let name = flag.trim_start_matches("--").replace('-', "_");
-                let known = ["grip_level", "trigger_level", "engine", "road", "bumps", "rumble", "wheelspin", "gear",
-                             "retarder", "impact", "trigger", "throttle_pulse"];
-                if !flag.starts_with("--") || !known.contains(&name.as_str()) {
+                if !flag.starts_with("--") || !FLOAT_FIELDS.contains(&name.as_str()) {
                     fail(&format!("unrecognized argument: {item}"));
                 }
-                *gains.float_mut(&name).unwrap() = number("a gain");
+                *gains.float_mut(&name).unwrap() = number("a number");
             }
         }
     }
@@ -231,7 +248,11 @@ fn main() {
         }
         Err(error) => {
             eprintln!("\n{error}");
+            let _ = std::io::stdout().flush();
+            DONE.store(true, Ordering::Relaxed);
             std::process::exit(1);
         }
     }
+    let _ = std::io::stdout().flush();
+    DONE.store(true, Ordering::Relaxed);
 }

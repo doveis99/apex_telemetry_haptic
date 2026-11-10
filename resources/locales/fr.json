@@ -85,6 +85,7 @@
 "리타더": "Ralentisseur",
 "리타더 단계에 비례하는 웅웅거림으로, 빠를수록 음이 높아집니다(40~65Hz). 엔진 브레이크는 엔진 점화 박자에 맞춰 '다다닥' 노크하고, 엑셀을 밟으면 멈춥니다.": "Un bourdonnement proportionnel au cran du ralentisseur, plus aigu avec la vitesse (40–65 Hz). Le frein moteur cogne au rythme de l'allumage et s'arrête dès que vous accélérez.",
 "릴리스 zip에 {exe}이 없습니다": "{exe} est absent du zip de la version",
+"릴리스 zip을 풀지 못했습니다 (PowerShell {code})": "Impossible de décompresser le zip de la version (PowerShell {code})",
 "릴리스 페이지를 열까요?": "Ouvrir la page de la version ?",
 "모든 세기와 기준, 진동 위치를 기본값으로 되돌리고 모든 효과를 켭니다. 저장은 따로 눌러야 합니다.": "Remet tous les niveaux, seuils et sorties par défaut et active tous les effets. Appuyez sur Enregistrer pour garder.",
 "모터 보정": "Calibrage des moteurs",

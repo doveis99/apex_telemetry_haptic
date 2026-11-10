@@ -250,6 +250,9 @@ impl App {
                 if let Ok(Some(release)) = updater::newer_release() {
                     update.lock().unwrap().release = Some(release);
                 }
+                // well after the start: the script that installed this version has ended by now
+                std::thread::sleep(Duration::from_secs(20));
+                updater::clean_up_downloads();
             });
         }
     }
@@ -971,7 +974,12 @@ impl App {
             self.ui.set_update_text(t!("설치 중…").into());
             self.on_close();
             if self.closed {
-                let _ = updater::apply_on_exit(&source); // copies once this process has exited
+                // copies once this process has exited
+                if let Err(error) = updater::apply_on_exit(&source) {
+                    // the window is gone already: say why nothing will come back up
+                    platform::show(std::ptr::null_mut(), &t!("업데이트"),
+                                   &t!("업데이트하지 못했습니다: {error}", error = error), Icon::Error);
+                }
             } else {
                 // the save prompt was cancelled
                 self.update.lock().unwrap().progress = None;

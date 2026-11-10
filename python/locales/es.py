@@ -407,4 +407,5 @@ MESSAGES = {
         "No se pudo leer el archivo de ajustes; se ha iniciado con los valores predeterminados. Al guardar, el archivo original se conserva como {name}.",
     "2 kHz 출력을 끄고 1 kHz로 돌아감": "Salida a 2 kHz apagada, vuelta a 1 kHz",
     "4 ms마다 리포트를 못 받음 (보낸 것 {percent})": "No aceptó un informe cada 4 ms ({percent} enviados)",
+    "릴리스 zip을 풀지 못했습니다 (PowerShell {code})": "No se pudo descomprimir el zip de la versión (PowerShell {code})",
 }

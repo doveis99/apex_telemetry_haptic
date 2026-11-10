@@ -261,6 +261,9 @@ msgstr "Um zumbido proporcional ao estágio do retarder que fica mais agudo com 
 msgid "릴리스 zip에 {exe}이 없습니다"
 msgstr "{exe} não está no zip da versão"
 
+msgid "릴리스 zip을 풀지 못했습니다 (PowerShell {code})"
+msgstr "Não foi possível descompactar o zip da versão (PowerShell {code})"
+
 msgid "릴리스 페이지를 열까요?"
 msgstr "Abrir a página da versão?"
 

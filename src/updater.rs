@@ -236,7 +236,7 @@ fn find(dir: &Path, name: &str) -> Option<PathBuf> {
 
 /// Fetch, verify and unpack the release zip; the folder holding the new exe.
 pub fn download(release: &Release, mut progress: impl FnMut(f64)) -> Result<PathBuf, String> {
-    let work = std::env::temp_dir().join(format!("ATSHaptics-update-{}", release.version()));
+    let work = std::env::temp_dir().join(format!("{WORK_PREFIX}{}", release.version()));
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
     let archive = work.join("release.zip");
@@ -266,12 +266,37 @@ pub fn download(release: &Release, mut progress: impl FnMut(f64)) -> Result<Path
         .creation_flags(CREATE_NO_WINDOW)
         .status()
         .map_err(|e| e.to_string())?;
-    let exe = find(&unpacked, EXE_NAME);
-    match exe {
-        Some(exe) if status.success() && exe.parent().is_some_and(|d| d.join("_internal").is_dir()) => {
-            Ok(exe.parent().unwrap().to_path_buf())
-        }
+    if !status.success() {
+        // PowerShell missing, blocked by policy, or the disk full: not the zip's doing
+        let code = status.code().map_or("?".to_string(), |code| code.to_string());
+        return Err(t!("릴리스 zip을 풀지 못했습니다 (PowerShell {code})", code = code));
+    }
+    match find(&unpacked, EXE_NAME) {
+        Some(exe) if exe.parent().is_some_and(|d| d.join("_internal").is_dir()) => Ok(exe.parent().unwrap().to_path_buf()),
         _ => Err(t!("릴리스 zip에 {exe}이 없습니다", exe = EXE_NAME)),
+    }
+}
+
+const WORK_PREFIX: &str = "ATSHaptics-update-";
+
+/// A download folder (its name) this build has no more use for: of this version or an older one.
+/// One of a newer version is an update that has not gone through yet; its log says why.
+fn spent(folder: &str, running: &str) -> bool {
+    folder.strip_prefix(WORK_PREFIX).is_some_and(|version| {
+        let version = parse_version(version);
+        !version.is_empty() && version <= parse_version(running)
+    })
+}
+
+/// Remove what past updates left in %TEMP%: the zip, the unpacked release and the copy of the
+/// version before it, about three times the program's size each time. Called a while after
+/// the start, when the script that installed this version has long ended.
+pub fn clean_up_downloads() {
+    let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else { return };
+    for entry in entries.filter_map(Result::ok) {
+        if spent(&entry.file_name().to_string_lossy(), env!("CARGO_PKG_VERSION")) && entry.path().is_dir() {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
     }
 }
 
@@ -311,6 +336,16 @@ mod tests {
         assert!(parse_version("v0.20.0") > parse_version("0.19.0"));
         assert!(parse_version("0.19.10") > parse_version("0.19.9"));
         assert_eq!(parse_version("v1.2.3"), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn only_downloads_of_this_version_or_older_are_spent() {
+        assert!(spent("ATSHaptics-update-0.21.0", "0.21.0"));
+        assert!(spent("ATSHaptics-update-0.19.10", "0.21.0"));
+        assert!(!spent("ATSHaptics-update-0.22.0", "0.21.0"), "an update still to go through");
+        assert!(!spent("ATSHaptics-update-", "0.21.0"));
+        assert!(!spent("ATSHaptics-plugin", "0.21.0"));
+        assert!(!spent("something-else-0.1.0", "0.21.0"));
     }
 }
 

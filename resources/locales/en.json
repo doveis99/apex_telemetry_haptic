@@ -85,6 +85,7 @@
 "리타더": "Retarder",
 "리타더 단계에 비례하는 웅웅거림으로, 빠를수록 음이 높아집니다(40~65Hz). 엔진 브레이크는 엔진 점화 박자에 맞춰 '다다닥' 노크하고, 엑셀을 밟으면 멈춥니다.": "A hum in proportion to the retarder stage that rises in pitch with speed (40–65 Hz). The engine brake knocks at the engine's firing rate and stops when you press the throttle.",
 "릴리스 zip에 {exe}이 없습니다": "{exe} is missing from the release zip",
+"릴리스 zip을 풀지 못했습니다 (PowerShell {code})": "Could not unpack the release zip (PowerShell {code})",
 "릴리스 페이지를 열까요?": "Open the release page?",
 "모든 세기와 기준, 진동 위치를 기본값으로 되돌리고 모든 효과를 켭니다. 저장은 따로 눌러야 합니다.": "Resets every level, threshold and output to its default and turns every effect on. Press Save to keep it.",
 "모터 보정": "Motor calibration",

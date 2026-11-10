@@ -261,6 +261,9 @@ msgstr "Un bourdonnement proportionnel au cran du ralentisseur, plus aigu avec l
 msgid "릴리스 zip에 {exe}이 없습니다"
 msgstr "{exe} est absent du zip de la version"
 
+msgid "릴리스 zip을 풀지 못했습니다 (PowerShell {code})"
+msgstr "Impossible de décompresser le zip de la version (PowerShell {code})"
+
 msgid "릴리스 페이지를 열까요?"
 msgstr "Ouvrir la page de la version ?"
 

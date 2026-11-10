@@ -339,12 +339,17 @@ fn hid_api() -> Result<hidapi::HidApi, PadError> {
     hidapi::HidApi::new().map_err(|e| PadError::Unavailable(t!("컨트롤러를 열 수 없음 ({error})", error = e)))
 }
 
-/// The vendor interface's path, or why there is none.
-pub fn find_path(api: &hidapi::HidApi) -> Result<CString, PadError> {
-    for entry in api.device_list() {
-        if entry.vendor_id() == VENDOR_ID && entry.product_id() == PRODUCT_ID && entry.usage_page() == USAGE_PAGE {
-            return Ok(entry.path().to_owned());
-        }
+/// The vendor interfaces' paths in the order Windows lists them, or why there is none. The
+/// cable and the 2.4 GHz dongle show up alike, so with both plugged in there are two, and the
+/// dongle's stays listed while the pad is on the cable or asleep.
+pub fn find_paths(api: &hidapi::HidApi) -> Result<Vec<CString>, PadError> {
+    let paths: Vec<CString> = api
+        .device_list()
+        .filter(|e| e.vendor_id() == VENDOR_ID && e.product_id() == PRODUCT_ID && e.usage_page() == USAGE_PAGE)
+        .map(|e| e.path().to_owned())
+        .collect();
+    if !paths.is_empty() {
+        return Ok(paths);
     }
     if steam_overlay_loaded() {
         return Err(PadError::Unavailable(t!(
@@ -352,6 +357,25 @@ pub fn find_path(api: &hidapi::HidApi) -> Result<CString, PadError> {
         )));
     }
     Err(PadError::Unavailable(t!("컨트롤러 없음 (유선/2.4G 동글 연결, 전원 확인)")))
+}
+
+/// The first candidate `open` gets an answering APEX 6 Pro from. When none does, the error of
+/// one worth trying again (asleep, not answering) rather than of one that never will be (another
+/// model), so the caller keeps trying while any could still wake.
+pub fn first_that_answers<P, T>(candidates: impl IntoIterator<Item = P>,
+                                mut open: impl FnMut(P) -> Result<T, PadError>) -> Result<T, PadError> {
+    let mut failed: Option<PadError> = None;
+    for candidate in candidates {
+        match open(candidate) {
+            Ok(found) => return Ok(found),
+            Err(error) => {
+                if matches!((&failed, &error), (None, _) | (Some(PadError::Fatal(_)), PadError::Unavailable(_))) {
+                    failed = Some(error);
+                }
+            }
+        }
+    }
+    Err(failed.unwrap_or_else(|| PadError::Unavailable(t!("컨트롤러 없음 (유선/2.4G 동글 연결, 전원 확인)"))))
 }
 
 /// Runs the calling thread at THREAD_PRIORITY_TIME_CRITICAL until dropped.
@@ -459,16 +483,18 @@ pub struct Apex6<L: Link = HidLink, C: Clock = RealClock> {
 }
 
 impl Apex6<HidLink, RealClock> {
-    /// Open the controller and check it is an APEX 6 Pro.
+    /// Open the controller and check it is an APEX 6 Pro: the first of its interfaces that
+    /// answers (find_paths), so a dongle left plugged in does not stand in the cable's way.
     pub fn open() -> Result<Self, PadError> {
         let api = hid_api()?;
-        let path = find_path(&api)?;
-        let device = api
-            .open_path(&path)
-            .map_err(|e| PadError::Unavailable(t!("컨트롤러를 열 수 없음 ({error})", error = e)))?;
-        let mut pad = Apex6::with_link(HidLink { device }, RealClock::default());
-        pad.info = Some(pad.identify(0.6)?);
-        Ok(pad)
+        first_that_answers(find_paths(&api)?, |path| {
+            let device = api
+                .open_path(&path)
+                .map_err(|e| PadError::Unavailable(t!("컨트롤러를 열 수 없음 ({error})", error = e)))?;
+            let mut pad = Apex6::with_link(HidLink { device }, RealClock::default());
+            pad.info = Some(pad.identify(0.6)?);
+            Ok(pad)
+        })
     }
 }
 
@@ -761,6 +787,28 @@ mod tests {
         let mut pad = Apex6::with_link(FakeLink::default(), FakeClock::default());
         pad.set_enabled(true);
         pad
+    }
+
+    #[test]
+    fn the_first_interface_that_answers_is_taken() {
+        let asleep = || PadError::Unavailable("asleep".into());
+        let other_model = || PadError::Fatal("another model".into());
+        let mut tried = Vec::new();
+        // the dongle is listed first and its pad does not answer; the cable's does
+        let found = first_that_answers(["dongle", "cable", "more"], |path| {
+            tried.push(path);
+            if path == "cable" { Ok(path) } else { Err(asleep()) }
+        });
+        assert_eq!(found.unwrap(), "cable");
+        assert_eq!(tried, ["dongle", "cable"]);
+        // none answers: an error worth retrying wins over one that is not, whichever came first
+        for errors in [[asleep(), other_model()], [other_model(), asleep()]] {
+            let mut errors = errors.into_iter();
+            let failed = first_that_answers(0..2, |_| Err::<(), _>(errors.next().unwrap()));
+            assert!(matches!(failed, Err(PadError::Unavailable(text)) if text == "asleep"));
+        }
+        let failed = first_that_answers(0..1, |_| Err::<(), _>(other_model()));
+        assert!(matches!(failed, Err(PadError::Fatal(_))));
     }
 
     #[test]

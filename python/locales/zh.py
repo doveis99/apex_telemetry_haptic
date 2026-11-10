@@ -326,4 +326,5 @@ MESSAGES = {
         "无法读取设置文件，已按默认值启动。保存时，原文件会保留为 {name}。",
     "2 kHz 출력을 끄고 1 kHz로 돌아감": "已关闭 2 kHz 输出，退回 1 kHz",
     "4 ms마다 리포트를 못 받음 (보낸 것 {percent})": "手柄未能每 4 ms 接收报告（发出 {percent}）",
+    "릴리스 zip을 풀지 못했습니다 (PowerShell {code})": "无法解压发布的 zip（PowerShell {code}）",
 }

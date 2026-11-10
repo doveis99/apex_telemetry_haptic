@@ -407,4 +407,5 @@ MESSAGES = {
         "Die Einstellungsdatei konnte nicht gelesen werden; es wurde mit den Standardwerten gestartet. Beim Speichern bleibt die ursprüngliche Datei als {name} erhalten.",
     "2 kHz 출력을 끄고 1 kHz로 돌아감": "2-kHz-Ausgabe aus, zurück zu 1 kHz",
     "4 ms마다 리포트를 못 받음 (보낸 것 {percent})": "Kein Report alle 4 ms angenommen ({percent} gesendet)",
+    "릴리스 zip을 풀지 못했습니다 (PowerShell {code})": "Das Release-Zip konnte nicht entpackt werden (PowerShell {code})",
 }

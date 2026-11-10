@@ -261,6 +261,9 @@ msgstr "Buczenie proporcjonalne do stopnia retardera, coraz wyższe wraz z pręd
 msgid "릴리스 zip에 {exe}이 없습니다"
 msgstr "Brak {exe} w archiwum zip wydania"
 
+msgid "릴리스 zip을 풀지 못했습니다 (PowerShell {code})"
+msgstr "Nie udało się rozpakować pliku zip wydania (PowerShell {code})"
+
 msgid "릴리스 페이지를 열까요?"
 msgstr "Otworzyć stronę wydania?"
 

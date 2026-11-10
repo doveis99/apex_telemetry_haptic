@@ -393,4 +393,5 @@ MESSAGES = {
         "Nie można odczytać pliku ustawień, więc uruchomiono z wartościami domyślnymi. Przy zapisie oryginalny plik zostanie zachowany jako {name}.",
     "2 kHz 출력을 끄고 1 kHz로 돌아감": "Wyjście 2 kHz wyłączone, powrót do 1 kHz",
     "4 ms마다 리포트를 못 받음 (보낸 것 {percent})": "Raport co 4 ms nie był przyjmowany (wysłano {percent})",
+    "릴리스 zip을 풀지 못했습니다 (PowerShell {code})": "Nie udało się rozpakować pliku zip wydania (PowerShell {code})",
 }

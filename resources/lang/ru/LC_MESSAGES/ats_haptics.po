@@ -261,6 +261,9 @@ msgstr "Гул пропорционально ступени ретардера,
 msgid "릴리스 zip에 {exe}이 없습니다"
 msgstr "В zip-архиве релиза нет {exe}"
 
+msgid "릴리스 zip을 풀지 못했습니다 (PowerShell {code})"
+msgstr "Не удалось распаковать zip релиза (PowerShell {code})"
+
 msgid "릴리스 페이지를 열까요?"
 msgstr "Открыть страницу релиза?"
 

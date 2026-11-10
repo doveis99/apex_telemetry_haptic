@@ -261,6 +261,9 @@ msgstr "与缓速器挡位成比例的嗡嗡声，车速越快音调越高（40�
 msgid "릴리스 zip에 {exe}이 없습니다"
 msgstr "发布 zip 中没有 {exe}"
 
+msgid "릴리스 zip을 풀지 못했습니다 (PowerShell {code})"
+msgstr "无法解压发布的 zip（PowerShell {code}）"
+
 msgid "릴리스 페이지를 열까요?"
 msgstr "要打开发布页面吗？"
 

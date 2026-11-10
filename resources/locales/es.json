@@ -85,6 +85,7 @@
 "리타더": "Retardador",
 "리타더 단계에 비례하는 웅웅거림으로, 빠를수록 음이 높아집니다(40~65Hz). 엔진 브레이크는 엔진 점화 박자에 맞춰 '다다닥' 노크하고, 엑셀을 밟으면 멈춥니다.": "Un zumbido proporcional a la etapa del retardador que sube de tono con la velocidad (40–65 Hz). El freno motor golpea al ritmo de encendido del motor y se detiene al acelerar.",
 "릴리스 zip에 {exe}이 없습니다": "Falta {exe} en el zip de la versión",
+"릴리스 zip을 풀지 못했습니다 (PowerShell {code})": "No se pudo descomprimir el zip de la versión (PowerShell {code})",
 "릴리스 페이지를 열까요?": "¿Abrir la página de la versión?",
 "모든 세기와 기준, 진동 위치를 기본값으로 되돌리고 모든 효과를 켭니다. 저장은 따로 눌러야 합니다.": "Restablece todos los niveles, umbrales y salidas y enciende todos los efectos. Pulsa Guardar para conservarlo.",
 "모터 보정": "Calibración de motores",

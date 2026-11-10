@@ -408,4 +408,5 @@ MESSAGES = {
         "Le fichier de réglages est illisible ; démarrage avec les valeurs par défaut. À l'enregistrement, le fichier d'origine est conservé sous le nom {name}.",
     "2 kHz 출력을 끄고 1 kHz로 돌아감": "Sortie 2 kHz coupée, retour à 1 kHz",
     "4 ms마다 리포트를 못 받음 (보낸 것 {percent})": "Rapport toutes les 4 ms non accepté ({percent} envoyés)",
+    "릴리스 zip을 풀지 못했습니다 (PowerShell {code})": "Impossible de décompresser le zip de la version (PowerShell {code})",
 }

@@ -521,6 +521,33 @@ mod tests {
     }
 
     #[test]
+    fn a_ring_is_as_strong_on_the_trigger_as_on_the_grips() {
+        // what the gear shift's ring adds in 500-950 Hz on the output the effect is routed to,
+        // played quietly enough to stay clear of the soft limit
+        let ring = |route: &str| {
+            let mut gains = Gains { master: 0.05, ..Gains::default() };
+            gains.routes.insert("gear".into(), route.into());
+            let render = |hi: Option<f64>| -> Vec<f64> {
+                let mut preview = Preview::with_synth(Effect::Gear, &gains, &[], |gains| {
+                    Synth::with_seeds(gains, Equalizer::for_player(&Default::default()), PyRandom::new(1))
+                });
+                preview.set_events_2k(true);
+                preview.set_hi_trim(hi);
+                let mut output = Output2k::new();
+                let blocks: Vec<Block> = std::iter::from_fn(|| preview.render()).collect();
+                let halves = blocks.iter().flat_map(|b| output.split(b));
+                halves.flat_map(|h| if route == "trigger" { h.trigger } else { h.left_grip }).collect()
+            };
+            let (with, without) = (render(Some(0.0)), render(None));
+            let only: Vec<f64> = with.iter().zip(&without).map(|(a, b)| a - b).collect();
+            band(&only, 500.0, 950.0)
+        };
+        // the default curves drive the trigger 1.6 times as hard as the grips at 690 Hz
+        let ratio = (ring("trigger") / ring("grip")).sqrt();
+        assert!((ratio - 1.0).abs() < 0.05, "the ring on the trigger against the grips: {ratio}");
+    }
+
+    #[test]
     fn stones_click_above_500_hz_on_loose_ground_only() {
         // gravel's stones give the band most of what it had nowhere at 1 kHz
         let (old, sent) = (sent_2k(&surface_blocks("gravel", false)), sent_2k(&surface_blocks("gravel", true)));

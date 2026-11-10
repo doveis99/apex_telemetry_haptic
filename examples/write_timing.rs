@@ -19,7 +19,8 @@ fn main() {
         }
     };
     let info = pad.info.clone().unwrap();
-    println!("{}, connection_mode={}", info.name(), info.connection_mode);
+    let firmware: Vec<String> = info.firmware().iter().map(|(name, v)| format!("{name} {v}")).collect();
+    println!("{}, connection_mode={}, 펌웨어: {}", info.name(), info.connection_mode, firmware.join(", "));
     let extra: Vec<f64> = std::env::args().skip(2).filter_map(|a| a.parse().ok()).collect();
     let mut runs = vec![("1k (8 ms)".to_string(), true, FRAME_PERIOD), ("2k (4 ms)".to_string(), false, FRAME_PERIOD)];
     runs.extend(extra.iter().map(|ms| (format!("2k blocks every {ms} ms"), false, 2.0 * ms / 1000.0)));

@@ -189,9 +189,10 @@ const BLINKER_DECAY: f64 = 0.003;
 const TICK_SHARE: f64 = 1.0;
 const TICK_EDGE: f64 = 0.005;
 
-/// A click's ring above 500 Hz, drawn only at 2 kHz (set_events_2k): a sine from zero at `hz`,
-/// falling by e every `decay` s, carrying `db` more energy in 500-1000 Hz than its tick would
-/// alone (one sample at twice the tick's 1 kHz height).
+/// A click's ring above 500 Hz, drawn only at 2 kHz (set_events_2k): a sine from zero at `hz`
+/// with band noise around it (RING_TONAL, RING_Q), falling by e every `decay` s, carrying `db`
+/// more energy in 500-1000 Hz than its tick would alone (one sample at twice the tick's 1 kHz
+/// height).
 #[derive(Clone, Copy, Debug)]
 struct Ring {
     hz: f64,
@@ -213,12 +214,28 @@ struct Ring {
 // either side). The splitter's two clips ring at 861 and 885 Hz. The relays (16 clips of three
 // packs) each ring at their own pitch, 511-996 Hz, so the blinker takes their median; the fifth
 // wheel's knocks (11 clips) at 504-926 Hz, so each knock takes one of its own.
-const SHIFT_RING: Ring = Ring { hz: 690.0, decay: 0.038, db: 2.9 };
-const RANGE_RING: Ring = Ring { hz: 690.0, decay: 0.028, db: 2.0 };
-const SPLIT_RING: Ring = Ring { hz: 870.0, decay: 0.030, db: 17.1 };
-const BLINKER_RING: Ring = Ring { hz: 730.0, decay: 0.020, db: 5.2 };
+//
+// A ring is not one pure tone, though: in the clips the band's tail 3-60 ms after its peak holds
+// only 21-47% of its energy within 30 Hz of its strongest line (shift median 28%, relays 32-41%,
+// range and splitter 27-36%), the rest spread about 140 Hz either side of a 640-800 Hz centre.
+// Drawn as a sine, all of it sat on one line and played as a spring's twang (felt on the pad
+// 2026-11-08, shift and blinker). So RING_TONAL of its energy stays on the line and the rest
+// is noise through a band of RING_Q around it. The decays are the tails' own over those 3-60 ms
+// (1 ms envelope, log fit): shift 27 ms (12 clips), range 30 and splitter 32 (two each), relay
+// 15 (the trucks' relays; Sound Fixes Pack's 416 Hz one is a buzzer and was left out).
+// Drawn so, the shift test's tails hold 36% on the line (blinker 41%), spread about 100 Hz and
+// fall as the clips' do (shift -5 dB at 10-25 ms, -12 at 25-60); 500-1000 Hz within 1 dB of the sine.
+// Levels by ear (examples/ring_level, wireless, 0 late reports, 2026-11-09 00:03, the clips
+// played first on the PC): shift and relay kept their fitted db (0, 0 dB both rounds); range
+// and splitter -6 / -12 -> -9 dB, the coupling -12 / -6 -> -9 dB; the stones +6 twice (STONE_HI).
+const RING_TONAL: f64 = 0.15;
+const RING_Q: f64 = 1.0;
+const SHIFT_RING: Ring = Ring { hz: 690.0, decay: 0.027, db: 2.9 };
+const RANGE_RING: Ring = Ring { hz: 690.0, decay: 0.030, db: -7.0 };
+const SPLIT_RING: Ring = Ring { hz: 870.0, decay: 0.032, db: 8.1 };
+const BLINKER_RING: Ring = Ring { hz: 730.0, decay: 0.015, db: 5.2 };
 const COUPLE_RING_HZ: (f64, f64) = (504.0, 926.0);
-const COUPLE_RING: Ring = Ring { hz: 700.0, decay: 0.013, db: 2.1 };
+const COUPLE_RING: Ring = Ring { hz: 700.0, decay: 0.013, db: -6.9 };
 
 // At 2 kHz the stones click above 500 Hz too. In Sound Fixes Pack's five gravel loops the stones
 // stand out in 500-1000 Hz 9-17 times a second and hold 20-57% of its energy, while 40-250 Hz
@@ -226,11 +243,12 @@ const COUPLE_RING: Ring = Ring { hz: 700.0, decay: 0.013, db: 2.1 };
 // lies up there. Each click is flat from 400 to 1000 Hz within 6 dB, 8-12 dB down at 1.5 kHz,
 // and falls by e in 4-5 ms. The stones' body rings at the surface's pitch inside the bed's
 // 300 Hz low-pass, so each stone now also strikes a burst of noise through a band-pass over that
-// band, as strong against its body as STONE_HI says.
+// band, as strong against its body as STONE_HI says. Fitted at 0.14 (the clips' share less the
+// house -6 dB); picked by ear at +6 dB both rounds (2026-11-09, the top of the levels offered).
 const STONE_HZ: f64 = 700.0;
 const STONE_Q: f64 = 0.9;
 const STONE_DECAY: f64 = 0.0045;
-const STONE_HI: f64 = 0.14;
+const STONE_HI: f64 = 0.28;
 const COUPLE_S: f64 = 0.6;
 const COUPLE_GAP: (f64, f64) = (0.02, 0.04);
 const COUPLE_MAIN: (f64, f64) = (0.15, 0.45);
@@ -1352,10 +1370,36 @@ impl StoneClick {
     }
 }
 
+/// White noise through a band-pass at 2 kHz, at a sine's mean square (1/2).
+#[derive(Clone)]
+pub struct RingNoise {
+    filter: Resonator,
+    rng: PyRandom,
+    scale: f64,
+}
+
+impl RingNoise {
+    fn new(center: f64, q: f64, seed: u64) -> RingNoise {
+        let filter = Resonator::native(center, q, RATE_2K);
+        // white noise's power through the band-pass: its impulse response's energy
+        let mut probe = filter.clone();
+        let power: f64 = (0..4000).map(|n| probe.next(if n == 0 { 1.0 } else { 0.0 }).powi(2)).sum();
+        // uniform(-1, 1) has a variance of 1/3; a sine's mean square is 1/2
+        RingNoise { filter, rng: PyRandom::new(seed), scale: (0.5 / (power / 3.0)).sqrt() }
+    }
+
+    fn next(&mut self) -> f64 {
+        let x = self.scale * self.rng.uniform(-1.0, 1.0);
+        self.filter.next(x)
+    }
+}
+
 #[derive(Clone)]
 enum Carrier {
     Sine,
     Noise(Box<BandNoise>),
+    /// A ring's spread part, drawn at 2 kHz only (RingNoise).
+    Ring(Box<RingNoise>),
     /// One sample at the given strength: the click the pad makes of it.
     Tick { fired: bool },
 }
@@ -1395,6 +1439,12 @@ impl Burst {
     /// Decaying band-limited noise: air hiss, cranking (NoiseBurst).
     fn noise(center: f64, amplitude: f64, decay_s: f64, q: f64, seed: u64) -> Burst {
         Burst { carrier: Carrier::Noise(Box::new(BandNoise::new(center, q, seed))), ..Burst::new(center, amplitude, decay_s) }
+    }
+
+    /// A ring's spread part: noise through a band at `center`, at 2 kHz (RingNoise), drawn
+    /// with a sine's mean square so `amplitude` carries the same energy a sine's would.
+    fn ring_noise(center: f64, amplitude: f64, decay_s: f64, q: f64, seed: u64) -> Burst {
+        Burst { carrier: Carrier::Ring(Box::new(RingNoise::new(center, q, seed))), ..Burst::new(center, amplitude, decay_s) }
     }
 
     /// One sample at the given strength; frequency 0 so the motor eq leaves it as it is, and it never ducks.
@@ -1490,6 +1540,7 @@ impl Burst {
                 value
             }
             Carrier::Noise(noise) => noise.next_at(rate),
+            Carrier::Ring(noise) => noise.next(),
             Carrier::Tick { .. } => unreachable!(),
         };
         let value = carrier * self.envelope();
@@ -1707,6 +1758,9 @@ pub struct Synth {
     stones_2k: [StoneClick; 2],
     /// the coupling rings' pitches; only drawn from at 2 kHz, so the 1 kHz output stays as it was
     ring_rng: PyRandom,
+    /// how loud the rings and the stones' clicks above 500 Hz play against their fitted level
+    /// (1.0); only the ring-level listening check changes it (src/ring_level.rs)
+    hi_trim: f64,
 }
 
 impl Synth {
@@ -1784,6 +1838,7 @@ impl Synth {
             onset_carry: [0.0; 3],
             stones_2k: [StoneClick::new(21), StoneClick::new(22)],
             ring_rng: PyRandom::new(23),
+            hi_trim: 1.0,
         }
     }
 
@@ -1807,6 +1862,12 @@ impl Synth {
         self.events_2k
     }
 
+    /// Play the rings and the stones' clicks above 500 Hz `db` from their fitted level, or not at
+    /// all for None: the levels the ring-level listening check (src/ring_level.rs) compares.
+    pub fn set_hi_trim(&mut self, db: Option<f64>) {
+        self.hi_trim = db.map_or(0.0, |db| m::pow(10.0, db / 20.0));
+    }
+
     fn push(&mut self, effect: Effect, side: Side, burst: Burst) -> u64 {
         let id = self.next_burst_id;
         self.next_burst_id += 1;
@@ -1823,12 +1884,16 @@ impl Synth {
     /// as high, so half its 4 tick^2 lies there; the ring's is amplitude^2 decay 2000 / 4. It is
     /// drawn as flat as the tick, the motor eq taken back out at its pitch.
     fn ring(&mut self, effect: Effect, side: Side, tick: f64, delay: f64, ring: Ring) {
-        if !self.events_2k || tick == 0.0 {
+        if !self.events_2k || tick == 0.0 || self.hi_trim == 0.0 {
             return;
         }
         let share = m::pow(10.0, ring.db / 10.0);
-        let amplitude = tick * (2.0 * share / (500.0 * ring.decay)).sqrt() / self.eq.pair(ring.hz).0;
-        self.push(effect, side, Burst::new(ring.hz, amplitude, ring.decay).delay(delay).no_duck());
+        let amplitude = self.hi_trim * tick * (2.0 * share / (500.0 * ring.decay)).sqrt() / self.eq.pair(ring.hz).0;
+        let tone = Burst::new(ring.hz, amplitude * RING_TONAL.sqrt(), ring.decay);
+        self.push(effect, side, tone.delay(delay).no_duck());
+        let seed = self.ring_rng.randrange(1 << 30) as u64;
+        let spread = Burst::ring_noise(ring.hz, amplitude * (1.0 - RING_TONAL).sqrt(), ring.decay, RING_Q, seed);
+        self.push(effect, side, spread.delay(delay).no_duck());
     }
 
     /// A NoiseBurst: its noise is seeded from the shared seed source as it is made.
@@ -2603,7 +2668,7 @@ impl Synth {
                 for (side, amp) in [(0, rl), (1, rr)] {
                     let hit = self.texture[side].stone_hit;
                     if hit != 0.0 {
-                        self.stones_2k[side].strike(STONE_HI * amp * hit);
+                        self.stones_2k[side].strike(self.hi_trim * STONE_HI * amp * hit);
                     }
                 }
             }

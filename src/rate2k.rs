@@ -331,10 +331,12 @@ mod tests {
     const STRUCK: [Effect; 8] = [Effect::Blinker, Effect::Gear, Effect::Shifter, Effect::Trailer, Effect::Impact,
                                  Effect::GameEvents, Effect::Bumps, Effect::Pedal];
     const FELT: [(f64, f64); 4] = [(20.0, 45.0), (45.0, 90.0), (90.0, 150.0), (150.0, 250.0)];
-    /// 1.2 dB either way: within it in every felt band (measured 2026-11-08 at the default
+    /// 1.2 dB up, 1.5 down: within it in every felt band (measured 2026-11-08 at the default
     /// gains: gear 45-90 Hz -1.05 dB, in the resonance cut's notch with the clack in the soft
-    /// limit; game events 150-250 Hz +1.0; the rest within 0.7)
-    const WITHIN: (f64, f64) = (0.871, 1.148);
+    /// limit; game events 150-250 Hz +1.0; the rest within 0.7). The rings drawn as spread noise
+    /// with the clips' shorter decays (effects.rs RING_TONAL) push the shift's clack 0.3 dB
+    /// further into the limit: gear 45-90 Hz -1.38 dB.
+    const WITHIN: (f64, f64) = (0.841, 1.148);
 
     #[test]
     fn events_push_the_motor_as_hard_at_2k() {

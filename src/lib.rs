@@ -19,6 +19,7 @@ pub mod pymath;
 pub mod pyrandom;
 pub mod rate2k;
 pub mod replay;
+pub mod ring_level;
 pub mod runner;
 pub mod scenarios;
 pub mod settings;

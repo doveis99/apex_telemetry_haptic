@@ -3,6 +3,9 @@
 //!   cargo run --release --example render_effect -- blinker out.f32          1 kHz samples
 //!   cargo run --release --example render_effect -- blinker out.f32 2k       the 2 kHz output
 //!   cargo run --release --example render_effect -- road out.f32 2k gravel   the road test on one surface
+//!   cargo run --release --example render_effect -- gear out.f32 2k hi=-6    rings and stone clicks 6 dB down
+//!   cargo run --release --example render_effect -- gear out.f32 2k hi=off   ... or left out
+//!   cargo run --release --example render_effect -- gear out.f32 2k own      with the player's gains and eq
 //!
 //! The file holds little-endian f32 triples (left grip, right grip, trigger) at the output's rate,
 //! on the pad's 0..127 scale before rounding.
@@ -12,18 +15,38 @@ use std::io::Write;
 use ats_haptics::effects::{Effect, Equalizer, Gains};
 use ats_haptics::preview::Preview;
 use ats_haptics::rate2k::Output2k;
+use ats_haptics::settings::Settings;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() < 2 {
-        eprintln!("usage: render_effect <effect> <out.f32> [2k] [surface]");
+        eprintln!("usage: render_effect <effect> <out.f32> [2k] [hi=<dB>|hi=off] [own] [surface]");
         std::process::exit(2);
     }
     let effect = Effect::from_name(&args[0]).unwrap_or_else(|| panic!("no effect {:?}", args[0]));
     let two_k = args.iter().skip(2).any(|a| a == "2k");
-    let surfaces: Vec<&str> = args.iter().skip(2).filter(|a| *a != "2k").map(String::as_str).collect();
-    let mut preview = Preview::new(effect, &Gains::default(), Equalizer::for_player(&Default::default()), &surfaces);
+    let hi = args.iter().skip(2).find_map(|a| a.strip_prefix("hi=")).map(|v| match v {
+        "off" => None,
+        db => Some(db.parse::<f64>().unwrap_or_else(|_| panic!("hi= takes dB or off, not {db:?}"))),
+    });
+    let own = args.iter().skip(2).any(|a| a == "own");
+    let surfaces: Vec<&str> = args
+        .iter()
+        .skip(2)
+        .filter(|a| *a != "2k" && *a != "own" && !a.starts_with("hi="))
+        .map(String::as_str)
+        .collect();
+    let (gains, eq) = if own {
+        let settings = Settings::default();
+        (settings.load_gains(), Equalizer::for_player(&settings.load_eq()))
+    } else {
+        (Gains::default(), Equalizer::for_player(&Default::default()))
+    };
+    let mut preview = Preview::new(effect, &gains, eq, &surfaces);
     preview.set_events_2k(two_k);
+    if let Some(hi) = hi {
+        preview.set_hi_trim(hi);
+    }
     let mut output = two_k.then(Output2k::new);
     let mut bytes = Vec::new();
     let mut put = |l: &[f64], r: &[f64], t: &[f64]| {

@@ -291,6 +291,12 @@ impl Preview {
         self.synth.set_events_2k(on);
     }
 
+    /// The rings and stone clicks above 500 Hz this many dB from their level, None for off
+    /// (Synth::set_hi_trim).
+    pub fn set_hi_trim(&mut self, db: Option<f64>) {
+        self.synth.set_hi_trim(db);
+    }
+
     fn surface_at(&self, t: f64) -> &str {
         &self.surfaces[((t / self.step) as usize).min(self.surfaces.len() - 1)]
     }

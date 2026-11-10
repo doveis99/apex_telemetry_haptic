@@ -34,6 +34,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_Globalization",
     "Win32_Graphics_Dwm",
+    "Win32_Media_Audio",
     "Win32_Networking_WinHttp",
     "Win32_Security",
     "Win32_System_Com",

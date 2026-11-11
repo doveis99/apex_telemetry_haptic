@@ -549,6 +549,11 @@ impl<L: Link, C: Clock> Apex6<L, C> {
         &self.link
     }
 
+    /// The link itself, for checks that send frames the stream never does (examples/).
+    pub fn link_mut(&mut self) -> &mut L {
+        &mut self.link
+    }
+
     pub fn clock(&self) -> &C {
         &self.clock
     }

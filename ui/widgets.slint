@@ -389,6 +389,13 @@ export component Card inherits Rectangle {
     }
 }
 
+// A window's floor, under everything else: counting `tick` up makes Slint draw the whole
+// window again, where it otherwise draws only what changed (src/bin/app/repaint.rs).
+export component Repaint inherits Rectangle {
+    in property <int> tick;
+    background: self.tick < 0 ? transparent : Theme.bg;
+}
+
 // A thin rule between groups of rows.
 export component Rule inherits Rectangle {
     height: 1px;

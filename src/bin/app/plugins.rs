@@ -55,7 +55,7 @@ impl Plugins {
         });
         me.render();
         let _ = dialog.show();
-        crate::title_bar_later(&dialog);
+        crate::native_window_later(&dialog);
         me
     }
 

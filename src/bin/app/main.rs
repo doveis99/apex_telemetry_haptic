@@ -18,6 +18,7 @@ slint::include_modules!();
 
 mod calibration;
 mod plugins;
+mod repaint;
 mod snapshot;
 mod specs;
 mod window;
@@ -72,11 +73,18 @@ pub fn when_created<C: slint::ComponentHandle + 'static>(component: &C, visible:
     slint::Timer::single_shot(Duration::from_millis(0), move || attempt(weak, visible, Box::new(f), 100));
 }
 
-/// A dark caption with the program's icon once the native window exists.
-pub fn title_bar_later<C: slint::ComponentHandle + 'static>(component: &C) {
-    when_created(component, false, |handle| {
+/// Once the native window exists: a dark caption with the program's icon, and all of the window
+/// drawn again whenever Windows asks for it (see repaint.rs).
+pub fn native_window_later<C: slint::ComponentHandle + repaint::Repaint + 'static>(component: &C) {
+    let weak = component.as_weak();
+    when_created(component, false, move |handle| {
         platform::dark_title_bar(handle);
         platform::app_icon(handle);
+        repaint::watch(handle, move || {
+            if let Some(component) = weak.upgrade() {
+                component.repaint();
+            }
+        });
     });
 }
 
@@ -119,7 +127,7 @@ fn main() {
     }
     let weak = std::rc::Rc::downgrade(&app);
     let ui = app.borrow().ui.clone_strong();
-    title_bar_later(&ui);
+    native_window_later(&ui);
     if minimized {
         when_created(&ui, true, |handle| {
             // minimized without taking the focus from the game being launched

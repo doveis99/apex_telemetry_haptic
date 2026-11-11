@@ -1,7 +1,7 @@
 // The telemetry plugin dialog and the motor calibration (gui.py's PluginDialog and
 // CalibrationDialog). Rust fills them and acts on what they report.
 
-import { Theme, TipArea, TipOverlay, Button, Switch, TipText } from "widgets.slint";
+import { Theme, TipArea, TipOverlay, Button, Switch, TipText, Repaint } from "widgets.slint";
 
 export struct GameRow {
     key: string,
@@ -17,6 +17,7 @@ export component PluginDialog inherits Window {
     callback install(string);
     callback pick-folder();
     callback close-clicked();
+    in property <int> repaint;
     out property <length> content-width: body.preferred-width;
     out property <length> content-height: body.preferred-height;
     title: @tr("텔레메트리 플러그인");
@@ -27,6 +28,7 @@ export component PluginDialog inherits Window {
     max-width: body.preferred-width;
     min-height: body.preferred-height;
     max-height: body.preferred-height;
+    Repaint { tick: root.repaint; }
     body := VerticalLayout {
         padding: 14px;
         spacing: 4px;
@@ -140,6 +142,7 @@ export component CalibrationDialog inherits Window {
     callback close-clicked();
     callback answer(string);  // first, second, replay, cancel
     callback restart();
+    in property <int> repaint;
     out property <length> content-height: body.preferred-height;
     title: @tr("모터 보정");
     background: Theme.bg;
@@ -149,6 +152,7 @@ export component CalibrationDialog inherits Window {
     min-height: body.preferred-height;
     max-height: body.preferred-height;
     property <string> hint: @tr("컨트롤러를 평소처럼 잡으세요. 패드 버튼으로 답할 수 있습니다: 십자키 ← 또는 LB 첫 번째, → 또는 RB 두 번째, X 다시 듣기, B 그만. 키보드는 ← → (또는 1 2) R Esc입니다. 재생 중에 눌러도 바로 반영됩니다.");
+    Repaint { tick: root.repaint; }
     keys := FocusScope {
         key-pressed(event) => {
             if (event.text == Key.LeftArrow || event.text == "1") {

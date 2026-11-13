@@ -252,6 +252,12 @@ impl Runner {
         self.last_render_time = None;
         // Map the plugin afresh: the next game may write another plugin's mapping.
         self.source.close();
+        self.source.expect_game(self.game());
+    }
+
+    /// "ATS" or "ETS2" while one runs; None for a test drive or a replay.
+    fn game(&self) -> Option<&'static str> {
+        self.watcher.as_ref().and_then(GameWatcher::game)
     }
 
     /// Start a debug log once the controller is taken: one file per connection, not per attempt.
@@ -276,6 +282,7 @@ impl Runner {
         let info: Value = json!({
             "version": version(),
             "source": self.source.name(),
+            "game": self.game(),
             "gains": serde_json::to_value(&self.gains).unwrap_or(Value::Null),
             "eq_curves": Value::Object(self.eq.curves.clone()),
         });
@@ -524,5 +531,20 @@ mod tests {
         for part in ["1 kHz", "4 ms"] {
             assert_eq!(runner.events.iter().filter(|line| line.contains(part)).count(), 1, "{part}: {:?}", runner.events);
         }
+    }
+
+    #[test]
+    fn a_debug_log_says_which_game_it_is_from() {
+        let dir = std::env::temp_dir().join(format!("ats_haptics_runner_{}", std::process::id()));
+        let mut runner = Runner::new(&Gains::default(), Equalizer::default(), Source::Simulated(None), None, true);
+        runner.log_dir = dir.clone();
+        runner.open_log();
+        let path = runner.block_log.as_ref().expect("a log").path.with_extension("json");
+        runner.close_log();
+        let info: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        // a test drive is no game's; from the game it is "ATS" or "ETS2"
+        assert_eq!(info.get("game"), Some(&Value::Null));
+        assert_eq!(info["source"], "simulated");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

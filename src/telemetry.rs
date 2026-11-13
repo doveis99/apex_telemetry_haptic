@@ -22,6 +22,7 @@ mod offset {
     pub const PAUSED: usize = 4;
     pub const RENDER_TIME: usize = 24;
     pub const REVISION: usize = 40;
+    pub const GAME: usize = 52; // 1 ETS2, 2 ATS, 0 unknown
     pub const RETARDER_STEPS: usize = 76;
     pub const WHEEL_COUNT: usize = 80;
     pub const MAX_TRAILERS: usize = 92;
@@ -201,6 +202,17 @@ pub trait TelemetrySource: Send {
     fn problem(&self) -> Option<String> {
         None
     }
+    /// The game that is running ("ATS" or "ETS2"), for a source that can tell whose data it reads.
+    fn expect_game(&mut self, _game: Option<&str>) {}
+}
+
+/// The plugin's number for a game (scs_values.game).
+fn game_id(game: &str) -> Option<u32> {
+    match game {
+        "ETS2" => Some(1),
+        "ATS" => Some(2),
+        _ => None,
+    }
 }
 
 struct Mapping {
@@ -293,6 +305,8 @@ pub struct SharedMemoryTelemetry {
     next_open_attempt: Option<Instant>,
     problem: Option<String>,
     buf: Vec<u8>,
+    /// the running game's number in the plugin's terms, when known
+    expected_game: Option<u32>,
 }
 
 impl Default for SharedMemoryTelemetry {
@@ -312,6 +326,7 @@ impl SharedMemoryTelemetry {
             next_open_attempt: None,
             problem: None,
             buf: Vec::new(),
+            expected_game: None,
         }
     }
 
@@ -322,12 +337,17 @@ impl SharedMemoryTelemetry {
         }
         self.next_open_attempt = Some(now + std::time::Duration::from_secs(1));
         self.problem = None;
+        // RenCloud's plugin clears its revision when the game quits (scs_telemetry_shutdown in
+        // its source), but a game that crashes leaves it: a mapping another program still holds
+        // then keeps that game's last frame. So the running game's own mapping goes first, and
+        // any other only when none says it is that game's.
+        let mut found: Option<(Mapping, String)> = None;
         for name in &self.names {
             let Some(mem) = Mapping::open(name) else { continue };
             if mem.size < MAPPING_NEEDED {
                 continue;
             }
-            mem.snapshot(offset::REVISION + 4, &mut self.buf);
+            mem.snapshot(offset::GAME + 4, &mut self.buf);
             let revision = Buf(&self.buf).u32(offset::REVISION);
             if revision == 0 {
                 // Mapping exists (e.g. created by SimHub) but the game has not filled it yet.
@@ -343,11 +363,17 @@ impl SharedMemoryTelemetry {
                 ));
                 continue;
             }
-            self.mem = Some(mem);
-            self.mapping_name = Some(name.clone());
-            return true;
+            let game = Buf(&self.buf).u32(offset::GAME);
+            if self.expected_game.is_none_or(|expected| expected == game) {
+                found = Some((mem, name.clone()));
+                break;
+            }
+            found.get_or_insert((mem, name.clone()));
         }
-        false
+        let Some((mem, name)) = found else { return false };
+        self.mem = Some(mem);
+        self.mapping_name = Some(name);
+        true
     }
 
     fn read_substances(&mut self) {
@@ -486,6 +512,10 @@ impl TelemetrySource for SharedMemoryTelemetry {
 
     fn problem(&self) -> Option<String> {
         self.problem.clone()
+    }
+
+    fn expect_game(&mut self, game: Option<&str>) {
+        self.expected_game = game.and_then(game_id);
     }
 }
 
@@ -658,5 +688,56 @@ pub fn format_g(x: f64) -> String {
         format!("{}", x as i64)
     } else {
         format!("{x}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A mapping as a plugin would leave it: this revision, this game's number.
+    fn plant(name: &str, revision: u32, game: u32) -> Mapping {
+        use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+        use windows_sys::Win32::System::Memory::{CreateFileMappingW, MapViewOfFile, FILE_MAP_WRITE, PAGE_READWRITE};
+        let wide: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
+        // SAFETY: a fresh page-file mapping of MAPPING_NEEDED bytes, written within its size.
+        unsafe {
+            let handle = CreateFileMappingW(INVALID_HANDLE_VALUE, std::ptr::null(), PAGE_READWRITE, 0,
+                                            MAPPING_NEEDED as u32, wide.as_ptr());
+            assert!(!handle.is_null());
+            let view = MapViewOfFile(handle, FILE_MAP_WRITE, 0, 0, 0);
+            assert!(!view.Value.is_null());
+            let bytes = std::slice::from_raw_parts_mut(view.Value as *mut u8, MAPPING_NEEDED);
+            bytes[offset::REVISION..offset::REVISION + 4].copy_from_slice(&revision.to_le_bytes());
+            bytes[offset::GAME..offset::GAME + 4].copy_from_slice(&game.to_le_bytes());
+            Mapping { handle, view, size: MAPPING_NEEDED }
+        }
+    }
+
+    fn opened(names: &[String], game: Option<&str>) -> Option<String> {
+        let mut source = SharedMemoryTelemetry::new(names.to_vec());
+        source.expect_game(game);
+        source.read().map(|_| source.name())
+    }
+
+    #[test]
+    fn the_running_games_mapping_goes_before_another_games() {
+        let name = |tag: &str| format!("Local\\ats_haptics_test_{}_{tag}", std::process::id());
+        let names = [name("ats"), name("ets2"), name("quit")];
+        let _ats = plant(&names[0], SUPPORTED_REVISION, 2);
+        let _ets2 = plant(&names[1], SUPPORTED_REVISION, 1);
+        let _quit = plant(&names[2], 0, 0);
+        assert_eq!(opened(&names, Some("ETS2")), Some(names[1].clone()));
+        assert_eq!(opened(&names, Some("ATS")), Some(names[0].clone()));
+        // not told which game runs: the first usable one, as before
+        assert_eq!(opened(&names, None), Some(names[0].clone()));
+        // a plugin that does not say whose data it is still serves
+        let unknown = [name("unknown")];
+        let _unknown = plant(&unknown[0], SUPPORTED_REVISION, 0);
+        assert_eq!(opened(&unknown, Some("ETS2")), Some(unknown[0].clone()));
+        // only the other game's mapping is there: better than nothing
+        assert_eq!(opened(&names[..1], Some("ETS2")), Some(names[0].clone()));
+        // a mapping the game cleared on quitting is not read
+        assert_eq!(opened(&names[2..], Some("ETS2")), None);
     }
 }

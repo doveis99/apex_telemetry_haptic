@@ -10,8 +10,8 @@ publish = false
 path = "src/lib.rs"
 
 [[bin]]
-name = "ats_haptics"
-path = "src/bin/ats_haptics.rs"
+name = "scs_haptics"
+path = "src/bin/scs_haptics.rs"
 
 [[bin]]
 name = "replay"
@@ -69,5 +69,5 @@ slint-build = "1.18"
 embed-resource = "3"
 
 [[bin]]
-name = "ATSHaptics"
+name = "SCSHaptics"
 path = "src/bin/app/main.rs"

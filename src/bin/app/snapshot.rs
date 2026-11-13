@@ -1,7 +1,7 @@
 //! Draw a window offscreen into a PNG: the same software renderer as on screen, without
 //! opening a window or touching the controller.
 //!
-//!   ATSHaptics.exe --snapshot OUT.png [--language CODE] [--screen main|plugins|calibration|session|result]
+//!   SCSHaptics.exe --snapshot OUT.png [--language CODE] [--screen main|plugins|calibration|session|result]
 
 use std::cell::RefCell;
 use std::rc::Rc;

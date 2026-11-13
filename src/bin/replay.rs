@@ -5,7 +5,7 @@
 //!   replay LOG.csv --from 19:17:50 --to 19:18:10
 //!   replay LOG.csv --settings current    with config.json's settings and motor curves
 //!   replay LOG.csv --knocks 0.5          also list every bump knock of at least 0.5
-//!   ats_haptics --replay LOG.csv         feel it on the pad
+//!   scs_haptics --replay LOG.csv         feel it on the pad
 
 use std::path::PathBuf;
 

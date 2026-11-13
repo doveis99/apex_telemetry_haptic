@@ -1,4 +1,4 @@
-//! The window builds and draws in every language: each screen through ATSHaptics.exe
+//! The window builds and draws in every language: each screen through SCSHaptics.exe
 //! --snapshot, offscreen, with %APPDATA% pointed at an empty folder so the player's config and
 //! error log are left alone.
 
@@ -8,7 +8,7 @@ const SCREENS: [&str; 6] = ["main", "tip", "plugins", "calibration", "session", 
 
 #[test]
 fn every_screen_draws_in_every_language() {
-    let exe = env!("CARGO_BIN_EXE_ATSHaptics");
+    let exe = env!("CARGO_BIN_EXE_SCSHaptics");
     let dir = std::env::temp_dir().join(format!("ats_haptics_window_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let mut failures = Vec::new();

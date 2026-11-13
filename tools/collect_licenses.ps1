@@ -1,6 +1,6 @@
 # Write the license texts of everything compiled into the release executables to one
 # text file for the release zip: the Rust crates they link and the telemetry plugin
-# DLL that ATSHaptics.exe embeds.
+# DLL that SCSHaptics.exe embeds.
 #
 #   powershell -ExecutionPolicy Bypass -File tools\collect_licenses.ps1 OUT.txt VERSION
 #
@@ -78,11 +78,11 @@ foreach ($crate in $crates) {
 
 $lines = New-Object System.Collections.ArrayList
 $add = { param($text) [void]$lines.Add($text) }
-& $add "Third-party licenses in ATS Haptics $Version"
+& $add "Third-party licenses in SCS Haptics $Version"
 & $add ""
-& $add "ATS Haptics is licensed under GPL-3.0-or-later (LICENSE); THIRD_PARTY_NOTICES.md says"
+& $add "SCS Haptics is licensed under GPL-3.0-or-later (LICENSE); THIRD_PARTY_NOTICES.md says"
 & $add "what it includes and why. The executables link the Rust crates listed below, and"
-& $add "ATSHaptics.exe embeds RenCloud's scs-telemetry.dll, which its plugin window installs into"
+& $add "SCSHaptics.exe embeds RenCloud's scs-telemetry.dll, which its plugin window installs into"
 & $add "the game. Each license text follows once, under every package it came from."
 & $add ""
 & $add "Rust crates (version, license as the crate declares it, repository):"

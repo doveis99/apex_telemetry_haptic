@@ -1,14 +1,14 @@
 //! ATS / ETS2 telemetry -> APEX 6 Pro voice-coil haptics, command line (port of ats_haptics.py).
 //!
-//!   ats_haptics                      run with the game (waits for it)
-//!   ats_haptics --simulate           scripted 60 s test drive, no game needed
-//!   ats_haptics --simulate --sim-fps 30   the same drive as a 30 fps game (0: new data every block)
-//!   ats_haptics --scenario city      a few minutes of real driving: highway, city or mountain
-//!   ats_haptics --replay LOG.csv     a drive recorded by the debug log, again (--from/--to HH:MM:SS)
-//!   ats_haptics --dry-run            no controller; print levels only
-//!   ats_haptics --gain 0.8 --road 0.4 --trigger 0.3 --monitor
-//!   ats_haptics --exit-with-game
-//!   ats_haptics --rate 2k            send 2 kHz samples, a report every 4 ms (src/rate2k.rs)
+//!   scs_haptics                      run with the game (waits for it)
+//!   scs_haptics --simulate           scripted 60 s test drive, no game needed
+//!   scs_haptics --simulate --sim-fps 30   the same drive as a 30 fps game (0: new data every block)
+//!   scs_haptics --scenario city      a few minutes of real driving: highway, city or mountain
+//!   scs_haptics --replay LOG.csv     a drive recorded by the debug log, again (--from/--to HH:MM:SS)
+//!   scs_haptics --dry-run            no controller; print levels only
+//!   scs_haptics --gain 0.8 --road 0.4 --trigger 0.3 --monitor
+//!   scs_haptics --exit-with-game
+//!   scs_haptics --rate 2k            send 2 kHz samples, a report every 4 ms (src/rate2k.rs)
 //!
 //! The controller is only opened while ATS/ETS2 is running and released when the game quits.
 //! Defaults come from config.json (saved by the window); flags override them. Close the
@@ -27,7 +27,7 @@ use ats_haptics::settings::Settings;
 use ats_haptics::t;
 use ats_haptics::telemetry::SIMULATED_FPS;
 
-const USAGE: &str = "usage: ats_haptics [--simulate] [--sim-fps FPS] [--dry-run] [--monitor] [--seconds S]
+const USAGE: &str = "usage: scs_haptics [--simulate] [--sim-fps FPS] [--dry-run] [--monitor] [--seconds S]
                    [--exit-with-game] [--gain G] [--grip-level G] [--trigger-level G]
                    [--engine G] [--road G] [--bumps G] [--rumble G] [--wheelspin G] [--gear G]
                    [--retarder G] [--impact G] [--trigger G] [--throttle-pulse P] [--steady-fade F]

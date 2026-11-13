@@ -1,4 +1,4 @@
-# ATS Haptics for Flydigi APEX 6 Pro
+# SCS Haptics for Flydigi APEX 6 Pro
 
 [한국어](README.md) · **English** · [日本語](README.ja.md) · [简体中文](README.zh.md)
 
@@ -31,8 +31,8 @@ Drives the voice-coil (VCM) motors of the Flydigi APEX 6 Pro directly from Ameri
 
 ## Install and quick start
 
-1. Download `ATSHaptics-<version>.zip` from [Releases](../../releases) and unpack it anywhere.
-2. Run `ATSHaptics\ATSHaptics.exe` (the blue controller icon). There is no installer. `ats_haptics.exe` and `replay.exe`, with the dark console icons, are for the command line.
+1. Download `SCSHaptics-<version>.zip` from [Releases](../../releases) and unpack it anywhere.
+2. Run `SCSHaptics\SCSHaptics.exe` (the blue controller icon). There is no installer. `scs_haptics.exe` and `replay.exe`, with the dark console icons, are for the command line.
 3. If no usable telemetry plugin is found for your game, the [plugin window](#telemetry-plugin-window) opens by itself. Press **Install**.
 4. First check that the controller vibrates with **Test drive** → **Start** (a 60-second scenario, no game needed).
 5. Choose **ATS/ETS2 game** → **Start** and launch the game. The app takes the controller when the game starts and releases it when the game ends.
@@ -175,7 +175,7 @@ Shown to the right of the output controls as `controller status · telemetry sta
 | `… · Waiting for telemetry (game loading or no plugin)` | The game is running but there is no telemetry. If it persists after loading, install the plugin. |
 | `No telemetry: … plugin revision N (supported: 12) …` | The installed plugin's data layout revision does not match. Install from the plugin window. |
 | `No controller (check the cable or 2.4G dongle and the power) · retrying in 2 s` | The controller was not found. Check the connection; the app retries every 2 seconds. |
-| `Controller hidden: started by Steam, so Steam Input hides the pad …` | In a process started by Steam (for example ATSHaptics added as a non-Steam game), the pad is invisible while Steam Input is on for the game. Start the window yourself or use the launch option below. |
+| `Controller hidden: started by Steam, so Steam Input hides the pad …` | In a process started by Steam (for example SCSHaptics added as a non-Steam game), the pad is invisible while Steam Input is on for the game. Start the window yourself or use the launch option below. |
 | `Controller not responding (press a button to wake it if it is asleep)` | The dongle is present but the controller does not answer. Press a button to wake it; the app continues by itself. |
 | `Controller disconnected (…)` | The connection dropped while driving. The app continues by itself once it is back. |
 | `Game closed, controller released` | The game ended and the controller was released. The app waits for the next launch. |
@@ -203,7 +203,7 @@ Vibration is built from the data exported by the telemetry plugin installed in t
 In your Steam library, open the game's **Properties → General → Launch options** and enter the following, with the path changed to where you unpacked the app:
 
 ```
-"C:\Tools\ATSHaptics\ATSHaptics.exe" --launch %command%
+"C:\Tools\SCSHaptics\SCSHaptics.exe" --launch %command%
 ```
 
 - When the game starts, the window **opens minimised and starts by itself**. When the game ends, the window closes too, asking first if there are unsaved changes.
@@ -222,7 +222,8 @@ When the window opens it checks GitHub for the latest release. If there is a new
 - No updates while the game runs: when started through the Steam launch option, the executable stays in use until the game ends. Quit the game, open the window again and update.
 - If the install folder is not writable (e.g. `Program Files`) or you run from source, only the release page is opened.
 - Keep the `_internal` folder in the install folder: the update replaces only an install that has it, and otherwise opens the release page. Up to 0.19.0 it held the Python runtime; updating to 0.20.0 leaves a single note in it.
-- The install log is kept at `%TEMP%\ATSHaptics-update-<version>\unpacked\apply-update.log`.
+- The install log is kept at `%TEMP%\SCSHaptics-update-<version>\unpacked\apply-update.log`.
+- Up to 0.22.0 the program was called ATS Haptics (`ATSHaptics.exe`). Those installs cannot install a release from after the rename by themselves and only open the release page. Download the new zip, unpack it to a new folder, and change the path in your Steam launch options to `SCSHaptics.exe`. Your settings stay: they are still read from `%APPDATA%\ATSHaptics`.
 
 ## Tuning tips
 
@@ -261,7 +262,7 @@ When the window opens it checks GitHub for the latest release. If there is a new
 
 **The vibration sometimes kicks oddly.** Turn on **Debug log** at the bottom, press **Start** again, and note the clock time when it happens. Around that time, a `gap_ms` well above 8 means output ran late; a sudden jump in `trigger`/`left_grip`/`right_grip` means this program sent it. If both look normal, the cause is outside the program (radio interference, vibration from the game or Steam Input, firmware). Send the file and the time when you report it.
 
-**I want to collect information for a report.** Run `ATSHaptics.exe --selftest`; it writes the version, controller detection and game/plugin detection to `%TEMP%\ATSHaptics-selftest.txt`. If the status showed `Error: …`, also send `%APPDATA%\ATSHaptics\logs\error.log`, where unexpected errors are logged with the time.
+**I want to collect information for a report.** Run `SCSHaptics.exe --selftest`; it writes the version, controller detection and game/plugin detection to `%TEMP%\SCSHaptics-selftest.txt`. If the status showed `Error: …`, also send `%APPDATA%\ATSHaptics\logs\error.log`, where unexpected errors are logged with the time.
 
 ## Known limitations
 
@@ -276,11 +277,11 @@ When the window opens it checks GitHub for the latest release. If there is a new
 The released program is built from the Rust code at the top of the repository (`Cargo.toml`, `src\`, `ui\`). It needs [Rust](https://rustup.rs) (stable, MSVC toolchain).
 
 ```powershell
-cargo run --release --bin ATSHaptics                        # window
-cargo run --release --bin ats_haptics -- --monitor          # command line: --simulate, --scenario highway|city|mountain, --replay <log.csv>, --exit-with-game, per-effect levels
+cargo run --release --bin SCSHaptics                        # window
+cargo run --release --bin scs_haptics -- --monitor          # command line: --simulate, --scenario highway|city|mountain, --replay <log.csv>, --exit-with-game, per-effect levels
 cargo run --release --bin replay -- <log.csv> --knocks 0.5  # run a debug log through today's synth and compare it with what was logged
 cargo test                                                  # bit-for-bit comparison with the Python implementation (below), window drawing, translations
-powershell -ExecutionPolicy Bypass -File build.ps1          # dist\ATSHaptics-<version>.zip (source and licenses included)
+powershell -ExecutionPolicy Bypass -File build.ps1          # dist\SCSHaptics-<version>.zip (source and licenses included)
 ```
 
 The version is kept in one place, `version` in `Cargo.toml`. The executables, the zip's name and the Python `version.py` all read it from there.
@@ -305,7 +306,7 @@ python tools\pad_sound_analyze.py <recording.wav>           # analyse that recor
 
 Interface strings use the Korean source text as the key (`t("정지됨")` in code, `@tr("정지됨")` in `.slint`). The translations are kept in `MESSAGES` in `python\locales\<language>.py`; a missing translation falls back to English, then Korean. After changing or adding a string, run `python\i18n.py` to check that every language table has it, then regenerate the Rust tables with `tools\export_locales.py` (translations) and `tools\export_gui_texts.py` (slider rows, tooltips, menus).
 
-Steam launch option for your own build: `"<repo>\target\release\ATSHaptics.exe" --launch %command%`
+Steam launch option for your own build: `"<repo>\target\release\SCSHaptics.exe" --launch %command%`
 
 Folders: `src\` and `ui\` hold the Rust app; `resources\` what the executable embeds (the translation tables and the telemetry plugin DLL); `python\` the Python implementation; `tools\` development tools (regenerating the translation tables and the reference data, collecting licenses, analysing recordings); `docs\` screenshots and notes (`docs\rust-port.md`: notes on the move to Rust, in Korean).
 

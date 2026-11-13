@@ -1,7 +1,7 @@
 //! The Steam launch option and the self-test (port of app.py).
 //!
-//!   ATSHaptics.exe --launch %command%    open the window minimized, then run the game and wait
-//!   ATSHaptics.exe --selftest            check the build without a window; report to %TEMP%
+//!   SCSHaptics.exe --launch %command%    open the window minimized, then run the game and wait
+//!   SCSHaptics.exe --selftest            check the build without a window; report to %TEMP%
 
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
@@ -11,7 +11,7 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const DETACHED_PROCESS: u32 = 0x0000_0008;
 
 fn window_command() -> Vec<String> {
-    let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("ATSHaptics.exe"));
+    let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("SCSHaptics.exe"));
     std::iter::once(exe.to_string_lossy().into_owned()).chain(WINDOW_FLAGS.iter().map(|s| s.to_string())).collect()
 }
 
@@ -83,7 +83,7 @@ pub fn launch(game_command: &[String]) -> i32 {
         .unwrap_or(1)
 }
 
-/// Check the build without opening a window; report to %TEMP%\ATSHaptics-selftest.txt.
+/// Check the build without opening a window; report to %TEMP%\SCSHaptics-selftest.txt.
 pub fn selftest() -> i32 {
     let mut lines = vec![
         format!("version {}", crate::runner::version()),
@@ -113,7 +113,7 @@ pub fn selftest() -> i32 {
             1
         }
     };
-    let report = std::env::temp_dir().join("ATSHaptics-selftest.txt");
+    let report = std::env::temp_dir().join("SCSHaptics-selftest.txt");
     let _ = std::fs::write(report, lines.join("\n"));
     status
 }

@@ -1,6 +1,6 @@
 # Third-party notices
 
-ATS Haptics is licensed under the GNU General Public License v3.0 or later (see `LICENSE`).
+SCS Haptics is licensed under the GNU General Public License v3.0 or later (see `LICENSE`).
 It includes or is derived from the following works. The release zip also carries
 `THIRD_PARTY_LICENSES.txt`: every Rust crate compiled into the executables, with its version,
 declared license and license texts, as `tools/collect_licenses.ps1` collects them from
@@ -23,7 +23,7 @@ Public License v3.0 or later.
 `resources/scs-sdk-plugin/scs-telemetry.dll` is the unmodified Win64 build from release
 V.1.12.1 (`release_v_1_12_1.zip`, SHA-256
 `3679ec81407de0ebfb45241e496e2ad31e30a6e409ef0246fc86195bfee9c9a5`; DLL SHA-256
-`1d03dbc7a975e72203c60a7b9998021ceb8800b836bf28a131279979ad386cd4`). `ATSHaptics.exe` carries
+`1d03dbc7a975e72203c60a7b9998021ceb8800b836bf28a131279979ad386cd4`). `SCSHaptics.exe` carries
 it inside and copies it into the game's `plugins` folder from its plugin window. The
 shared-memory layout read by `src/telemetry.rs` and `python/telemetry.py` follows that plugin's
 `scs-telemetry-common.hpp` (revision 12). Its MIT license is in
@@ -40,10 +40,10 @@ package's revision 12 structure definitions. No code from the package is include
 
 <https://slint.dev>, <https://github.com/slint-ui/slint>
 
-The window toolkit compiled into `ATSHaptics.exe` (`slint` 1.18 and its `i-slint-*` crates,
+The window toolkit compiled into `SCSHaptics.exe` (`slint` 1.18 and its `i-slint-*` crates,
 with the winit backend and the software renderer). Slint is offered under GPL-3.0-only or one
 of two Slint licenses; this program takes GPL-3.0. Because that is GPL-3.0 *only*, the
-`ATSHaptics.exe` that combines it with this program's own GPL-3.0-or-later code is distributed
+`SCSHaptics.exe` that combines it with this program's own GPL-3.0-or-later code is distributed
 under GPL-3.0.
 
 ## HIDAPI — hidapi crate (MIT) and the HIDAPI C library (GPL-3.0, BSD or the original HIDAPI license)

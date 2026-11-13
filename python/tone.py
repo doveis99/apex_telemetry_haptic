@@ -253,7 +253,7 @@ def run_split(pad: Apex6, freq: float, amps: list[float], seconds: float,
         ratings[(amp, finger, route)] = _ask_rating(play)
 
     lines = [
-        f"트리거 좌우 분리 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        f"트리거 좌우 분리 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, SCS 햅틱 {__version__}",
         *_device_lines(info, firmware, dongle),
         f"톤: {freq:g} Hz, {seconds:g}초, 0x53 mode=0x02",
         "평가: 같은 세기의 기준음(BOTH)과 비교한 시험음 (BOTH 칸은 대조군이라 '비슷'이 정상)",
@@ -376,7 +376,7 @@ def run_byte_check(pad: Apex6, field: str, values: list[int], route: str, freq: 
     configure(control)
 
     lines = [
-        f"0x53 {name} 바이트 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        f"0x53 {name} 바이트 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, SCS 햅틱 {__version__}",
         *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
         f"톤: {freq:g} Hz, {seconds:g}초, 0x57 route={route}, 기준 {name} 0x{control:02X}",
         f"평가: 기본값으로 울린 기준음과 비교한 시험음 (0x{control:02X} 칸은 대조군이라 '비슷'이 정상)",
@@ -487,7 +487,7 @@ def run_ram_check(pad: Apex6, check: str, targets: list[int]) -> None:
     keyword, _, name, part, _ = BYTE_FIELDS[field]
     info = pad.info
     lines = [
-        f"0x53 {name}별 모터 RAM {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        f"0x53 {name}별 모터 RAM {datetime.now():%Y-%m-%d %H:%M:%S}, SCS 햅틱 {__version__}",
         *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
         "진동 없이 모터를 켜고 끄기만 하며, 바뀐 바이트는 시작할 때와 비교",
         "",
@@ -758,7 +758,7 @@ def run_side_check(pad: Apex6, freq: float, amp: float, trials: int) -> None:
         return
 
     lines = [
-        f"트리거 좌우 전환 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        f"트리거 좌우 전환 진단 {datetime.now():%Y-%m-%d %H:%M:%S}, SCS 햅틱 {__version__}",
         *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
         f"톤: {freq:g} Hz, {amp:g}%, {SIDE_SEGMENT_S:g}초씩 {SIDE_SEGMENTS}구간, 스트리밍 중에 0x53으로 쪽을 바꿈",
         f"답: {'패드 버튼' if buttons.connected else '키보드'}",
@@ -885,7 +885,7 @@ def run_rate_check(pad: Apex6, periods_ms: list[float], taps: int, amp: float) -
         counts[period_ms] = (taps, _ask_count(play))
 
     lines = [
-        f"리포트 간격 진단 (탭 세기) {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        f"리포트 간격 진단 (탭 세기) {datetime.now():%Y-%m-%d %H:%M:%S}, SCS 햅틱 {__version__}",
         *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
         f"탭: 양쪽 그립 {amp:g}%, {taps}번, 약 {TAP_SPACING_S:g}초 간격. 탭마다 리포트 하나(8샘플)를 채우고 "
         "나머지 리포트는 무음",
@@ -1029,7 +1029,7 @@ def run_model_check(pad: Apex6, periods_ms: list[float], trials: int, freq: floa
 
     verdicts = {period: model_verdict(period, picks[period]) for period in periods_ms}
     lines = [
-        f"리포트 재생 모델 진단 (X/Y) {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        f"리포트 재생 모델 진단 (X/Y) {datetime.now():%Y-%m-%d %H:%M:%S}, SCS 햅틱 {__version__}",
         *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
         f"톤: 양쪽 그립 {freq:g} Hz, {amp:g}%, {seconds:g}초, 1초에 {MODEL_PULSE_HZ:g}번 끊김. "
         "기준음은 8 ms 간격 1 kHz",
@@ -1767,7 +1767,7 @@ def run_strength_check(pad: Apex6, trials: int) -> None:
         print("그만둡니다.")
         return
     lines = [
-        f"세기 체감 점검 {datetime.now():%Y-%m-%d %H:%M:%S}, ATS 햅틱 {__version__}",
+        f"세기 체감 점검 {datetime.now():%Y-%m-%d %H:%M:%S}, SCS 햅틱 {__version__}",
         *_device_lines(info, info.firmware.get("controller", ""), info.firmware.get("dongle", "")),
         f"양쪽 그립, {STRENGTH_SECONDS:g}초씩, 기준 {STRENGTH_BASE:g}%, 순서 무작위, 다시 듣기 {replays}번",
         f"답: {'패드 버튼' if buttons.connected else '키보드'}, {len(results)}/{len(plan)}회",

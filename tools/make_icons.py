@@ -2,8 +2,8 @@
 
     python tools/make_icons.py [--preview OUT.png]
 
-  ATSHaptics.ico   the window: a bright blue tile with a vibrating controller, the one to open
-  ats_haptics.ico  the command line: a dark console window with a >_ prompt
+  SCSHaptics.ico   the window: a bright blue tile with a vibrating controller, the one to open
+  scs_haptics.ico  the command line: a dark console window with a >_ prompt
   replay.ico       the debug-log replay: the same console window with an orange replay arrow
 
 The colours are the window's own (ui/widgets.slint Theme): grip blue, trigger orange, card dark.
@@ -87,7 +87,7 @@ def arc(draw: ImageDraw.ImageDraw, centre, radius: float, start: float, end: flo
         draw.ellipse([x - width / 2, y - width / 2, x + width / 2, y + width / 2], fill=fill)
 
 
-# --- the window: ATSHaptics.exe ---------------------------------------------------------------
+# --- the window: SCSHaptics.exe ---------------------------------------------------------------
 
 def window_icon(size: int) -> Image.Image:
     c = Canvas(size)
@@ -148,7 +148,7 @@ def window_icon(size: int) -> Image.Image:
     return c.finish()
 
 
-# --- the console programs: ats_haptics.exe and replay.exe ----------------------------------------
+# --- the console programs: scs_haptics.exe and replay.exe ----------------------------------------
 
 def console_frame(c: Canvas) -> tuple[float, float, float, float]:
     """A dark window with a caption strip; returns the content area."""
@@ -260,8 +260,8 @@ def write_ico(path: Path, frames: list[Image.Image]) -> None:
 
 
 ICONS = {
-    "ATSHaptics": window_icon,
-    "ats_haptics": command_line_icon,
+    "SCSHaptics": window_icon,
+    "scs_haptics": command_line_icon,
     "replay": replay_icon,
 }
 

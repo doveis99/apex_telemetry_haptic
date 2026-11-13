@@ -272,7 +272,7 @@ impl App {
     fn build(&mut self) {
         let ui = &self.ui;
         let version = env!("CARGO_PKG_VERSION");
-        let mut title = format!("{} {version} - APEX 6 Pro", t!("ATS 햅틱"));
+        let mut title = format!("{} {version} - APEX 6 Pro", t!("SCS 햅틱"));
         if self.dry_run {
             title.push_str(" (dry-run)");
         }

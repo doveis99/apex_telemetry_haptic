@@ -479,7 +479,7 @@ fn main() {
     println!("연결: {}", if info.connection_mode == 0 { "유선" } else { "무선" });
     let mut lines = vec![
         format!(
-            "트리거 내장 효과(0x53 mode 4) {} {}, ATS 햅틱 {}",
+            "트리거 내장 효과(0x53 mode 4) {} {}, SCS 햅틱 {}",
             match mode.as_str() {
                 "ram" => "RAM 점검",
                 "rate" => "빠르기 값 점검 (안 가림)",

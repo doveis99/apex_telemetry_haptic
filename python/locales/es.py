@@ -46,7 +46,7 @@ MESSAGES = {
     "{name} 플러그인 버전 {revision} (지원: {supported})": "plugin {name} revisión {revision} (compatible: {supported})",
     "다운로드한 파일의 해시가 릴리스와 다릅니다": "El hash del archivo descargado no coincide con la versión",
     "릴리스 zip에 {exe}이 없습니다": "Falta {exe} en el zip de la versión",
-    "ATS 햅틱": "ATS Háptica",
+    "SCS 햅틱": "SCS Háptica",
     "게임 종료 시 닫힘": "se cierra con el juego",
     "텔레메트리 플러그인": "Plugin de telemetría",
     "출력 제어": "Control de salida",

@@ -1,6 +1,8 @@
 # Rust 포팅
 
-파이썬 앱을 Rust로 옮겼음: 창(`ATSHaptics.exe`), 명령줄(`ats_haptics.exe`), 기록 요약(`replay.exe`). 0.20.0부터 배포 zip은 이 코드로 만듦 ([배포 빌드](#배포-빌드)). `python/`의 파이썬 파일은 비교 기준과 패드 진단(`tone.py`)용으로 남아 있음. 실제 패드로는 아직 써 보지 않았음.
+파이썬 앱을 Rust로 옮겼음: 창(`SCSHaptics.exe`), 명령줄(`scs_haptics.exe`), 기록 요약(`replay.exe`). 0.20.0부터 배포 zip은 이 코드로 만듦 ([배포 빌드](#배포-빌드)). `python/`의 파이썬 파일은 비교 기준과 패드 진단(`tone.py`)용으로 남아 있음. 실제 패드로는 아직 써 보지 않았음.
+
+0.22.0까지는 창이 `ATSHaptics.exe`, 명령줄이 `ats_haptics.exe`였음(크레이트 이름 `ats_haptics`와 설정 폴더 `%APPDATA%\ATSHaptics`는 그대로). 아래에서 날짜가 붙은 확인 기록은 그때 이름 그대로 둠.
 
 ## 폴더
 
@@ -53,12 +55,12 @@ cargo는 저장소 안 어디서 실행해도 `.cargo/config.toml`을 읽음 (`r
 | private 메모리 | 29 MB | 152 MB | 13 MB |
 | CPU, 미터 10 Hz | 0.3% | 1.4% | 0.8% |
 
-실제 창(`ATSHaptics.exe --dry-run`, 정지 상태): private 18.5 MB, CPU 0.6%, exe 13.5 MB 하나.
+실제 창(`SCSHaptics.exe --dry-run`, 정지 상태): private 18.5 MB, CPU 0.6%, exe 13.5 MB 하나.
 
 - 배치와 색은 `gui.py`/`widgets.py` 그대로 옮김 (카드, 슬라이더, 그립·트리거·둘 다 선택, 스위치, 미터, 말풍선 도움말, 메뉴)
 - 고정 글은 `.slint`의 `@tr("한국어 원문")`, 값이 섞인 글과 효과 줄은 Rust의 `t!()`. 둘 다 파이썬 표의 한국어 원문이 키
 - 슬라이더 줄, 말풍선 설명, 메뉴 이름은 `tools/export_gui_texts.py`가 `gui.py`에서 그대로 뽑아 `src/bin/app/specs.rs`를 만듦
-- `ATSHaptics.exe --snapshot 파일.png --language en --screen main|tip|plugins|calibration|session|result`: 창을 띄우지 않고 같은 렌더러로 그려 봄
+- `SCSHaptics.exe --snapshot 파일.png --language en --screen main|tip|plugins|calibration|session|result`: 창을 띄우지 않고 같은 렌더러로 그려 봄
 
 ## 파이썬과 같은지 확인
 
@@ -101,9 +103,9 @@ Rust가 쓴 기록은 파이썬 `replay.py`도 그대로 읽음 (같은 요약�
 
 `powershell -ExecutionPolicy Bypass -File build.ps1` (저장소 맨 위에서):
 
-- `cargo build --release`로 `ATSHaptics.exe`(창), `ats_haptics.exe`(명령줄), `replay.exe`를 만들어 `dist\ATSHaptics\`에 모으고 `dist\ATSHaptics-<버전>.zip`으로 묶음. 플러그인 DLL은 `ATSHaptics.exe` 안에 있음
+- `cargo build --release`로 `SCSHaptics.exe`(창), `scs_haptics.exe`(명령줄), `replay.exe`를 만들어 `dist\SCSHaptics\`에 모으고 `dist\SCSHaptics-<버전>.zip`으로 묶음. 플러그인 DLL은 `SCSHaptics.exe` 안에 있음
 - 함께 넣는 것: README 4개, `LICENSE`, `THIRD_PARTY_NOTICES.md`, `docs\`, `source\`(git이 추적하거나 새로 생긴 파일, `target`·`tests/golden-data` 빼고), `THIRD_PARTY_LICENSES.txt`(`tools/collect_licenses.ps1`이 `Cargo.lock` 기준으로 실행 파일에 링크된 크레이트 183개의 라이선스 원문을 모음)
-- `_internal\README.txt`: 파이썬 0.19 이하의 업데이터는 새 zip에서 `ATSHaptics.exe` 옆에 `_internal` 폴더가 있어야 받아들이고, 그 폴더를 `/MIR`로 덮어써 파이썬 런타임을 지움. Rust 업데이터도 같은 폴더로 설치본을 알아봄. `Compress-Archive`가 빈 폴더를 버려서 설명 파일을 넣음. `build.ps1`이 zip 안에 둘 다 있는지 마지막에 확인함
+- `_internal\README.txt`: 파이썬 0.19 이하의 업데이터는 새 zip에서 `SCSHaptics.exe` 옆에 `_internal` 폴더가 있어야 받아들이고, 그 폴더를 `/MIR`로 덮어써 파이썬 런타임을 지움. Rust 업데이터도 같은 폴더로 설치본을 알아봄. `Compress-Archive`가 빈 폴더를 버려서 설명 파일을 넣음. `build.ps1`이 zip 안에 둘 다 있는지 마지막에 확인함
 - 버전은 `Cargo.toml`의 `version` 한 곳(0.20.0부터). exe는 `CARGO_PKG_VERSION`, `build.ps1`은 zip 이름, 파이썬 `version.py`는 `tomllib`로 같은 값을 읽음
 - `.cargo/config.toml`: VC 런타임(`vcruntime140.dll`)은 정적으로 링크하고 UCRT(`ucrtbase.dll`, Windows 10/11 기본)는 동적으로 둠. 파이썬 배포는 `_internal`에 `vcruntime140.dll`을 넣어 다녔기 때문에, 이게 없으면 VC++ 재배포 패키지가 없는 PC에서 업데이트 후 실행이 안 됨. 수학 함수는 파이썬과 같은 `ucrtbase.dll` 것을 그대로 써서 비트 단위 비교도 그대로 통과함
 

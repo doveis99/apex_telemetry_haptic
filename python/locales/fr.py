@@ -48,7 +48,7 @@ MESSAGES = {
         "plugin {name} révision {revision} (prise en charge : {supported})",
     "다운로드한 파일의 해시가 릴리스와 다릅니다": "Le hachage du fichier téléchargé ne correspond pas à la version",
     "릴리스 zip에 {exe}이 없습니다": "{exe} est absent du zip de la version",
-    "ATS 햅틱": "ATS Haptique",
+    "SCS 햅틱": "SCS Haptique",
     "게임 종료 시 닫힘": "se ferme avec le jeu",
     "텔레메트리 플러그인": "Plugin de télémétrie",
     "출력 제어": "Contrôle de sortie",

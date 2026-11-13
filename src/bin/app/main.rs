@@ -1,11 +1,11 @@
-//! ATSHaptics.exe: the live tuning window (port of app.py and gui.py's main).
+//! SCSHaptics.exe: the live tuning window (port of app.py and gui.py's main).
 //!
-//!   ATSHaptics.exe                       the window
-//!   ATSHaptics.exe --launch %command%    Steam launch option: open the window minimized, then
+//!   SCSHaptics.exe                       the window
+//!   SCSHaptics.exe --launch %command%    Steam launch option: open the window minimized, then
 //!                                        run the game and wait
-//!   ATSHaptics.exe --dry-run | --autostart | --exit-with-game | --minimized
-//!   ATSHaptics.exe --selftest            check the build; report to %TEMP%\ATSHaptics-selftest.txt
-//!   ATSHaptics.exe --snapshot OUT.png [--language CODE] [--screen main|plugins|calibration]
+//!   SCSHaptics.exe --dry-run | --autostart | --exit-with-game | --minimized
+//!   SCSHaptics.exe --selftest            check the build; report to %TEMP%\SCSHaptics-selftest.txt
+//!   SCSHaptics.exe --snapshot OUT.png [--language CODE] [--screen main|plugins|calibration]
 //!                                        draw a window offscreen into a PNG, for checking the layout
 //!
 //! Only one window runs at a time; a second launch exits quietly, and if it came from the

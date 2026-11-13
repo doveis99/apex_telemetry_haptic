@@ -10,9 +10,9 @@ use std::path::Path;
 
 /// (binary, icon, FileDescription)
 const PROGRAMS: [(&str, &str, &str); 3] = [
-    ("ATSHaptics", "ATSHaptics.ico", "ATS Haptics"),
-    ("ats_haptics", "ats_haptics.ico", "ATS Haptics command line"),
-    ("replay", "replay.ico", "ATS Haptics debug log replay"),
+    ("SCSHaptics", "SCSHaptics.ico", "SCS Haptics"),
+    ("scs_haptics", "scs_haptics.ico", "SCS Haptics command line"),
+    ("replay", "replay.ico", "SCS Haptics debug log replay"),
 ];
 
 fn main() {
@@ -57,7 +57,7 @@ BEGIN
             VALUE "FileVersion", "{version}"
             VALUE "InternalName", "{binary}"
             VALUE "OriginalFilename", "{binary}.exe"
-            VALUE "ProductName", "ATS Haptics"
+            VALUE "ProductName", "SCS Haptics"
             VALUE "ProductVersion", "{version}"
         END
     END

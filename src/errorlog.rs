@@ -22,7 +22,7 @@ pub fn log_error(message: &str, place: &str) {
         let now = crate::clock::now();
         let stamp = format!("{:04}-{:02}-{:02} {}", now.year, now.month, now.day, now.hms());
         let mut out = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
-        writeln!(out, "--- {stamp} ATSHaptics {} · {place}", crate::runner::version())?;
+        writeln!(out, "--- {stamp} SCSHaptics {} · {place}", crate::runner::version())?;
         writeln!(out, "{message}")
     })();
 }

@@ -120,7 +120,7 @@ impl Plugins {
 
     /// The bundled plugin as a file beside the error, for copying by hand.
     fn bundled_file() -> String {
-        let path = std::env::temp_dir().join("ATSHaptics-plugin").join(PLUGIN_FILE);
+        let path = std::env::temp_dir().join("SCSHaptics-plugin").join(PLUGIN_FILE);
         let _ = std::fs::create_dir_all(path.parent().unwrap());
         let _ = std::fs::write(&path, BUNDLED_PLUGIN);
         path.display().to_string()

@@ -1,4 +1,4 @@
-# ATS ハプティクス for Flydigi APEX 6 Pro
+# SCS ハプティクス for Flydigi APEX 6 Pro
 
 [한국어](README.md) · [English](README.en.md) · **日本語** · [简体中文](README.zh.md)
 
@@ -31,8 +31,8 @@ American Truck Simulator / Euro Truck Simulator 2 のテレメトリーで、Fly
 
 ## インストールとクイックスタート
 
-1. [Releases](../../releases) から `ATSHaptics-<バージョン>.zip` をダウンロードし、好きな場所に展開します。
-2. `ATSHaptics\ATSHaptics.exe`（青いコントローラーのアイコン）を実行します。インストール作業はありません。黒いコンソールのアイコンの `ats_haptics.exe` と `replay.exe` はコマンドライン用です。
+1. [Releases](../../releases) から `SCSHaptics-<バージョン>.zip` をダウンロードし、好きな場所に展開します。
+2. `SCSHaptics\SCSHaptics.exe`（青いコントローラーのアイコン）を実行します。インストール作業はありません。黒いコンソールのアイコンの `scs_haptics.exe` と `replay.exe` はコマンドライン用です。
 3. ゲームで使えるテレメトリープラグインがない場合は、[プラグイン ウィンドウ](#テレメトリープラグイン-ウィンドウ)が自動で開きます。**インストール**を押してください。
 4. まず **テスト走行** → **開始** で振動が来るか確認します（ゲーム不要の 60 秒シナリオ）。
 5. **ATS/ETS2 ゲーム** → **開始** を押してゲームを起動します。ゲームが始まるとコントローラーを掴み、ゲームが終わると解放します。
@@ -175,7 +175,7 @@ American Truck Simulator / Euro Truck Simulator 2 のテレメトリーで、Fly
 | `… · テレメトリー待機中（ゲーム読み込み中、またはプラグインなし）` | ゲームは実行中ですがテレメトリーがありません。読み込みが終わっても続くならプラグインをインストールしてください。 |
 | `テレメトリーなし: … プラグインのリビジョン N（対応: 12）…` | インストールされたプラグインのデータ構造のバージョンが合いません。プラグイン ウィンドウからインストールしてください。 |
 | `コントローラーなし（有線/2.4Gドングルの接続と電源を確認） · 2 秒後に再試行` | コントローラーが見つかりません。接続を確認してください。2 秒ごとに自動で再試行します。 |
-| `コントローラーが見えません: Steam から起動されたため Steam Input がパッドを隠しています …` | Steam が起動したプロセス（例: Steam 以外のゲームとして登録した ATSHaptics）では、ゲームの Steam Input がオンだとパッドが見えません。ウィンドウを直接起動するか、下の起動オプションを使ってください。 |
+| `コントローラーが見えません: Steam から起動されたため Steam Input がパッドを隠しています …` | Steam が起動したプロセス（例: Steam 以外のゲームとして登録した SCSHaptics）では、ゲームの Steam Input がオンだとパッドが見えません。ウィンドウを直接起動するか、下の起動オプションを使ってください。 |
 | `コントローラーが応答しません（スリープ中ならボタンを押して起こしてください）` | ドングルは見えていますが、コントローラーが応答しません。ボタンを押して起こせば自動で続きます。 |
 | `コントローラーの接続が切れました（…）` | 走行中に接続が切れました。つながり直せば自動で続きます。 |
 | `ゲーム終了、コントローラーを解放しました` | ゲームが終わったのでコントローラーを解放しました。次のゲーム起動を待ちます。 |
@@ -203,7 +203,7 @@ American Truck Simulator / Euro Truck Simulator 2 のテレメトリーで、Fly
 Steam ライブラリでゲームの **プロパティ → 一般 → 起動オプション** に次のように入力します。パスは展開した場所に変えてください。
 
 ```
-"C:\Tools\ATSHaptics\ATSHaptics.exe" --launch %command%
+"C:\Tools\SCSHaptics\SCSHaptics.exe" --launch %command%
 ```
 
 - ゲームを起動するとウィンドウが**最小化された状態で一緒に開き、自動で開始**します。ゲームを終了するとウィンドウも閉じます。未保存の変更があれば、閉じる前に尋ねます。
@@ -222,7 +222,8 @@ Steam ライブラリでゲームの **プロパティ → 一般 → 起動オ�
 - ゲームの実行中はアップデートしません。Steam 起動オプションで開いた場合、ゲームが終わるまで実行ファイルが使用中だからです。ゲームを終了してからウィンドウを開き直してアップデートしてください。
 - インストールフォルダーに書き込む権限がない場合（例: `Program Files`）や、ソースから実行している場合はリリースページを開くだけです。
 - インストールフォルダーの `_internal` フォルダーは消さないでください。このフォルダーがあるときだけインストールフォルダーを置き換え、なければリリースページを開くだけです。0.19.0 までは Python ランタイムが入っていて、0.20.0 にアップデートすると説明ファイルが 1 つ残るだけになります。
-- インストールの記録は `%TEMP%\ATSHaptics-update-<バージョン>\unpacked\apply-update.log` に残ります。
+- インストールの記録は `%TEMP%\SCSHaptics-update-<バージョン>\unpacked\apply-update.log` に残ります。
+- 0.22.0 まではプログラム名が ATS ハプティクス（`ATSHaptics.exe`）でした。そのインストールは名前が変わったあとのリリースを自動ではインストールできず、リリースページを開くだけです。新しい zip をダウンロードして新しいフォルダーに展開し、Steam の起動オプションに書いたパスも `SCSHaptics.exe` に直してください。設定は同じフォルダー（`%APPDATA%\ATSHaptics`）を使い続けるので、そのまま残ります。
 
 ## 調整のコツ
 
@@ -261,7 +262,7 @@ Steam ライブラリでゲームの **プロパティ → 一般 → 起動オ�
 
 **ときどき振動がおかしく跳ねます。** 下の **デバッグ記録** をオンにしてもう一度 **開始** し、跳ねたときに時計を見て時刻を覚えておいてください。その時刻付近の行で `gap_ms` が 8 より大きく跳ねていれば出力が遅れたということで、`trigger`/`left_grip`/`right_grip` の値が急に大きくなっていれば、このプログラムがそう送ったということです。どちらも普段どおりなら、プログラムの外の原因（無線の干渉、ゲームや Steam Input の振動、ファームウェア）です。問い合わせのときはこのファイルと時刻を一緒に送ってください。
 
-**問い合わせ用に情報を集めたいです。** `ATSHaptics.exe --selftest` を実行すると、`%TEMP%\ATSHaptics-selftest.txt` にバージョン、コントローラーの認識、ゲーム・プラグインの検出結果が記録されます。状態表示に `エラー: …` が出たなら、`%APPDATA%\ATSHaptics\logs\error.log` も一緒に送ってください。予期しないエラーが時刻とともに記録されています。
+**問い合わせ用に情報を集めたいです。** `SCSHaptics.exe --selftest` を実行すると、`%TEMP%\SCSHaptics-selftest.txt` にバージョン、コントローラーの認識、ゲーム・プラグインの検出結果が記録されます。状態表示に `エラー: …` が出たなら、`%APPDATA%\ATSHaptics\logs\error.log` も一緒に送ってください。予期しないエラーが時刻とともに記録されています。
 
 ## 既知の制限
 
@@ -276,11 +277,11 @@ Steam ライブラリでゲームの **プロパティ → 一般 → 起動オ�
 配布しているプログラムはリポジトリ直下の Rust コード（`Cargo.toml`、`src\`、`ui\`）からビルドします。[Rust](https://rustup.rs)（stable、MSVC ツールチェーン）が必要です。
 
 ```powershell
-cargo run --release --bin ATSHaptics                        # ウィンドウ
-cargo run --release --bin ats_haptics -- --monitor          # コマンドライン: --simulate, --scenario highway|city|mountain, --replay <記録.csv>, --exit-with-game, エフェクトごとの強さ
+cargo run --release --bin SCSHaptics                        # ウィンドウ
+cargo run --release --bin scs_haptics -- --monitor          # コマンドライン: --simulate, --scenario highway|city|mountain, --replay <記録.csv>, --exit-with-game, エフェクトごとの強さ
 cargo run --release --bin replay -- <記録.csv> --knocks 0.5  # デバッグ記録を今の合成器でもう一度流し、記録と比べる
 cargo test                                                  # Python 実装とビット単位で同じか（下記）、ウィンドウの描画、翻訳
-powershell -ExecutionPolicy Bypass -File build.ps1          # dist\ATSHaptics-<バージョン>.zip（ソースとライセンス同梱）
+powershell -ExecutionPolicy Bypass -File build.ps1          # dist\SCSHaptics-<バージョン>.zip（ソースとライセンス同梱）
 ```
 
 バージョンは `Cargo.toml` の `version` 1 か所だけにあります。実行ファイル、配布 zip の名前、Python の `version.py` はすべてここから読みます。
@@ -305,7 +306,7 @@ python tools\pad_sound_analyze.py <録音.wav>                # その録音を�
 
 画面の文言は韓国語の原文がそのままキーになっています（コードでは `t("정지됨")`、`.slint` では `@tr("정지됨")`）。翻訳の元は `python\locales\<言語>.py` の `MESSAGES` で、翻訳がなければ英語、その次に韓国語で表示されます。文言を変えたり追加したりしたら、`python\i18n.py` ですべての言語の表に反映されているか確認し、`tools\export_locales.py`（翻訳表）と `tools\export_gui_texts.py`（スライダーの行、ツールチップ、メニュー）で Rust 側の表を作り直してください。
 
-自分でビルドしたものの Steam 起動オプション: `"<repo>\target\release\ATSHaptics.exe" --launch %command%`
+自分でビルドしたものの Steam 起動オプション: `"<repo>\target\release\SCSHaptics.exe" --launch %command%`
 
 フォルダー: `src\` と `ui\` は Rust アプリ、`resources\` は実行ファイルに入る翻訳表とテレメトリープラグイン DLL、`python\` は Python 実装、`tools\` は開発ツール（翻訳表と比較データの生成、ライセンスの収集、録音の分析）、`docs\` はスクリーンショットとメモ（`docs\rust-port.md`: Rust 移植の記録、韓国語）です。
 

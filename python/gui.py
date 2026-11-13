@@ -215,7 +215,7 @@ class App:
 
     def _build(self) -> None:
         root = self.root
-        title = f"{t('ATS 햅틱')} {__version__} - APEX 6 Pro" + (" (dry-run)" if self.dry_run else "")
+        title = f"{t('SCS 햅틱')} {__version__} - APEX 6 Pro" + (" (dry-run)" if self.dry_run else "")
         root.title(title + (" · " + t("게임 종료 시 닫힘") if self.exit_with_game else ""))
         self.slider_vars: dict[str, tuple[tk.DoubleVar, tk.Label, int, str]] = {}
         self.sliders: dict[str, Slider] = {}
@@ -233,7 +233,7 @@ class App:
         # header: name, version and repository link on the left; plugin, language and update on the right
         header = tk.Frame(root, bg=BG)
         header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=px(18), pady=(px(14), px(8)))
-        tk.Label(header, text=t("ATS 햅틱"), bg=BG, fg=TEXT, font=font(16, "bold")).pack(side="left")
+        tk.Label(header, text=t("SCS 햅틱"), bg=BG, fg=TEXT, font=font(16, "bold")).pack(side="left")
         subtitle = f"APEX 6 Pro · v{__version__}" + (" · dry-run" if self.dry_run else "")
         tk.Label(header, text=subtitle, bg=BG, fg=MUTED, font=font(9)).pack(side="left", padx=(px(10), 0), pady=(px(6), 0))
         tip(Link(header, "GitHub ↗", lambda: webbrowser.open(updater.PAGE_URL)),

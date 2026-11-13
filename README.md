@@ -1,4 +1,4 @@
-# ATS 햅틱 for Flydigi APEX 6 Pro
+# SCS 햅틱 for Flydigi APEX 6 Pro
 
 **한국어** · [English](README.en.md) · [日本語](README.ja.md) · [简体中文](README.zh.md)
 
@@ -29,8 +29,8 @@ American Truck Simulator / Euro Truck Simulator 2의 텔레메트리로 Flydigi 
 
 ## 설치와 빠른 시작
 
-1. [Releases](../../releases)에서 `ATSHaptics-<버전>.zip`을 받아 원하는 곳에 압축을 풉니다.
-2. `ATSHaptics\ATSHaptics.exe`(파란 컨트롤러 아이콘)를 실행합니다. 설치 과정은 없습니다. 검은 콘솔 아이콘의 `ats_haptics.exe`와 `replay.exe`는 명령줄용입니다.
+1. [Releases](../../releases)에서 `SCSHaptics-<버전>.zip`을 받아 원하는 곳에 압축을 풉니다.
+2. `SCSHaptics\SCSHaptics.exe`(파란 컨트롤러 아이콘)를 실행합니다. 설치 과정은 없습니다. 검은 콘솔 아이콘의 `scs_haptics.exe`와 `replay.exe`는 명령줄용입니다.
 3. 게임에 쓸 수 있는 텔레메트리 플러그인이 없으면 [플러그인 창](#텔레메트리-플러그인-창)이 자동으로 열립니다. **설치**를 누르세요.
 4. 먼저 **테스트 주행** → **시작**으로 진동이 오는지 확인합니다(게임 없이 60초 시나리오).
 5. **ATS/ETS2 게임** → **시작**을 누르고 게임을 실행합니다. 게임이 켜지면 컨트롤러를 잡고, 게임이 끝나면 놓습니다.
@@ -173,7 +173,7 @@ American Truck Simulator / Euro Truck Simulator 2의 텔레메트리로 Flydigi 
 | `… · 텔레메트리 대기 중 (게임 로딩 중이거나 플러그인 없음)` | 게임은 실행 중인데 텔레메트리가 없습니다. 로딩이 끝나도 계속되면 플러그인을 설치하세요. |
 | `텔레메트리 없음: … 플러그인 버전 N (지원: 12) …` | 설치된 플러그인의 데이터 구조 버전이 맞지 않습니다. 플러그인 창에서 설치하세요. |
 | `컨트롤러 없음 (유선/2.4G 동글 연결, 전원 확인) · 2초 후 재시도` | 컨트롤러를 찾지 못했습니다. 연결을 확인하세요. 2초마다 자동으로 다시 시도합니다. |
-| `컨트롤러 안 보임: Steam이 실행한 프로세스라 Steam Input이 패드를 숨김 …` | Steam이 실행한 프로세스(예: 비 Steam 게임으로 등록한 ATSHaptics)에서는 게임에 Steam Input이 켜져 있으면 패드가 보이지 않습니다. 창을 직접 실행하거나 아래 실행 옵션을 쓰세요. |
+| `컨트롤러 안 보임: Steam이 실행한 프로세스라 Steam Input이 패드를 숨김 …` | Steam이 실행한 프로세스(예: 비 Steam 게임으로 등록한 SCSHaptics)에서는 게임에 Steam Input이 켜져 있으면 패드가 보이지 않습니다. 창을 직접 실행하거나 아래 실행 옵션을 쓰세요. |
 | `컨트롤러 응답 없음 (절전 중이면 버튼을 눌러 깨우세요)` | 동글은 보이지만 컨트롤러가 응답하지 않습니다. 버튼을 눌러 깨우면 자동으로 이어집니다. |
 | `컨트롤러 연결 끊김 (…)` | 주행 중 연결이 끊겼습니다. 다시 연결되면 자동으로 이어집니다. |
 | `게임 종료됨, 컨트롤러 해제` | 게임이 끝나서 컨트롤러를 놓았습니다. 다음 게임 실행을 기다립니다. |
@@ -201,7 +201,7 @@ American Truck Simulator / Euro Truck Simulator 2의 텔레메트리로 Flydigi 
 Steam 라이브러리에서 게임 **속성 → 일반 → 실행 옵션**에 아래처럼 넣습니다. 경로는 압축을 푼 위치로 바꾸세요.
 
 ```
-"C:\Tools\ATSHaptics\ATSHaptics.exe" --launch %command%
+"C:\Tools\SCSHaptics\SCSHaptics.exe" --launch %command%
 ```
 
 - 게임을 켜면 창이 **최소화 상태로 함께 뜨고 자동으로 시작**합니다. 게임을 끄면 창도 닫힙니다. 저장하지 않은 변경이 있으면 닫기 전에 묻습니다.
@@ -220,7 +220,8 @@ Steam 라이브러리에서 게임 **속성 → 일반 → 실행 옵션**에 �
 - 게임 실행 중에는 업데이트하지 않습니다. Steam 실행 옵션으로 띄운 경우 게임이 끝날 때까지 실행 파일이 사용 중이기 때문입니다. 게임을 끈 뒤 창을 다시 열어 업데이트하세요.
 - 설치 폴더에 쓸 권한이 없거나(예: `Program Files`) 소스에서 실행 중이면 릴리스 페이지만 열어 줍니다.
 - 설치 폴더의 `_internal` 폴더는 지우지 마세요. 이 폴더가 있어야 설치 폴더를 바꾸고, 없으면 릴리스 페이지만 엽니다. 0.19.0까지는 여기에 파이썬 런타임이 있었고, 0.20.0으로 업데이트하면 설명 파일 하나만 남습니다.
-- 설치 과정 기록은 `%TEMP%\ATSHaptics-update-<버전>\unpacked\apply-update.log`에 남습니다.
+- 설치 과정 기록은 `%TEMP%\SCSHaptics-update-<버전>\unpacked\apply-update.log`에 남습니다.
+- 0.22.0까지는 프로그램 이름이 ATS 햅틱(`ATSHaptics.exe`)이었습니다. 그 설치본은 이름이 바뀐 뒤의 릴리스를 자동으로 설치하지 못하고 릴리스 페이지만 엽니다. 새 zip을 받아 새 폴더에 풀고, Steam 실행 옵션에 적어 둔 경로도 `SCSHaptics.exe`로 고치세요. 설정은 같은 폴더(`%APPDATA%\ATSHaptics`)를 그대로 쓰므로 유지됩니다.
 
 ## 튜닝 팁
 
@@ -259,7 +260,7 @@ Steam 라이브러리에서 게임 **속성 → 일반 → 실행 옵션**에 �
 
 **가끔 진동이 이상하게 튀어요.** 아래쪽 **디버그 기록**을 켜고 다시 **시작**한 뒤, 튈 때 시계를 보고 시각을 기억해 두세요. 그 시각 근처 줄에서 `gap_ms`가 8보다 크게 튀면 출력이 늦은 것이고, `trigger`/`left_grip`/`right_grip` 값이 갑자기 커지면 이 프로그램이 그렇게 보낸 것입니다. 둘 다 평소와 같다면 프로그램 밖의 원인(무선 간섭, 게임이나 Steam Input의 진동, 펌웨어)입니다. 문의할 때 이 파일과 시각을 함께 보내 주세요.
 
-**문의할 때 정보를 모으고 싶어요.** `ATSHaptics.exe --selftest`를 실행하면 `%TEMP%\ATSHaptics-selftest.txt`에 버전, 컨트롤러 인식, 게임·플러그인 감지 결과가 기록됩니다. 상태 표시에 `오류: …`가 나왔다면 `%APPDATA%\ATSHaptics\logs\error.log`도 함께 보내 주세요. 예기치 못한 오류가 시각과 함께 기록됩니다.
+**문의할 때 정보를 모으고 싶어요.** `SCSHaptics.exe --selftest`를 실행하면 `%TEMP%\SCSHaptics-selftest.txt`에 버전, 컨트롤러 인식, 게임·플러그인 감지 결과가 기록됩니다. 상태 표시에 `오류: …`가 나왔다면 `%APPDATA%\ATSHaptics\logs\error.log`도 함께 보내 주세요. 예기치 못한 오류가 시각과 함께 기록됩니다.
 
 ## 알려진 제약
 
@@ -274,11 +275,11 @@ Steam 라이브러리에서 게임 **속성 → 일반 → 실행 옵션**에 �
 배포하는 프로그램은 저장소 맨 위의 Rust 코드(`Cargo.toml`, `src\`, `ui\`)로 만듭니다. [Rust](https://rustup.rs)(stable, MSVC 도구 모음)가 필요합니다.
 
 ```powershell
-cargo run --release --bin ATSHaptics                        # 창
-cargo run --release --bin ats_haptics -- --monitor          # 명령줄: --simulate, --scenario highway|city|mountain, --replay <기록.csv>, --exit-with-game, 효과별 세기 옵션
+cargo run --release --bin SCSHaptics                        # 창
+cargo run --release --bin scs_haptics -- --monitor          # 명령줄: --simulate, --scenario highway|city|mountain, --replay <기록.csv>, --exit-with-game, 효과별 세기 옵션
 cargo run --release --bin replay -- <기록.csv> --knocks 0.5  # 디버그 기록을 지금의 합성기로 다시 돌려 기록과 비교
 cargo test                                                  # 파이썬 구현과 비트 단위로 같은지(아래), 창 그리기, 번역
-powershell -ExecutionPolicy Bypass -File build.ps1          # dist\ATSHaptics-<버전>.zip (소스와 라이선스 포함)
+powershell -ExecutionPolicy Bypass -File build.ps1          # dist\SCSHaptics-<버전>.zip (소스와 라이선스 포함)
 ```
 
 버전은 `Cargo.toml`의 `version` 한 곳에만 있습니다. 실행 파일, 배포 zip 이름, 파이썬의 `version.py`가 모두 여기서 읽습니다.
@@ -303,7 +304,7 @@ python tools\pad_sound_analyze.py <녹음.wav>                # 그 녹음 분�
 
 화면 문구는 한국어 원문이 그대로 키입니다(코드에서는 `t("정지됨")`, `.slint`에서는 `@tr("정지됨")`). 번역의 원본은 `python\locales\<언어>.py`의 `MESSAGES`이고, 빠진 번역은 영어, 그다음 한국어로 나옵니다. 문구를 바꾸거나 추가했으면 `python\i18n.py`로 모든 언어 표에 반영됐는지 확인하고, `tools\export_locales.py`(번역 표)와 `tools\export_gui_texts.py`(슬라이더 줄, 툴팁, 메뉴)로 Rust 쪽 표를 다시 만드세요.
 
-직접 빌드한 것의 Steam 실행 옵션: `"<repo>\target\release\ATSHaptics.exe" --launch %command%`
+직접 빌드한 것의 Steam 실행 옵션: `"<repo>\target\release\SCSHaptics.exe" --launch %command%`
 
 폴더: `src\`, `ui\`는 Rust 앱, `resources\`는 실행 파일에 들어가는 번역 표와 텔레메트리 플러그인 DLL, `python\`은 파이썬 구현, `tools\`는 개발 도구(번역 표와 비교 데이터 만들기, 라이선스 모으기, 녹음 분석), `docs\`는 스크린샷과 메모(`docs\rust-port.md`: Rust로 옮긴 기록)입니다.
 

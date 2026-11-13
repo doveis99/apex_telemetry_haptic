@@ -166,7 +166,7 @@ fn main() {
     let with_reference: Vec<&str> =
         CASES.iter().zip(&references).filter(|(_, r)| r.is_some()).map(|(c, _)| c.effect.name()).collect();
     let mut lines = vec![
-        format!("링 크기 듣기 점검 (Rust) {}, ATS 햅틱 {}", ats_haptics::clock::now().stamp(), env!("CARGO_PKG_VERSION")),
+        format!("링 크기 듣기 점검 (Rust) {}, SCS 햅틱 {}", ats_haptics::clock::now().stamp(), env!("CARGO_PKG_VERSION")),
         format!("구성 요소 펌웨어: {}", firmware.join(", ")),
         format!("기기: {}, connection_mode={}, features=0x{:02X}", info.name(), info.connection_mode, info.features),
         format!(

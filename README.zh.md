@@ -1,4 +1,4 @@
-# ATS 触觉反馈 for Flydigi APEX 6 Pro
+# SCS 触觉反馈 for Flydigi APEX 6 Pro
 
 [한국어](README.md) · [English](README.en.md) · [日本語](README.ja.md) · **简体中文**
 
@@ -31,8 +31,8 @@
 
 ## 安装与快速上手
 
-1. 从 [Releases](../../releases) 下载 `ATSHaptics-<版本>.zip`，解压到任意位置。
-2. 运行 `ATSHaptics\ATSHaptics.exe`（蓝色手柄图标）。无需安装。黑色控制台图标的 `ats_haptics.exe` 和 `replay.exe` 是命令行工具。
+1. 从 [Releases](../../releases) 下载 `SCSHaptics-<版本>.zip`，解压到任意位置。
+2. 运行 `SCSHaptics\SCSHaptics.exe`（蓝色手柄图标）。无需安装。黑色控制台图标的 `scs_haptics.exe` 和 `replay.exe` 是命令行工具。
 3. 如果游戏没有可用的遥测插件，[插件窗口](#遥测插件窗口)会自动打开。请点击**安装**。
 4. 先用 **测试驾驶** → **开始** 确认手柄会振动（无需游戏的 60 秒场景）。
 5. 选择 **ATS/ETS2 游戏** → **开始**，然后启动游戏。游戏启动后程序会占用手柄，游戏结束后释放。
@@ -175,7 +175,7 @@
 | `… · 等待遥测（游戏加载中或未安装插件）` | 游戏正在运行但没有遥测。如果加载完成后仍然如此，请安装插件。 |
 | `无遥测：… 插件版本 N（支持：12）…` | 已安装插件的数据结构版本不匹配。请在插件窗口中安装。 |
 | `未找到手柄（请检查有线/2.4G 接收器连接和电源） · 2 秒后重试` | 找不到手柄。请检查连接。程序每 2 秒自动重试。 |
-| `看不到手柄：本进程由 Steam 启动，Steam Input 隐藏了手柄 …` | 在 Steam 启动的进程中（例如作为非 Steam 游戏添加的 ATSHaptics），如果该游戏开启了 Steam Input，就看不到手柄。请直接打开窗口，或使用下面的启动选项。 |
+| `看不到手柄：本进程由 Steam 启动，Steam Input 隐藏了手柄 …` | 在 Steam 启动的进程中（例如作为非 Steam 游戏添加的 SCSHaptics），如果该游戏开启了 Steam Input，就看不到手柄。请直接打开窗口，或使用下面的启动选项。 |
 | `手柄无响应（如在休眠，请按任意键唤醒）` | 能看到接收器，但手柄没有响应。按键唤醒后会自动继续。 |
 | `手柄连接已断开（…）` | 行驶中连接断开。重新连接后会自动继续。 |
 | `游戏已退出，已释放手柄` | 游戏已结束，手柄已释放。等待下次启动游戏。 |
@@ -203,7 +203,7 @@
 在 Steam 库中打开游戏的 **属性 → 通用 → 启动选项**，输入如下内容。路径请改为解压的位置。
 
 ```
-"C:\Tools\ATSHaptics\ATSHaptics.exe" --launch %command%
+"C:\Tools\SCSHaptics\SCSHaptics.exe" --launch %command%
 ```
 
 - 启动游戏时窗口会**以最小化状态一同打开并自动开始**。关闭游戏时窗口也会关闭。有未保存的更改时会先询问。
@@ -222,7 +222,8 @@
 - 游戏运行期间不会更新。通过 Steam 启动选项打开时，可执行文件在游戏结束前一直处于使用状态。请退出游戏后重新打开窗口再更新。
 - 如果没有写入安装文件夹的权限（例如 `Program Files`），或从源码运行，则只打开发布页面。
 - 请勿删除安装文件夹中的 `_internal` 文件夹：只有存在该文件夹时才会替换安装文件夹，否则只打开发布页面。0.19.0 及之前这里存放 Python 运行时，更新到 0.20.0 后只剩一个说明文件。
-- 安装过程记录在 `%TEMP%\ATSHaptics-update-<版本>\unpacked\apply-update.log`。
+- 安装过程记录在 `%TEMP%\SCSHaptics-update-<版本>\unpacked\apply-update.log`。
+- 0.22.0 及之前，程序名为 ATS 触觉反馈（`ATSHaptics.exe`）。那些安装无法自动安装改名之后的版本，只会打开发布页面。请下载新的 zip 解压到新文件夹，并把 Steam 启动选项里的路径改为 `SCSHaptics.exe`。设置仍然使用同一个文件夹（`%APPDATA%\ATSHaptics`），所以会保留。
 
 ## 调校技巧
 
@@ -261,7 +262,7 @@
 
 **振动偶尔会异常跳动。** 打开下方的 **调试记录**，重新点击 **开始**，跳动时看一下时钟记住时间。在该时间附近的行中，如果 `gap_ms` 明显大于 8，说明输出延迟了；如果 `trigger`/`left_grip`/`right_grip` 的数值突然变大，说明是本程序发出的。两者都正常的话，原因在程序之外（无线干扰、游戏或 Steam Input 的振动、固件）。反馈问题时请一并发送该文件和时间。
 
-**想收集反馈问题所需的信息。** 运行 `ATSHaptics.exe --selftest`，会在 `%TEMP%\ATSHaptics-selftest.txt` 中记录版本、手柄识别以及游戏/插件检测结果。如果状态显示出现了 `错误：…`，请同时发送 `%APPDATA%\ATSHaptics\logs\error.log`，其中记录了意外错误及其时间。
+**想收集反馈问题所需的信息。** 运行 `SCSHaptics.exe --selftest`，会在 `%TEMP%\SCSHaptics-selftest.txt` 中记录版本、手柄识别以及游戏/插件检测结果。如果状态显示出现了 `错误：…`，请同时发送 `%APPDATA%\ATSHaptics\logs\error.log`，其中记录了意外错误及其时间。
 
 ## 已知限制
 
@@ -276,11 +277,11 @@
 发布的程序由仓库顶层的 Rust 代码（`Cargo.toml`、`src\`、`ui\`）构建，需要 [Rust](https://rustup.rs)（stable，MSVC 工具链）。
 
 ```powershell
-cargo run --release --bin ATSHaptics                        # 窗口
-cargo run --release --bin ats_haptics -- --monitor          # 命令行：--simulate, --scenario highway|city|mountain, --replay <记录.csv>, --exit-with-game, 各效果强度选项
+cargo run --release --bin SCSHaptics                        # 窗口
+cargo run --release --bin scs_haptics -- --monitor          # 命令行：--simulate, --scenario highway|city|mountain, --replay <记录.csv>, --exit-with-game, 各效果强度选项
 cargo run --release --bin replay -- <记录.csv> --knocks 0.5  # 用当前的合成器重新运行调试记录，并与记录对比
 cargo test                                                  # 与 Python 实现逐位一致（见下）、窗口绘制、翻译
-powershell -ExecutionPolicy Bypass -File build.ps1          # dist\ATSHaptics-<版本>.zip（含源码和许可证）
+powershell -ExecutionPolicy Bypass -File build.ps1          # dist\SCSHaptics-<版本>.zip（含源码和许可证）
 ```
 
 版本号只保存在 `Cargo.toml` 的 `version` 一处。可执行文件、发布 zip 的文件名和 Python 的 `version.py` 都从这里读取。
@@ -305,7 +306,7 @@ python tools\pad_sound_analyze.py <录音.wav>                # 分析该录音�
 
 界面文本以韩语原文作为键（代码中为 `t("정지됨")`，`.slint` 中为 `@tr("정지됨")`）。翻译的来源是 `python\locales\<语言>.py` 的 `MESSAGES`，缺少翻译时依次回退到英语、韩语。修改或新增文本后，请运行 `python\i18n.py` 确认所有语言表都已更新，再用 `tools\export_locales.py`（翻译表）和 `tools\export_gui_texts.py`（滑块行、提示、菜单）重新生成 Rust 侧的表。
 
-自行构建版本的 Steam 启动选项：`"<repo>\target\release\ATSHaptics.exe" --launch %command%`
+自行构建版本的 Steam 启动选项：`"<repo>\target\release\SCSHaptics.exe" --launch %command%`
 
 目录：`src\` 和 `ui\` 是 Rust 程序；`resources\` 是编入可执行文件的翻译表和遥测插件 DLL；`python\` 是 Python 实现；`tools\` 是开发工具（生成翻译表和对比数据、收集许可证、分析录音）；`docs\` 是截图和笔记（`docs\rust-port.md`：迁移到 Rust 的记录，韩文）。
 

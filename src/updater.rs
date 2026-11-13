@@ -3,7 +3,7 @@
 //! Only an installed release updates itself: the release zip is downloaded with Windows'
 //! own HTTP stack (WinHTTP), checked against the SHA-256 digest GitHub publishes for the
 //! asset and unpacked to %TEMP%. A small PowerShell script then waits until every
-//! ATSHaptics.exe from the install folder has exited, backs the install up, copies the new
+//! SCSHaptics.exe from the install folder has exited, backs the install up, copies the new
 //! files over it and starts the new version; a failed copy restores the backup. A build run
 //! from anywhere else, or from a folder that is not writable, only points at the release page.
 
@@ -17,16 +17,18 @@ use crate::t;
 pub const REPO: &str = "doveis99/apex_telemetry_haptic";
 pub const PAGE_URL: &str = "https://github.com/doveis99/apex_telemetry_haptic";
 const API_URL: &str = "https://api.github.com/repos/doveis99/apex_telemetry_haptic/releases/latest";
-pub const EXE_NAME: &str = "ATSHaptics.exe";
+pub const EXE_NAME: &str = "SCSHaptics.exe";
 const TIMEOUT_MS: i32 = 10_000;
 
-/// The same script as updater.py's, so an update works across both apps' layouts.
+/// updater.py's script under the program's name since the rename. Releases up to 0.22.0 were
+/// ATSHaptics.exe in ATSHaptics-<version>.zip: they find no asset of that name in a later
+/// release and point at the release page instead of installing it.
 const UPDATE_SCRIPT: &str = r#"
 param([string]$Source, [string]$Target, [string]$Log)
-$exe = Join-Path $Target "ATSHaptics.exe"
+$exe = Join-Path $Target "SCSHaptics.exe"
 "waiting for $exe to exit" | Out-File $Log
 for ($i = 0; $i -lt 240; $i++) {
-    $running = Get-Process ATSHaptics -ErrorAction SilentlyContinue | Where-Object { $_.Path -ieq $exe }
+    $running = Get-Process SCSHaptics -ErrorAction SilentlyContinue | Where-Object { $_.Path -ieq $exe }
     if (-not $running) { break }
     Start-Sleep -Milliseconds 500
 }
@@ -126,7 +128,7 @@ pub fn http_get(url: &str, mut on_chunk: impl FnMut(&[u8]) -> Result<(), String>
             .copied()
             .chain(Some(0))
             .collect();
-        let agent = wide(&format!("ATSHaptics/{}", env!("CARGO_PKG_VERSION")));
+        let agent = wide(&format!("SCSHaptics/{}", env!("CARGO_PKG_VERSION")));
         let session = Handle(WinHttpOpen(agent.as_ptr(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, std::ptr::null(),
                                          std::ptr::null(), 0));
         if session.0.is_null() {
@@ -183,7 +185,7 @@ pub fn latest_release() -> Result<Release, String> {
     let asset = data["assets"].as_array().and_then(|assets| {
         assets.iter().find(|a| {
             let name = a["name"].as_str().unwrap_or_default();
-            name.starts_with("ATSHaptics-") && name.ends_with(".zip")
+            name.starts_with("SCSHaptics-") && name.ends_with(".zip")
         })
     });
     let digest = asset.map(|a| text(&a["digest"])).unwrap_or_default();
@@ -277,12 +279,14 @@ pub fn download(release: &Release, mut progress: impl FnMut(f64)) -> Result<Path
     }
 }
 
-const WORK_PREFIX: &str = "ATSHaptics-update-";
+const WORK_PREFIX: &str = "SCSHaptics-update-";
+/// what releases up to 0.22.0 called theirs
+const OLD_WORK_PREFIX: &str = "ATSHaptics-update-";
 
 /// A download folder (its name) this build has no more use for: of this version or an older one.
 /// One of a newer version is an update that has not gone through yet; its log says why.
 fn spent(folder: &str, running: &str) -> bool {
-    folder.strip_prefix(WORK_PREFIX).is_some_and(|version| {
+    folder.strip_prefix(WORK_PREFIX).or_else(|| folder.strip_prefix(OLD_WORK_PREFIX)).is_some_and(|version| {
         let version = parse_version(version);
         !version.is_empty() && version <= parse_version(running)
     })
@@ -340,11 +344,13 @@ mod tests {
 
     #[test]
     fn only_downloads_of_this_version_or_older_are_spent() {
-        assert!(spent("ATSHaptics-update-0.21.0", "0.21.0"));
-        assert!(spent("ATSHaptics-update-0.19.10", "0.21.0"));
-        assert!(!spent("ATSHaptics-update-0.22.0", "0.21.0"), "an update still to go through");
-        assert!(!spent("ATSHaptics-update-", "0.21.0"));
-        assert!(!spent("ATSHaptics-plugin", "0.21.0"));
+        assert!(spent("SCSHaptics-update-0.21.0", "0.21.0"));
+        assert!(spent("SCSHaptics-update-0.19.10", "0.21.0"));
+        assert!(!spent("SCSHaptics-update-0.22.0", "0.21.0"), "an update still to go through");
+        assert!(!spent("SCSHaptics-update-", "0.21.0"));
+        assert!(!spent("SCSHaptics-plugin", "0.21.0"));
+        // left by a release from before the rename
+        assert!(spent("ATSHaptics-update-0.22.0", "0.23.0"));
         assert!(!spent("something-else-0.1.0", "0.21.0"));
     }
 }
@@ -373,6 +379,6 @@ mod download {
         let folder = super::download(&release, |done| last = done).unwrap();
         eprintln!("unpacked to {} (progress reached {last:.2})", folder.display());
         assert!(folder.join(super::EXE_NAME).is_file());
-        let _ = std::fs::remove_dir_all(folder.ancestors().find(|p| p.ends_with(format!("ATSHaptics-update-{}", release.version()))).unwrap());
+        let _ = std::fs::remove_dir_all(folder.ancestors().find(|p| p.ends_with(format!("SCSHaptics-update-{}", release.version()))).unwrap());
     }
 }

@@ -408,4 +408,13 @@ MESSAGES = {
     "2 kHz 출력을 끄고 1 kHz로 돌아감": "Salida a 2 kHz apagada, vuelta a 1 kHz",
     "4 ms마다 리포트를 못 받음 (보낸 것 {percent})": "No aceptó un informe cada 4 ms ({percent} enviados)",
     "릴리스 zip을 풀지 못했습니다 (PowerShell {code})": "No se pudo descomprimir el zip de la versión (PowerShell {code})",
+    "변속 소리": "Sonido del cambio",
+    "방향지시등 소리": "Sonido del intermitente",
+    "기본": "Normal",
+    "스카니아": "Scania",
+    "부드럽게": "Suave",
+    "AMT·수동 변속기가 변속할 때 누구의 소리로 울릴지 고릅니다. 기본은 미국 트럭의 이튼 변속기 녹음에 맞춘 '철컥'입니다. 스카니아는 딸깍 뒤에 공기로 밀어 넣는 묵직한 진동이 길게 이어지고, MAN은 높고 마른 딸깍이 두 번 납니다. 부드럽게는 딸깍 소리 없이 진동만 냅니다. 토크컨버터에는 쓰이지 않습니다.":
+        "De qué camión suena el cambio de marcha de una caja AMT / manual. Normal es el «clac» ajustado a grabaciones de la caja Eaton de camiones norteamericanos. Scania sigue su clic con un empuje largo y pesado mientras el aire mete la marcha; MAN da dos clics agudos y secos. Suave deja solo la vibración, sin el clic. No se usa con convertidor de par.",
+    "방향지시등 릴레이를 누구의 소리로 울릴지 고릅니다. 기본은 미국 트럭의 릴레이 녹음에 맞춘 딸깍입니다. 스카니아는 더 낮고 통통한 소리이고, MAN은 켜질 때만 나는 짧고 가벼운 틱입니다. 부드럽게는 딸깍 소리 없이 진동만 냅니다.":
+        "De qué camión suena el relé de los intermitentes. Normal es el clic ajustado a grabaciones de relés de camiones norteamericanos. Scania es un toc más grave y lleno; MAN es un tic corto y ligero solo al encenderse la luz. Suave deja solo la vibración, sin el clic.",
 }

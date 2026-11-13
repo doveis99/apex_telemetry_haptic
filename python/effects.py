@@ -483,6 +483,10 @@ class Gains:
     cylinders: int = 6
     # how a gear change feels: AMT (the lever's knock and the clack) or CONVERTER (a soft push)
     gearbox: str = AMT
+    # the Rust app's voices for a gear change and the turn signal's relay (src/effects.rs SOUNDS);
+    # this app keeps them and always plays the default
+    shift_sound: str = "default"
+    blinker_sound: str = "default"
     # m/s of sudden suspension travel; 0.2 brings a 60 fps game's short joints, which a
     # frame can straddle, close to what a continuous clock sees at 0.25
     bump_threshold: float = 0.2

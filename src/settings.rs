@@ -155,6 +155,12 @@ pub fn set_gain_fields(gains: &mut Gains, stored: &Map<String, Value>) {
     if let Some(value) = stored.get("gearbox") {
         gains.gearbox = py_str(value);
     }
+    if let Some(value) = stored.get("shift_sound") {
+        gains.shift_sound = py_str(value);
+    }
+    if let Some(value) = stored.get("blinker_sound") {
+        gains.blinker_sound = py_str(value);
+    }
     if let Some(Value::Array(items)) = stored.get("disabled") {
         gains.disabled = items.iter().map(py_str).collect();
     }

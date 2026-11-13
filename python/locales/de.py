@@ -408,4 +408,13 @@ MESSAGES = {
     "2 kHz 출력을 끄고 1 kHz로 돌아감": "2-kHz-Ausgabe aus, zurück zu 1 kHz",
     "4 ms마다 리포트를 못 받음 (보낸 것 {percent})": "Kein Report alle 4 ms angenommen ({percent} gesendet)",
     "릴리스 zip을 풀지 못했습니다 (PowerShell {code})": "Das Release-Zip konnte nicht entpackt werden (PowerShell {code})",
+    "변속 소리": "Schaltgeräusch",
+    "방향지시등 소리": "Blinkergeräusch",
+    "기본": "Standard",
+    "스카니아": "Scania",
+    "부드럽게": "Weich",
+    "AMT·수동 변속기가 변속할 때 누구의 소리로 울릴지 고릅니다. 기본은 미국 트럭의 이튼 변속기 녹음에 맞춘 '철컥'입니다. 스카니아는 딸깍 뒤에 공기로 밀어 넣는 묵직한 진동이 길게 이어지고, MAN은 높고 마른 딸깍이 두 번 납니다. 부드럽게는 딸깍 소리 없이 진동만 냅니다. 토크컨버터에는 쓰이지 않습니다.":
+        "Wessen Gangwechsel ein AMT- oder Schaltgetriebe spielt. Standard ist das „Klack“ nach Aufnahmen des Eaton-Getriebes nordamerikanischer Lkw. Scania lässt auf den Klick ein langes, schweres Schieben folgen, wenn die Luft den Gang einlegt; MAN gibt zwei hohe, trockene Klicks. Weich spielt nur die Vibration, ohne Klick. Bei Wandlerautomatik ohne Wirkung.",
+    "방향지시등 릴레이를 누구의 소리로 울릴지 고릅니다. 기본은 미국 트럭의 릴레이 녹음에 맞춘 딸깍입니다. 스카니아는 더 낮고 통통한 소리이고, MAN은 켜질 때만 나는 짧고 가벼운 틱입니다. 부드럽게는 딸깍 소리 없이 진동만 냅니다.":
+        "Wessen Relais die Blinker spielen. Standard ist der Klick nach Aufnahmen der Relais nordamerikanischer Lkw. Scania klingt tiefer und voller; MAN ist ein kurzes, leichtes Ticken nur beim Aufleuchten. Weich spielt nur die Vibration, ohne Klick.",
 }

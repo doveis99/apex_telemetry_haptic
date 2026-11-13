@@ -6,6 +6,7 @@
 //!   cargo run --release --example render_effect -- gear out.f32 2k hi=-6    rings and stone clicks 6 dB down
 //!   cargo run --release --example render_effect -- gear out.f32 2k hi=off   ... or left out
 //!   cargo run --release --example render_effect -- gear out.f32 2k own      with the player's gains and eq
+//!   cargo run --release --example render_effect -- gear out.f32 sound=man   in another truck's voice (effects::SOUNDS)
 //!
 //! The file holds little-endian f32 triples (left grip, right grip, trigger) at the output's rate,
 //! on the pad's 0..127 scale before rounding.
@@ -20,7 +21,7 @@ use ats_haptics::settings::Settings;
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() < 2 {
-        eprintln!("usage: render_effect <effect> <out.f32> [2k] [hi=<dB>|hi=off] [own] [surface]");
+        eprintln!("usage: render_effect <effect> <out.f32> [2k] [hi=<dB>|hi=off] [own] [sound=<name>] [surface]");
         std::process::exit(2);
     }
     let effect = Effect::from_name(&args[0]).unwrap_or_else(|| panic!("no effect {:?}", args[0]));
@@ -33,15 +34,21 @@ fn main() {
     let surfaces: Vec<&str> = args
         .iter()
         .skip(2)
-        .filter(|a| *a != "2k" && *a != "own" && !a.starts_with("hi="))
+        .filter(|a| *a != "2k" && *a != "own" && !a.starts_with("hi=") && !a.starts_with("sound="))
         .map(String::as_str)
         .collect();
-    let (gains, eq) = if own {
+    let sound = args.iter().skip(2).find_map(|a| a.strip_prefix("sound="));
+    let (mut gains, eq) = if own {
         let settings = Settings::default();
         (settings.load_gains(), Equalizer::for_player(&settings.load_eq()))
     } else {
         (Gains::default(), Equalizer::for_player(&Default::default()))
     };
+    if let Some(sound) = sound {
+        assert!(ats_haptics::effects::SOUNDS.contains(&sound), "sound= takes one of {:?}", ats_haptics::effects::SOUNDS);
+        gains.shift_sound = sound.to_string();
+        gains.blinker_sound = sound.to_string();
+    }
     let mut preview = Preview::new(effect, &gains, eq, &surfaces);
     preview.set_events_2k(two_k);
     if let Some(hi) = hi {

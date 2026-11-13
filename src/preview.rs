@@ -523,6 +523,64 @@ mod tests {
         }
     }
 
+    /// The left grip of an effect test with both sounds set to `sound`, at 2 kHz.
+    fn played(effect: Effect, sound: &str) -> Vec<f64> {
+        let gains = Gains { shift_sound: sound.into(), blinker_sound: sound.into(), ..Gains::default() };
+        let mut preview = Preview::new(effect, &gains, Equalizer::default(), &[]);
+        preview.set_events_2k(true);
+        let mut output = crate::rate2k::Output2k::new();
+        let mut samples = Vec::new();
+        while let Some(block) = preview.render() {
+            for half in output.split(&block) {
+                samples.extend_from_slice(&half.left_grip);
+            }
+        }
+        samples
+    }
+
+    /// Its hardest edge: the largest step from one 2 kHz sample to the next.
+    fn edge(samples: &[f64]) -> f64 {
+        samples.windows(2).map(|pair| (pair[1] - pair[0]).abs()).fold(0.0, f64::max)
+    }
+
+    #[test]
+    fn each_sound_is_its_own_and_an_unknown_one_is_the_default() {
+        use crate::effects::{SOUNDS, SOUND_DEFAULT};
+        for effect in [Effect::Gear, Effect::Blinker] {
+            let voices: Vec<Vec<f64>> = SOUNDS.iter().map(|sound| played(effect, sound)).collect();
+            for (i, voice) in voices.iter().enumerate() {
+                assert!(voice.iter().any(|x| x.abs() > 1.0), "{effect:?} {} stayed silent", SOUNDS[i]);
+                for (j, other) in voices.iter().enumerate().skip(i + 1) {
+                    assert_ne!(voice, other, "{effect:?}: {} plays as {}", SOUNDS[i], SOUNDS[j]);
+                }
+            }
+            assert_eq!(SOUNDS[0], SOUND_DEFAULT);
+            // a config from a later version, or a hand edit
+            assert_eq!(played(effect, "another truck"), voices[0], "{effect:?}");
+        }
+    }
+
+    #[test]
+    fn the_soft_sound_has_no_click_in_it() {
+        use crate::effects::{SOUND_DEFAULT, SOUND_SOFT};
+        for effect in [Effect::Gear, Effect::Blinker] {
+            let (default, soft) = (played(effect, SOUND_DEFAULT), played(effect, SOUND_SOFT));
+            // a tick is one sample high; a 140 or 150 Hz swell climbs a quarter of its height in one
+            assert!(edge(&soft) < 0.5 * edge(&default), "{effect:?}: {} against {}", edge(&soft), edge(&default));
+        }
+    }
+
+    #[test]
+    fn mans_relay_is_quiet_as_the_lamp_goes_out() {
+        use crate::effects::{SOUND_DEFAULT, SOUND_MAN};
+        // the test's left lamp comes on at 0.4 s and goes out at 0.8 (blinker())
+        let out = |sound| played(Effect::Blinker, sound)[1600..2400].iter().fold(0.0f64, |peak, x| peak.max(x.abs()));
+        assert!(out(SOUND_DEFAULT) > 1.0);
+        assert_eq!(out(SOUND_MAN), 0.0);
+        let on = played(Effect::Blinker, SOUND_MAN)[800..1600].iter().fold(0.0f64, |peak, x| peak.max(x.abs()));
+        assert!(on > 1.0);
+    }
+
     #[test]
     fn surfaces_play_one_after_another() {
         let mut preview = Preview::new(Effect::Road, &Gains::default(), Equalizer::default(), &["ice", "gravel"]);

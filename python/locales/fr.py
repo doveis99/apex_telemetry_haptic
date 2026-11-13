@@ -409,4 +409,13 @@ MESSAGES = {
     "2 kHz 출력을 끄고 1 kHz로 돌아감": "Sortie 2 kHz coupée, retour à 1 kHz",
     "4 ms마다 리포트를 못 받음 (보낸 것 {percent})": "Rapport toutes les 4 ms non accepté ({percent} envoyés)",
     "릴리스 zip을 풀지 못했습니다 (PowerShell {code})": "Impossible de décompresser le zip de la version (PowerShell {code})",
+    "변속 소리": "Son du passage",
+    "방향지시등 소리": "Son du clignotant",
+    "기본": "Standard",
+    "스카니아": "Scania",
+    "부드럽게": "Doux",
+    "AMT·수동 변속기가 변속할 때 누구의 소리로 울릴지 고릅니다. 기본은 미국 트럭의 이튼 변속기 녹음에 맞춘 '철컥'입니다. 스카니아는 딸깍 뒤에 공기로 밀어 넣는 묵직한 진동이 길게 이어지고, MAN은 높고 마른 딸깍이 두 번 납니다. 부드럽게는 딸깍 소리 없이 진동만 냅니다. 토크컨버터에는 쓰이지 않습니다.":
+        "Le camion dont une boîte AMT / manuelle joue le passage de rapport. Standard est le « clac » réglé sur des enregistrements de la boîte Eaton de camions nord-américains. Scania fait suivre son clic d'une poussée longue et lourde quand l'air engage le rapport ; MAN donne deux clics aigus et secs. Doux ne garde que la vibration, sans le clic. Sans effet avec un convertisseur.",
+    "방향지시등 릴레이를 누구의 소리로 울릴지 고릅니다. 기본은 미국 트럭의 릴레이 녹음에 맞춘 딸깍입니다. 스카니아는 더 낮고 통통한 소리이고, MAN은 켜질 때만 나는 짧고 가벼운 틱입니다. 부드럽게는 딸깍 소리 없이 진동만 냅니다.":
+        "Le camion dont les clignotants jouent le relais. Standard est le clic réglé sur des enregistrements de relais de camions nord-américains. Scania est un toc plus grave et plus plein ; MAN est un tic court et léger, seulement à l'allumage. Doux ne garde que la vibration, sans le clic.",
 }

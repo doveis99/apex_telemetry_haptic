@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use ats_haptics::effects::{Equalizer, Gains, FLOAT_FIELDS, GEARBOXES};
+use ats_haptics::effects::{Equalizer, Gains, FLOAT_FIELDS, GEARBOXES, SOUNDS};
 use ats_haptics::runner::{run, Connection, Runner, Source};
 use ats_haptics::scenarios::{scenario, scenarios};
 use ats_haptics::settings::Settings;
@@ -34,7 +34,8 @@ const USAGE: &str = "usage: ats_haptics [--simulate] [--sim-fps FPS] [--dry-run]
                    [--pedal G] [--squeal G] [--trailer G] [--park-brake G] [--engine-start G]
                    [--shifter G] [--air-brake G] [--blinker G] [--game-events G] [--ducking D]
                    [--bump-threshold M/S] [--impact-threshold M/S2]
-                   [--cylinders N] [--gearbox amt|converter] [--scenario highway|city|mountain]
+                   [--cylinders N] [--gearbox amt|converter] [--shift-sound default|scania|man|soft]
+                   [--blinker-sound default|scania|man|soft] [--scenario highway|city|mountain]
                    [--replay LOG] [--from HH:MM:SS] [--to HH:MM:SS] [--log-blocks] [--rate 1k|2k]
 
 Every strength and threshold config.json keeps can be set for one run, by its name there with
@@ -130,6 +131,17 @@ fn parse_args(gains: &mut Gains) -> Args {
                     fail(&format!("--gearbox: choose from {}", GEARBOXES.join(", ")));
                 }
                 gains.gearbox = gearbox;
+            }
+            "--shift-sound" | "--blinker-sound" => {
+                let sound = value("a sound");
+                if !SOUNDS.contains(&sound.as_str()) {
+                    fail(&format!("{flag}: choose from {}", SOUNDS.join(", ")));
+                }
+                if flag == "--shift-sound" {
+                    gains.shift_sound = sound;
+                } else {
+                    gains.blinker_sound = sound;
+                }
             }
             "--scenario" => {
                 let name = value("a scenario");

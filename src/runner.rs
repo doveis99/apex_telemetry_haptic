@@ -210,6 +210,12 @@ impl Runner {
         if self.gains.gearbox != effective.gearbox {
             changed.push(format!("gearbox {}->{}", self.gains.gearbox, effective.gearbox));
         }
+        if self.gains.shift_sound != effective.shift_sound {
+            changed.push(format!("shift_sound {}->{}", self.gains.shift_sound, effective.shift_sound));
+        }
+        if self.gains.blinker_sound != effective.blinker_sound {
+            changed.push(format!("blinker_sound {}->{}", self.gains.blinker_sound, effective.blinker_sound));
+        }
         if self.gains.disabled != effective.disabled {
             changed.push(format!("disabled {:?}->{:?}", self.gains.disabled, effective.disabled));
         }

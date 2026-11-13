@@ -155,6 +155,8 @@ export component AppWindow inherits Window {
     in property <string> accel: "-";
     in property <int> cylinders: 6;
     in property <string> gearbox: "amt";
+    in property <string> shift-sound: "default";
+    in property <string> blinker-sound: "default";
     in property <[string]> events;
     in property <[Choice]> surfaces;
     in property <string> all-surfaces-label;
@@ -190,6 +192,8 @@ export component AppWindow inherits Window {
     callback calibration();
     callback cylinders-step(int);
     callback gearbox-picked(string);
+    callback shift-sound-picked(string);
+    callback blinker-sound-picked(string);
     callback save();
     callback reset();
     callback debug-log-toggled(bool);
@@ -232,7 +236,17 @@ export component AppWindow inherits Window {
         Text { text: @tr("오른쪽 그립"); }
         Text { text: @tr("엔진 기통 수"); }
         Text { text: @tr("변속기"); }
+        Text { text: @tr("변속 소리"); }
+        Text { text: @tr("방향지시등 소리"); }
     }
+    property <[SegOption]> sounds: [
+        { value: "default", text: @tr("기본"), color: Theme.accent },
+        { value: "scania", text: @tr("스카니아"), color: Theme.accent },
+        { value: "man", text: "MAN", color: Theme.accent },
+        { value: "soft", text: @tr("부드럽게"), color: Theme.accent },
+    ];
+    property <string> shift-sound-tip: @tr("AMT·수동 변속기가 변속할 때 누구의 소리로 울릴지 고릅니다. 기본은 미국 트럭의 이튼 변속기 녹음에 맞춘 '철컥'입니다. 스카니아는 딸깍 뒤에 공기로 밀어 넣는 묵직한 진동이 길게 이어지고, MAN은 높고 마른 딸깍이 두 번 납니다. 부드럽게는 딸깍 소리 없이 진동만 냅니다. 토크컨버터에는 쓰이지 않습니다.");
+    property <string> blinker-sound-tip: @tr("방향지시등 릴레이를 누구의 소리로 울릴지 고릅니다. 기본은 미국 트럭의 릴레이 녹음에 맞춘 딸깍입니다. 스카니아는 더 낮고 통통한 소리이고, MAN은 켜질 때만 나는 짧고 가벼운 틱입니다. 부드럽게는 딸깍 소리 없이 진동만 냅니다.");
     // the telemetry rows' label column
     info-measure := VerticalLayout {
         visible: false;
@@ -697,6 +711,48 @@ export component AppWindow inherits Window {
                             current: root.gearbox;
                             tip: @tr("변속할 때의 느낌입니다. AMT·수동은 레버가 빠지고 다음 기어가 '철컥' 들어갑니다(이튼 풀러, DT12 같은 변속기). 토크컨버터는 동력이 끊기지 않고 다음 기어가 물리며 부드럽게 '쿵' 밀어 줍니다(앨리슨). 엑셀을 깊이 밟을수록 단단하고, 발을 떼고 변속하면 거의 없습니다. 텔레메트리에는 변속기 종류가 없습니다.");
                             picked(value) => { root.gearbox-picked(value); }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                    HorizontalLayout {
+                        padding-top: 6px;
+                        padding-bottom: 2px;
+                        TipText {
+                            width: root.label-width;
+                            text: @tr("변속 소리");
+                            color: Theme.text;
+                            tip: root.shift-sound-tip;
+                        }
+                        Rectangle {
+                            width: 6px;
+                        }
+                        Segmented {
+                            options: root.sounds;
+                            current: root.shift-sound;
+                            // a torque converter's push has one voice
+                            dim: root.gearbox == "converter";
+                            tip: root.shift-sound-tip;
+                            picked(value) => { root.shift-sound-picked(value); }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+                    HorizontalLayout {
+                        padding-top: 6px;
+                        padding-bottom: 2px;
+                        TipText {
+                            width: root.label-width;
+                            text: @tr("방향지시등 소리");
+                            color: Theme.text;
+                            tip: root.blinker-sound-tip;
+                        }
+                        Rectangle {
+                            width: 6px;
+                        }
+                        Segmented {
+                            options: root.sounds;
+                            current: root.blinker-sound;
+                            tip: root.blinker-sound-tip;
+                            picked(value) => { root.blinker-sound-picked(value); }
                         }
                         Rectangle { horizontal-stretch: 1; }
                     }

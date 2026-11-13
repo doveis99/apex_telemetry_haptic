@@ -158,10 +158,15 @@ const SPIKE_BACK: f64 = 0.3;
 const LEAP_SLOPE: f64 = 0.5;
 const LEAP_FLOOR: f64 = 0.5;
 const LEAP_HOLD: f64 = 0.15;
-const SHIFT_HZ: f64 = 140.0;
-/// (s after the gear change, strength at gear gain 1, decay s)
-const SHIFT_HITS: [(f64, f64, f64); 3] = [(0.02, 0.19, 0.16), (0.14, 0.95, 0.005), (0.14, 0.43, 0.08)];
 const SHIFT_COOLDOWN: f64 = 0.15;
+/// The voices a gear change (Gains.shift_sound) and the turn signal's relay (Gains.blinker_sound)
+/// can be given: the recordings the effects were first fitted to, two trucks of ETS2, or the
+/// vibration alone.
+pub const SOUND_DEFAULT: &str = "default";
+pub const SOUND_SCANIA: &str = "scania";
+pub const SOUND_MAN: &str = "man";
+pub const SOUND_SOFT: &str = "soft";
+pub const SOUNDS: [&str; 4] = [SOUND_DEFAULT, SOUND_SCANIA, SOUND_MAN, SOUND_SOFT];
 pub const AMT: &str = "amt";
 pub const CONVERTER: &str = "converter";
 pub const GEARBOXES: [&str; 2] = [AMT, CONVERTER];
@@ -184,8 +189,6 @@ const PEDAL_FLOOR: f64 = 0.4;
 const AIR_BRAKE_HOLD: f64 = 0.3;
 const AIR_BRAKE_ON: f64 = 0.1;
 const AIR_BRAKE_OFF: f64 = 0.03;
-const BLINKER_HZ: f64 = 190.0;
-const BLINKER_DECAY: f64 = 0.003;
 const TICK_SHARE: f64 = 1.0;
 const TICK_EDGE: f64 = 0.005;
 
@@ -230,10 +233,130 @@ struct Ring {
 // and splitter -6 / -12 -> -9 dB, the coupling -12 / -6 -> -9 dB; the stones +6 twice (STONE_HI).
 const RING_TONAL: f64 = 0.15;
 const RING_Q: f64 = 1.0;
-const SHIFT_RING: Ring = Ring { hz: 690.0, decay: 0.027, db: 2.9 };
 const RANGE_RING: Ring = Ring { hz: 690.0, decay: 0.030, db: -7.0 };
 const SPLIT_RING: Ring = Ring { hz: 870.0, decay: 0.032, db: 8.1 };
-const BLINKER_RING: Ring = Ring { hz: 730.0, decay: 0.015, db: 5.2 };
+
+/// A gear change through an automated or manual gearbox, in one truck's voice.
+struct ShiftVoice {
+    hz: f64,
+    /// (s after the gear change, strength at gear gain 1, decay s, attack s)
+    hits: &'static [(f64, f64, f64, f64)],
+    ring: Ring,
+    /// each hit starts at its crest, and one that decays within TICK_EDGE ticks and rings;
+    /// without it the hits swell from zero and nothing clicks
+    edge: bool,
+}
+
+/// The turn signal's relay, in one truck's voice.
+struct BlinkerVoice {
+    hz: f64,
+    decay: f64,
+    /// the click's body and its tick, against the default's
+    body: f64,
+    tick: f64,
+    /// the lamp going out against it coming on
+    off: f64,
+    /// the ring after the tick, as strong as a whole tick's would be
+    ring: Option<Ring>,
+    /// the body starts at its crest; without it it swells from zero
+    edge: bool,
+}
+
+// The default voices are the first fits (2026-10-26, -11-08): 12 Eaton shifts and the relays of
+// three North American cabs. The others are measured the same way (2026-11-14) on the clips of two
+// ETS2 sound mods, a Scania's cab with its G25 gearbox and a MAN's with its TraXon, and set
+// against the default by what the clips differ in; none has been felt on the pad.
+//
+// Shifts, on each clip's own timeline (medians; the Eaton clips by the same script in brackets):
+//   Scania, 10 clips: the 30-250 Hz band lies at 155 Hz (150-157 in nine) [131]. The click comes
+//     at 81 ms [92], a second at 169 ms 5 dB under it [165, 0.6 under]. The band swells from
+//     80 ms to 120 and then holds within 8 dB for 170 ms more [falls 8 dB in 50 ms], only 2 dB
+//     under the click's 500-1000 Hz peak [16 under]: an air-shifted box, more push than clack.
+//     Its ring: 609 Hz (595-616 in seven), 30 ms, 8.4 dB around its loudest 2 ms [687, 39, 8.7].
+//   MAN, 11 clips (their two layers summed): 213 Hz (206-223 in nine). The first click at
+//     83 ms, a second in six of them at about 300 ms, 1.2 dB under. A dry click: the ring at
+//     859 Hz (831-894 in seven) is gone in 23 ms and holds 5.5 dB, and the low band is 14 dB
+//     under it without a swell (the Eaton's 16, so the same body).
+// Relays:
+//   Scania, on and off: rings at 586 and 686 Hz [764: 522-935], as long (20 ms, then 12-15 dB
+//     down within 10 ms more), 6.8 dB around its loudest 2 ms [5.6], off 2.9 dB under on [4.3].
+//     Its 30-250 Hz band is 37 dB under the click's peak [48] and its 500-1000 Hz band 9 [15]:
+//     a fuller, lower tock, so half the tick under the same ring and a longer, lower body.
+//   MAN: one clip for the lamp coming on and none for it going out. Its 500-1000 Hz band is
+//     34 dB under its peak [15]: a faint tick, so no ring and half the body, on that edge alone.
+// "soft" is no truck's: the default's timeline without the tick, the ring and the hard edge, for
+// a player who wants the cue in the hand and not in the ear.
+static SHIFT_VOICES: [(&str, ShiftVoice); 4] = [
+    (
+        SOUND_DEFAULT,
+        ShiftVoice {
+            hz: 140.0,
+            hits: &[(0.02, 0.19, 0.16, 0.0), (0.14, 0.95, 0.005, 0.0), (0.14, 0.43, 0.08, 0.0)],
+            ring: Ring { hz: 690.0, decay: 0.027, db: 2.9 },
+            edge: true,
+        },
+    ),
+    (
+        SOUND_SCANIA,
+        ShiftVoice {
+            hz: 155.0,
+            hits: &[(0.08, 0.55, 0.005, 0.0), (0.08, 0.6, 0.2, 0.04), (0.17, 0.31, 0.005, 0.0)],
+            ring: Ring { hz: 609.0, decay: 0.030, db: 2.6 },
+            edge: true,
+        },
+    ),
+    (
+        SOUND_MAN,
+        ShiftVoice {
+            hz: 213.0,
+            hits: &[(0.083, 0.95, 0.005, 0.0), (0.083, 0.43, 0.07, 0.0), (0.3, 0.83, 0.005, 0.0)],
+            ring: Ring { hz: 859.0, decay: 0.023, db: -0.3 },
+            edge: true,
+        },
+    ),
+    (
+        SOUND_SOFT,
+        ShiftVoice {
+            hz: 140.0,
+            hits: &[(0.02, 0.19, 0.16, 0.0), (0.14, 0.6, 0.06, 0.008)],
+            ring: Ring { hz: 690.0, decay: 0.027, db: 2.9 },
+            edge: false,
+        },
+    ),
+];
+static BLINKER_VOICES: [(&str, BlinkerVoice); 4] = [
+    (
+        SOUND_DEFAULT,
+        BlinkerVoice {
+            hz: 190.0,
+            decay: 0.003,
+            body: 1.0,
+            tick: 1.0,
+            off: 0.7,
+            ring: Some(Ring { hz: 730.0, decay: 0.015, db: 5.2 }),
+            edge: true,
+        },
+    ),
+    (
+        SOUND_SCANIA,
+        BlinkerVoice {
+            hz: 150.0,
+            decay: 0.006,
+            body: 1.0,
+            tick: 0.5,
+            off: 0.7,
+            ring: Some(Ring { hz: 636.0, decay: 0.012, db: 6.4 }),
+            edge: true,
+        },
+    ),
+    (SOUND_MAN, BlinkerVoice { hz: 240.0, decay: 0.002, body: 0.5, tick: 1.0, off: 0.0, ring: None, edge: true }),
+    (SOUND_SOFT, BlinkerVoice { hz: 150.0, decay: 0.008, body: 1.0, tick: 0.0, off: 0.7, ring: None, edge: false }),
+];
+
+/// The voice of that name; a name this version does not know plays as the default.
+fn voice<'a, V>(voices: &'a [(&str, V)], name: &str) -> &'a V {
+    &voices.iter().find(|(known, _)| *known == name).unwrap_or(&voices[0]).1
+}
 const COUPLE_RING_HZ: (f64, f64) = (504.0, 926.0);
 const COUPLE_RING: Ring = Ring { hz: 700.0, decay: 0.013, db: -6.9 };
 
@@ -473,6 +596,10 @@ pub struct Gains {
     pub steady_fade: f64,
     pub cylinders: i64,
     pub gearbox: String,
+    /// whose gear change an automated or manual gearbox plays (SOUNDS)
+    pub shift_sound: String,
+    /// whose relay the turn signal plays (SOUNDS)
+    pub blinker_sound: String,
     pub bump_threshold: f64,
     pub impact_threshold: f64,
     pub pedal: f64,
@@ -510,6 +637,8 @@ impl Default for Gains {
             steady_fade: 0.6,
             cylinders: 6,
             gearbox: AMT.to_string(),
+            shift_sound: SOUND_DEFAULT.to_string(),
+            blinker_sound: SOUND_DEFAULT.to_string(),
             bump_threshold: 0.2,
             impact_threshold: 12.0,
             pedal: 0.6,
@@ -2149,11 +2278,13 @@ impl Synth {
                 );
             } else {
                 // the recorded shift on its own timeline
-                for (delay, strength, decay) in SHIFT_HITS {
-                    self.both(Effect::Gear, Burst::new(SHIFT_HZ, strength * gear, decay).delay(delay).phase(0.25));
-                    if decay <= TICK_EDGE {
+                let voice = voice(&SHIFT_VOICES, &self.g.shift_sound);
+                for &(delay, strength, decay, attack) in voice.hits {
+                    let hit = Burst::new(voice.hz, strength * gear, decay).delay(delay).attack(attack);
+                    self.both(Effect::Gear, if voice.edge { hit.phase(0.25) } else { hit });
+                    if voice.edge && decay <= TICK_EDGE {
                         self.both(Effect::Gear, Burst::tick(TICK_SHARE * strength * gear, delay));
-                        self.ring(Effect::Gear, Side::C, TICK_SHARE * strength * gear, delay, SHIFT_RING);
+                        self.ring(Effect::Gear, Side::C, TICK_SHARE * strength * gear, delay, voice.ring);
                     }
                 }
             }
@@ -2266,10 +2397,18 @@ impl Synth {
         self.blinker_idle += DT;
         for (key, on, side) in [("blinker_l", frame.blinker_left, Side::L), ("blinker_r", frame.blinker_right, Side::R)] {
             if self.changed(key, on) && g.blinker != 0.0 {
-                let strength = if on { 1.0 } else { 0.7 } * g.blinker;
-                self.push(Effect::Blinker, side, Burst::new(BLINKER_HZ, strength, BLINKER_DECAY).phase(0.25));
-                self.push(Effect::Blinker, side, Burst::tick(TICK_SHARE * strength, 0.0));
-                self.ring(Effect::Blinker, side, TICK_SHARE * strength, 0.0, BLINKER_RING);
+                let voice = voice(&BLINKER_VOICES, &g.blinker_sound);
+                let strength = if on { 1.0 } else { voice.off } * g.blinker;
+                if strength != 0.0 {
+                    let click = Burst::new(voice.hz, voice.body * strength, voice.decay);
+                    self.push(Effect::Blinker, side, if voice.edge { click.phase(0.25) } else { click });
+                    if voice.tick != 0.0 {
+                        self.push(Effect::Blinker, side, Burst::tick(TICK_SHARE * strength * voice.tick, 0.0));
+                    }
+                    if let Some(ring) = voice.ring {
+                        self.ring(Effect::Blinker, side, TICK_SHARE * strength, 0.0, ring);
+                    }
+                }
                 if self.blinker_idle > 1.5 {
                     self.levels.events.push(if key == "blinker_l" { t!("방향지시등 좌") } else { t!("방향지시등 우") });
                 }

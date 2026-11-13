@@ -15,7 +15,7 @@ use std::time::Duration;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use ats_haptics::blocklog::log_dir;
-use ats_haptics::effects::{Effect, Equalizer, Gains, AMT, GEARBOXES};
+use ats_haptics::effects::{Effect, Equalizer, Gains, AMT, GEARBOXES, SOUNDS, SOUND_DEFAULT};
 use ats_haptics::gamewatch::GameWatcher;
 use ats_haptics::i18n::{self, LANGUAGES};
 use ats_haptics::platform::{self, Icon, LaunchEvent};
@@ -122,6 +122,15 @@ pub struct App {
     events_model: Rc<VecModel<SharedString>>,
     timer: Option<slint::Timer>,
     me: Weak<RefCell<App>>,
+}
+
+/// The shift or blinker sound to show: one this version knows, else the default it plays as.
+fn known_sound(sound: &str) -> &str {
+    if SOUNDS.contains(&sound) {
+        sound
+    } else {
+        SOUND_DEFAULT
+    }
 }
 
 fn specs(group: usize) -> &'static [Spec] {
@@ -305,6 +314,8 @@ impl App {
         ui.set_events(ModelRc::from(Rc::clone(&self.events_model)));
         ui.set_cylinders(self.gains.cylinders as i32);
         ui.set_gearbox(if GEARBOXES.contains(&self.gains.gearbox.as_str()) { self.gains.gearbox.as_str() } else { AMT }.into());
+        ui.set_shift_sound(known_sound(&self.gains.shift_sound).into());
+        ui.set_blinker_sound(known_sound(&self.gains.blinker_sound).into());
         self.build_presets();
         self.changed();
         self.show_run_state();
@@ -388,6 +399,8 @@ impl App {
         on!(on_calibration, |app| app.open_calibration());
         on!(on_cylinders_step, |app, step: i32| app.step_cylinders(step as i64));
         on!(on_gearbox_picked, |app, gearbox: SharedString| app.set_gearbox(&gearbox));
+        on!(on_shift_sound_picked, |app, sound: SharedString| app.set_shift_sound(&sound));
+        on!(on_blinker_sound_picked, |app, sound: SharedString| app.set_blinker_sound(&sound));
         on!(on_save, |app| app.save());
         on!(on_reset, |app| app.apply(&Gains::default()));
         on!(on_debug_log_toggled, |app, on: bool| app.set_debug_log(on));
@@ -493,6 +506,22 @@ impl App {
         }
     }
 
+    fn set_shift_sound(&mut self, sound: &str) {
+        self.ui.set_shift_sound(sound.into());
+        if sound != self.gains.shift_sound {
+            self.gains.shift_sound = sound.to_string();
+            self.changed();
+        }
+    }
+
+    fn set_blinker_sound(&mut self, sound: &str) {
+        self.ui.set_blinker_sound(sound.into());
+        if sound != self.gains.blinker_sound {
+            self.gains.blinker_sound = sound.to_string();
+            self.changed();
+        }
+    }
+
     fn set_auto_start(&mut self, on: bool) {
         // an app option, not a tuning value: saved right away
         self.options.auto_start_on_game = on;
@@ -542,7 +571,7 @@ impl App {
         true
     }
 
-    /// Set every slider, switch, route, cylinder count and gearbox to these gains; saving stays separate.
+    /// Set every slider, switch, route, cylinder count, gearbox and sound to these gains; saving stays separate.
     fn apply(&mut self, gains: &Gains) {
         for group in 0..4 {
             for spec in specs(group) {
@@ -566,6 +595,10 @@ impl App {
         let gearbox = if GEARBOXES.contains(&gains.gearbox.as_str()) { gains.gearbox.as_str() } else { AMT };
         self.gains.gearbox = gearbox.to_string();
         self.ui.set_gearbox(gearbox.into());
+        self.gains.shift_sound = known_sound(&gains.shift_sound).to_string();
+        self.ui.set_shift_sound(self.gains.shift_sound.as_str().into());
+        self.gains.blinker_sound = known_sound(&gains.blinker_sound).to_string();
+        self.ui.set_blinker_sound(self.gains.blinker_sound.as_str().into());
         for (group, model) in self.rows.iter().enumerate() {
             for (index, spec) in specs(group).iter().enumerate() {
                 model.set_row_data(index, self.row(spec));

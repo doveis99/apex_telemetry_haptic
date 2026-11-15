@@ -90,13 +90,17 @@ class ScenarioTest(unittest.TestCase):
                 for samples in run(name).channels:
                     self.assertLess(sum(abs(x) > 0.9 * MAX_SAMPLE for x in samples) / len(samples), 0.01)
 
-    def test_a_split_shift_is_no_louder_than_a_shift(self) -> None:
-        gains = Gains(steady_fade=0.0, disabled=[n for n in TOGGLEABLE if n not in ("gear", "shifter")])
-        r = Run(CITY, gains)
+    def test_a_split_shift_is_no_louder_than_its_louder_part(self) -> None:
+        # At the default gains the splitter's knob (0.7) is the stronger part now, the gear's clack (0.35) the
+        # weaker: together they must not pile up over either alone.
+        def only(*effects: str) -> Run:
+            return Run(CITY, Gains(steady_fade=0.0, disabled=[n for n in TOGGLEABLE if n not in effects]))
+        r, knob = only("gear", "shifter"), only("shifter")
         split = {round(at + SPLIT_LEAD, 3) for at, _ in r.drive.splits}
         plain = max(r.peak(at - 0.35, at + 0.55) for at, _ in r.drive.shifts[1:] if round(at, 3) not in split)
+        alone = max(knob.peak(at - 0.35, at + 0.55) for at, _ in r.drive.shifts[1:] if round(at, 3) in split)
         stacked = max(r.peak(at - 0.35, at + 0.55) for at, _ in r.drive.shifts[1:] if round(at, 3) in split)
-        self.assertLess(stacked, 1.15 * plain)
+        self.assertLess(stacked, 1.15 * max(plain, alone))
 
     def test_the_cruise_settles_and_the_overtake_brings_it_back(self) -> None:
         fresh = run("highway").fresh

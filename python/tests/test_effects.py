@@ -78,7 +78,8 @@ class GearTest(unittest.TestCase):
         clack = max(range(len(samples)), key=lambda n: abs(samples[n]))
         self.assertAlmostEqual(clack, 140, delta=5)  # where the recordings have it
         lever = max(abs(x) for x in samples[20:clack - 10])
-        self.assertGreater(lever, 0.1 * abs(samples[clack]))
+        # 0.094 of the clack; it read 0.12 while the default gain pushed the clack into the limiter
+        self.assertGreater(lever, 0.08 * abs(samples[clack]))
         self.assertLess(lever, 0.4 * abs(samples[clack]))
         edge = rms(samples[clack:clack + 20])
         self.assertGreater(rms(samples[clack + 50:clack + 70]), 0.25 * edge)  # it rings on, not just a click
@@ -563,7 +564,7 @@ class SteadyFadeTest(unittest.TestCase):
         self.drive(s, 30.0)
         settled = s.levels.engine
         self.drive(s, 0.2, gear=11, rpm=1050.0)
-        self.assertGreater(s.levels.engine, 1.8 * settled)
+        self.assertGreater(s.levels.engine, 0.9 * settled / (1.0 - s.g.steady_fade))  # in full again, at the lower rpm
 
     def test_coming_back_from_a_pause_starts_in_full(self) -> None:
         s = only("road")

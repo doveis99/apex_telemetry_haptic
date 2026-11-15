@@ -466,15 +466,16 @@ class Gains:
     trigger_level: float = 1.0
     # The player sits in the cab holding the wheel, often for hours. The engine is a hum under
     # the road, and the cab's clicks stand out.
-    engine: float = 0.1
+    engine: float = 0.15
     road: float = 0.5
     bumps: float = 1.0
     rumble: float = 0.8
     wheelspin: float = 0.7
-    # Gear shift, throttle/brake and its pulse are the developer's own after a 220 mile haul
-    # (2026-10-28): the shift clacks near 90 of 112 even at 0.6, and anything stronger tires
-    # the hands.
-    gear: float = 0.6
+    # Throttle/brake and its pulse are the developer's own after a 220 mile haul (2026-10-28).
+    # The gear shift came down from that haul's 0.6 to the developer's 0.35 (2026-11-16): in
+    # the game's own mix the clack lies about 12 dB under the coasting engine, here it stood
+    # 19 dB over it, and the trigger now shows the pull going away through a shift.
+    gear: float = 0.35
     retarder: float = 0.3
     impact: float = 1.0
     trigger: float = 0.2  # held nearly all the time
@@ -484,7 +485,7 @@ class Gains:
     # how far engine, road and throttle/brake fade while what drives them holds steady; 0 keeps
     # them constant. On the developer's 220 mile haul 0.6 takes the road 6.6 dB down overall
     # (under 60% of itself for 86% of the drive) and the trigger 2.5 dB; 0.4 takes them 3.9 and 1.6.
-    steady_fade: float = 0.6
+    steady_fade: float = 0.4
     cylinders: int = 6
     # how a gear change feels: AMT (the lever's knock and the clack) or CONVERTER (a soft push)
     gearbox: str = AMT
@@ -499,7 +500,7 @@ class Gains:
     # event effects
     pedal: float = 0.6
     squeal: float = 0.4
-    trailer: float = 0.9
+    trailer: float = 0.7
     park_brake: float = 0.7
     engine_start: float = 0.8
     shifter: float = 0.7
@@ -510,7 +511,7 @@ class Gains:
     blinker: float = 0.5
     game_events: float = 0.5
     # how far the continuous effects dip while an event plays; 0 never
-    ducking: float = 0.7
+    ducking: float = 0.8
     # effects switched off; their gains are kept so switching back restores them
     disabled: list[str] = field(default_factory=list)
     # effect -> GRIP, TRIGGER or BOTH; missing or unknown entries use DEFAULT_ROUTES

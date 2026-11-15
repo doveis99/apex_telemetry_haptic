@@ -159,6 +159,12 @@ const LEAP_SLOPE: f64 = 0.5;
 const LEAP_FLOOR: f64 = 0.5;
 const LEAP_HOLD: f64 = 0.15;
 const SHIFT_COOLDOWN: f64 = 0.15;
+/// The engine counts as cut off while it gets under this share of the pedal. In the block logs
+/// of 2026-11-02 to -14, 157 of the 164 such cuts with the pedal held sat on a gear change:
+/// 0.7 s before the gear number and 0.4 s after it on an 18-speed and a 12-speed, 0.54 and
+/// 0.31 s on a 14-gear truck of ETS2, 0.04 and 0.24 s on a 6-speed automatic. Coasting shifts
+/// show none.
+const THROTTLE_CUT: f64 = 0.5;
 /// The voices a gear change (Gains.shift_sound) and the turn signal's relay (Gains.blinker_sound)
 /// can be given: the recordings the effects were first fitted to, two trucks of ETS2, or the
 /// vibration alone.
@@ -1876,6 +1882,12 @@ pub struct Synth {
     sway_osc: Oscillator,
     lock_phase: f64,
     was_locked: bool,
+    /// the pedal on the frame before this one
+    prev_pedal: Option<f64>,
+    /// the lower of the pedal on this frame and the one before: what the engine should have by now
+    pedal_asked: f64,
+    /// the game is holding the engine's throttle under the pedal, as through a gear change
+    throttle_cut: bool,
     steady_ref: [Option<f64>; 7],
     /// engine, road, trigger: 1 just after a bed's input moved, falling while it holds
     pub fresh: [f64; 3],
@@ -1965,6 +1977,9 @@ impl Synth {
             sway_osc: Oscillator::default(),
             lock_phase: 0.0,
             was_locked: false,
+            prev_pedal: None,
+            pedal_asked: 0.0,
+            throttle_cut: false,
             steady_ref: [None; 7],
             fresh: [1.0; 3],
             duck: [0.0; 3],
@@ -2061,6 +2076,8 @@ impl Synth {
         self.cab_sway = (0.0, 0.0);
         self.prev_gear = None;
         self.prev_flags.clear(); // the game events stay: they are one-shot flags, not states
+        self.prev_pedal = None;
+        self.throttle_cut = false;
         self.steady_ref = [None; 7];
         self.fresh = [1.0; 3];
     }
@@ -2612,6 +2629,9 @@ impl Synth {
                 self.wheel_events(frame, dt);
                 self.impact_event(frame, dt);
                 self.cab_event(frame);
+                // the game gives the engine the pedal a frame late
+                let before = self.prev_pedal.replace(frame.user_throttle).unwrap_or(frame.user_throttle);
+                self.pedal_asked = m::min(before, frame.user_throttle);
             }
             self.gear_event(frame);
             self.state_events(frame);
@@ -2718,6 +2738,11 @@ impl Synth {
             // the finger on the trigger is never quite still
             let throttle_moved = self.novelty(REF_THROTTLE, frame.user_throttle, 0.1, 0.03);
             let brake_moved = self.novelty(REF_BRAKE, frame.user_brake, 0.1, 0.03);
+            // The throttle the engine really gets, never more than the pedal: through a gear
+            // change the game takes it away and gives it back, each gearbox in its own time.
+            let short = m::max(0.0, self.pedal_asked - m::max(frame.game_throttle, 0.0));
+            let given = m::max(0.0, frame.user_throttle - short);
+            let mut cut = false;
             if frame.user_brake > 0.05 && frame.user_brake >= frame.user_throttle {
                 trigger_mode = TriggerMode::Brake;
                 if lock > 0.0 {
@@ -2730,9 +2755,12 @@ impl Synth {
                 }
             } else if frame.user_throttle > 0.05 && frame.engine_on {
                 trigger_mode = TriggerMode::Throttle;
-                trigger_amp =
-                    g.trigger * (0.2 + 0.6 * frame.user_throttle) * self.steady_gain(BED_TRIGGER, throttle_moved);
+                cut = given < THROTTLE_CUT * frame.user_throttle;
+                // the pull coming back is news, as a move of the finger is
+                let moved = if self.throttle_cut && !cut { 1.0 } else { throttle_moved };
+                trigger_amp = g.trigger * (0.2 + 0.6 * given) * self.steady_gain(BED_TRIGGER, moved);
             }
+            self.throttle_cut = cut;
         }
 
         if lock > 0.0 && !self.was_locked {

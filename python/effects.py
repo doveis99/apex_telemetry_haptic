@@ -301,6 +301,11 @@ SHIFT_HITS = ((0.02, 0.19, 0.16),  # the lever out of gear and across
               (0.14, 0.95, 0.005),  # the clack
               (0.14, 0.43, 0.08))  # its ring
 SHIFT_COOLDOWN = 0.15  # s
+# The engine counts as cut off while it gets under this share of the pedal. In the block logs of
+# 2026-11-02 to -14, 157 of the 164 such cuts with the pedal held sat on a gear change: 0.7 s
+# before the gear number and 0.4 s after it on an 18-speed and a 12-speed, 0.54 and 0.31 s on a
+# 14-gear truck of ETS2, 0.04 and 0.24 s on a 6-speed automatic. Coasting shifts show none.
+THROTTLE_CUT = 0.5
 # A torque converter's gearbox (an Allison) shifts under power instead: one clutch hands
 # the drive to the next with no lever and no break in the pull, and the converter cushions
 # it. What reaches the cab is a soft push as the next gear takes hold, firmer the harder the
@@ -1134,6 +1139,9 @@ class Synth:
         self.sway_osc = Oscillator()
         self.lock_phase = 0.0  # of the ABS-like chop, per sample
         self.was_locked = False
+        self.prev_pedal: float | None = None  # the pedal on the frame before this one
+        self.pedal_asked = 0.0  # the lower of the pedal on this frame and the one before
+        self.throttle_cut = False  # the game is holding the engine's throttle under the pedal
         self.steady_ref: dict[str, float] = {}
         self.fresh = dict.fromkeys(STEADY_BEDS, 1.0)  # 1 just after a bed's input moved, falling while it holds
         self.duck = [0.0, 0.0, 0.0]  # left grip, right grip, trigger; 0 = no ducking
@@ -1160,6 +1168,8 @@ class Synth:
         self.cab_sway = (0.0, 0.0)
         self.prev_gear = None
         self.prev_state = {key: value for key, value in self.prev_state.items() if key == "game_events"}
+        self.prev_pedal = None
+        self.throttle_cut = False
         # coming back is a change too: the beds start in full and settle again
         self.steady_ref = {}
         self.fresh = dict.fromkeys(STEADY_BEDS, 1.0)
@@ -1565,6 +1575,10 @@ class Synth:
                 self._wheel_events(frame, dt)
                 self._impact_event(frame, dt)
                 self._cab_event(frame)
+                # the game gives the engine the pedal a frame late
+                before = frame.user_throttle if self.prev_pedal is None else self.prev_pedal
+                self.prev_pedal = frame.user_throttle
+                self.pedal_asked = min(before, frame.user_throttle)
             self._gear_event(frame)
             self._state_events(frame)
 
@@ -1648,6 +1662,11 @@ class Synth:
             # the finger on the trigger is never quite still
             throttle_moved = self._novelty("throttle", frame.user_throttle, 0.1, 0.03)
             brake_moved = self._novelty("brake", frame.user_brake, 0.1, 0.03)
+            # The throttle the engine really gets, never more than the pedal: through a gear
+            # change the game takes it away and gives it back, each gearbox in its own time.
+            short = max(0.0, self.pedal_asked - max(frame.game_throttle, 0.0))
+            given = max(0.0, frame.user_throttle - short)
+            cut = False
             if frame.user_brake > 0.05 and frame.user_brake >= frame.user_throttle:
                 trigger_mode = "brake"
                 if lock > 0:
@@ -1660,8 +1679,11 @@ class Synth:
                                    * self._steady_gain("trigger", brake_moved))
             elif frame.user_throttle > 0.05 and frame.engine_on:
                 trigger_mode = "throttle"
-                trigger_amp = (g.trigger * (0.2 + 0.6 * frame.user_throttle)
-                               * self._steady_gain("trigger", throttle_moved))
+                cut = given < THROTTLE_CUT * frame.user_throttle
+                # the pull coming back is news, as a move of the finger is
+                moved = 1.0 if self.throttle_cut and not cut else throttle_moved
+                trigger_amp = g.trigger * (0.2 + 0.6 * given) * self._steady_gain("trigger", moved)
+            self.throttle_cut = cut
 
         if lock > 0 and not self.was_locked:
             self.lock_phase = 0.0  # the warning starts with a pulse, not up to half a cycle late

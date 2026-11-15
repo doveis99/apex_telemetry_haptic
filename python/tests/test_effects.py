@@ -443,6 +443,42 @@ class PedalTriggerTest(unittest.TestCase):
         locked = self.trigger(locked=True, user_brake=1.0, user_throttle=0.0)
         self.assertGreaterEqual(max(map(abs, locked)), max(map(abs, full)))
 
+    @staticmethod
+    def shift(fade: float, cut_blocks: int = 100) -> tuple[Synth, list[float], list[float], list[float]]:
+        """The trigger before, through and after the game cutting the throttle under a held pedal."""
+        s = Synth(effective_gains(Gains(steady_fade=fade, disabled=[n for n in TOGGLEABLE if n != "trigger"])))
+        parts = []
+        for blocks, game in ((2000, 0.7), (cut_blocks, 0.0), (60, 0.7)):
+            samples = []
+            for _ in range(blocks):
+                samples.extend(s.render(frame(user_throttle=0.7, game_throttle=game)).trigger)
+            parts.append(samples[-320:])
+        return s, *parts
+
+    def test_a_gear_change_takes_the_pull_off_the_trigger_and_brings_it_back(self) -> None:
+        # The trigger followed the finger alone, so it held through a shift while the grips' engine fell away.
+        _, before, during, after = self.shift(0.0)
+        self.assertLess(rms(during), 0.4 * rms(before))  # 0.2 + 0.6 x 0.7 down to 0.2
+        self.assertGreater(rms(during), 0.2 * rms(before))  # the pedal is still held: it does not go dead
+        self.assertAlmostEqual(rms(after) / rms(before), 1.0, delta=0.02)
+
+    def test_the_pull_comes_back_fresh_after_a_gear_change(self) -> None:
+        s, before, during, after = self.shift(0.6)
+        self.assertGreater(rms(after), 1.5 * rms(before))  # faded by the long hold, in full again
+        self.assertLess(rms(during), 0.5 * rms(before))
+        self.assertGreater(s.fresh["trigger"], 0.9)
+
+    def test_the_game_following_the_pedal_a_frame_late_is_no_cut(self) -> None:
+        def stab(late: bool) -> list[float]:
+            s = Synth(effective_gains(Gains(steady_fade=0.0, disabled=[n for n in TOGGLEABLE if n != "trigger"])))
+            samples, pedal_before = [], 0.2
+            for n in range(60):
+                pedal = 0.2 if n < 20 else min(0.9, 0.2 + 0.1 * (n - 19))
+                samples.extend(s.render(frame(user_throttle=pedal, game_throttle=pedal_before if late else pedal)).trigger)
+                pedal_before = pedal
+            return samples
+        self.assertEqual(stab(True), stab(False))
+
 
 class TriggerSideTest(unittest.TestCase):
     """The brake's effects play on the left trigger, the throttle's on the right, anything else on both."""

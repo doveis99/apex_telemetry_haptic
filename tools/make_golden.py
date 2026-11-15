@@ -177,6 +177,8 @@ def runs():
     full = [log for log in logs if "render_us" in columns(log) and log.with_suffix(".json").exists()]
     for log in full[:LOGS] + old[:OLD_LOGS]:
         gains, eq, _ = settings_of(log)
+        # the Python synth plays the default voices whatever the log was recorded with
+        gains = replace(gains, shift_sound="default", blinker_sound="default")
 
         def rows(log=log):
             for n, (_, _, frame) in enumerate(LogReader(log).rows()):
@@ -212,6 +214,10 @@ def main() -> None:
     i18n.set_language("ko")  # events in the source language, as the Rust port writes them for now
     OUT.mkdir(parents=True, exist_ok=True)
     wanted = sys.argv[1:]
+    if not wanted:
+        # the logs move on: what an earlier run made of ones no longer among the newest is stale
+        for stale in [*OUT.glob("log_*"), *OUT.glob("replay_*")]:
+            stale.unlink()
     if not wanted or "previews" in wanted:
         write_previews()
     logged_once = False

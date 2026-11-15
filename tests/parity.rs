@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use ats_haptics::apex6::{build_realtime, Block, FRAME_PERIOD};
 use ats_haptics::blocklog::{json_indent1, BlockLog};
-use ats_haptics::effects::{Equalizer, Gains, Synth};
+use ats_haptics::effects::{Equalizer, Gains, Synth, SOUND_DEFAULT};
 use ats_haptics::pyrandom::PyRandom;
 use ats_haptics::replay::{replay, settings_of, summary, LogReader};
 use ats_haptics::scenarios::{scenario, ScenarioTelemetry};
@@ -357,7 +357,10 @@ fn replay_summary_matches_python() {
             eprintln!("{name}: {} is gone, skipped", log.display());
             continue;
         }
-        let (gains, eq, version) = settings_of(&log);
+        let (mut gains, eq, version) = settings_of(&log);
+        // the Python synth plays the default voices whatever the log was recorded with
+        gains.shift_sound = SOUND_DEFAULT.to_string();
+        gains.blinker_sound = SOUND_DEFAULT.to_string();
         let mut lines = Vec::new();
         let (logged, replayed, blocks) = replay(&log, &gains, eq, None, Some(&golden.end), Some(golden.knocks),
                                                 PyRandom::new(golden.seed), &mut |line| lines.push(line))

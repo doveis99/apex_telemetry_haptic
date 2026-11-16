@@ -1481,7 +1481,8 @@ class TickTest(unittest.TestCase):
             with mock.patch("effects.TICK_SHARE", share):
                 return EventShapeTest.event("blinker", 4, {"blinker_left": False}, {"blinker_left": True})
         with_tick, without = flash(1.0), flash(0.0)
-        self.assertGreater(with_tick[0] - without[0], 0.25 * MAX_SAMPLE)  # one sample, on the click's crest
+        # one sample, on the click's crest: half the blinker's strength of full scale
+        self.assertGreater(with_tick[0] - without[0], 0.5 * Gains().blinker * MAX_SAMPLE)
         self.assertEqual(with_tick[1:], without[1:])  # the body after it is as it was
 
 

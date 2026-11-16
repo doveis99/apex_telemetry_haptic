@@ -590,7 +590,7 @@ class Gains:
     # event effects
     pedal: float = 0.6
     squeal: float = 0.4
-    trailer: float = 0.7
+    trailer: float = 0.25
     park_brake: float = 0.7
     engine_start: float = 0.8
     shifter: float = 0.7
@@ -598,7 +598,7 @@ class Gains:
     # release, the game's alerts. Softer than the cab's knocks; with the road fading on steady
     # stretches they still come through.
     air_brake: float = 0.3
-    blinker: float = 0.5
+    blinker: float = 0.25
     game_events: float = 0.5
     # how far the continuous effects dip while an event plays; 0 never
     ducking: float = 0.8

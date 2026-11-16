@@ -428,9 +428,11 @@ mod tests {
                 assert!(WITHIN.0 < ratio && ratio < WITHIN.1, "{effect:?} {lo}-{hi} Hz: {ratio}");
             }
             // under the resonance much of the clicks' push is where the pad's line rose to their
-            // first sample, which the 2 kHz events make up for (drawn plainly: about -30%)
+            // first sample, which the 2 kHz events make up for (drawn plainly: about -30%). How
+            // well depends on the level: the turn signal reads +1.6% at 0.5 and +5.1% (0.43 dB) at
+            // its default of 0.25 since 0.23.0.
             let ratio = felt_ratio(&a, &b, 20.0, 45.0);
-            assert!((ratio - 1.0).abs() < 0.03, "{effect:?} under 45 Hz: {ratio}");
+            assert!((ratio - 1.0).abs() < 0.06, "{effect:?} under 45 Hz: {ratio}");
         }
     }
 

@@ -22,6 +22,7 @@ import sys
 import time
 from collections import deque
 from dataclasses import asdict, fields
+from pathlib import Path
 from typing import Callable
 
 from apex6 import FRAME_PERIOD, MAX_SAMPLE, Apex6, Block, DeviceUnavailable, StreamStats
@@ -30,7 +31,7 @@ from effects import GEARBOXES, Equalizer, Gains, Synth, effective_gains
 from gamewatch import GameWatcher
 from i18n import set_language, system_language, t
 from preview import Preview
-from replay import LogTelemetry
+from replay import LogTelemetry, game_of
 from scenarios import SCENARIOS, ScenarioTelemetry
 from settings import load_app_options, load_eq, load_gains
 from telemetry import SIMULATED_FPS, Frame, SharedMemoryTelemetry, SimulatedTelemetry
@@ -54,7 +55,9 @@ class Runner:
                  replay: tuple[str, str | None, str | None] | None = None) -> None:
         self.gains = effective_gains(gains)
         self.eq = eq or Equalizer()
-        self.synth = Synth(self.gains, self.eq)
+        # a replayed drive is read as its game's trucks were; a test drive as ATS's (effects.Chassis)
+        self.replay_game = game_of(Path(replay[0])) if replay is not None else None
+        self.synth = Synth(self.gains, self.eq, self.replay_game)
         simulate = simulate or scenario is not None or replay is not None
         self.simulated = simulate
         if replay is not None:  # (log, from, to)
@@ -137,7 +140,8 @@ class Runner:
 
     def start_session(self) -> None:
         self.game_ended = False
-        self.synth = Synth(self.gains, self.eq)  # fresh edge detectors: no stale events
+        game = self.watcher.game if self.watcher is not None else self.replay_game
+        self.synth = Synth(self.gains, self.eq, game)  # fresh edge detectors: no stale events
         self._last_render_time = None
         # Map the plugin afresh: the next game may write another plugin's mapping,
         # and holding the old one keeps a dead copy alive.
@@ -293,7 +297,7 @@ def parse_args(defaults: Gains) -> argparse.Namespace:
     parser.add_argument("--grip-level", type=float, default=defaults.grip_level, help="grip output strength")
     parser.add_argument("--trigger-level", type=float, default=defaults.trigger_level,
                         help="trigger output strength")
-    for name in ("engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarder", "impact",
+    for name in ("engine", "road", "bumps", "cab", "rumble", "wheelspin", "gear", "retarder", "impact",
                  "trigger"):
         parser.add_argument(f"--{name}", type=float, default=getattr(defaults, name))
     parser.add_argument("--throttle-pulse", type=float, default=defaults.throttle_pulse,
@@ -309,8 +313,8 @@ def main() -> None:
     gains = load_gains()
     args = parse_args(gains)
     gains.master = args.gain
-    for name in ("grip_level", "trigger_level", "engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarder",
-                 "impact", "trigger", "throttle_pulse", "cylinders", "gearbox"):
+    for name in ("grip_level", "trigger_level", "engine", "road", "bumps", "cab", "rumble", "wheelspin", "gear",
+                 "retarder", "impact", "trigger", "throttle_pulse", "cylinders", "gearbox"):
         setattr(gains, name, getattr(args, name))
     runner = Runner(gains, simulate=args.simulate, seconds=args.seconds, log_blocks=args.log_blocks,
                     sim_fps=args.sim_fps or None, eq=Equalizer.for_player(load_eq()), scenario=args.scenario,

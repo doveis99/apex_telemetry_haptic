@@ -12,3 +12,5 @@ sound sample/
 # cargo's build output, and the golden data tools/make_golden.py records from the Python synth
 target/
 tests/golden-data/
+# drives kept for the tests after the app pruned their debug logs: frames per game, and whole logs
+tests/drives/

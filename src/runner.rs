@@ -58,6 +58,8 @@ pub struct Runner {
     pub simulated: bool,
     source: Box<dyn TelemetrySource>,
     watcher: Option<GameWatcher>,
+    /// the game a replayed log was recorded in
+    replay_game: Option<String>,
     on_state: Option<StateCallback>,
     deadline: Option<Instant>,
     /// set from any thread (Ctrl+C, the window) to stop at the next block
@@ -93,13 +95,20 @@ pub struct Runner {
 impl Runner {
     pub fn new(gains: &Gains, eq: Equalizer, source: Source, seconds: Option<f64>, log_blocks: bool) -> Runner {
         let simulated = !matches!(source, Source::Game);
+        // a replayed drive is read as its game's trucks were; a test drive as ATS's (effects::Chassis)
+        let replay_game = match &source {
+            Source::Replay { log, .. } => crate::replay::game_of(std::path::Path::new(log)),
+            _ => None,
+        };
         let source: Box<dyn TelemetrySource> = match source {
             Source::Game => Box::new(SharedMemoryTelemetry::default()),
             Source::Simulated(fps) => Box::new(SimulatedTelemetry::new(fps)),
             Source::Scenario(scenario, fps) => Box::new(ScenarioTelemetry::new(scenario, fps)),
             Source::Replay { log, from, to } => Box::new(LogTelemetry::new(log, from.as_deref(), to.as_deref())),
         };
-        let runner = Runner::with_source(gains.effective(), eq, source, simulated, seconds);
+        let mut runner = Runner::with_source(gains.effective(), eq, source, simulated, seconds);
+        runner.synth.set_game(replay_game.as_deref());
+        runner.replay_game = replay_game;
         runner.log_blocks.store(log_blocks, Ordering::Relaxed);
         runner
     }
@@ -113,6 +122,7 @@ impl Runner {
             simulated,
             source,
             watcher: if simulated { None } else { Some(GameWatcher::new()) },
+            replay_game: None,
             on_state: None,
             deadline: seconds.map(|s| Instant::now() + Duration::from_secs_f64(s)),
             stop_requested: Arc::new(AtomicBool::new(false)),
@@ -253,6 +263,8 @@ impl Runner {
     pub fn start_session(&mut self) {
         self.game_ended = false;
         self.synth = Synth::new(self.gains.clone(), self.eq.clone()); // fresh edge detectors: no stale events
+        let game = self.game().map(str::to_string).or_else(|| self.replay_game.clone());
+        self.synth.set_game(game.as_deref());
         self.rate2k = None;
         self.pace = Pace::default();
         self.last_render_time = None;

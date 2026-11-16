@@ -418,4 +418,7 @@ MESSAGES = {
         "Le camion dont une boîte AMT / manuelle joue le passage de rapport. Standard est le « clac » réglé sur des enregistrements de la boîte Eaton de camions nord-américains. Scania fait suivre son clic d'une poussée longue et lourde quand l'air engage le rapport ; MAN donne deux clics aigus et secs. Doux ne garde que la vibration, sans le clic. Sans effet avec un convertisseur.",
     "방향지시등 릴레이를 누구의 소리로 울릴지 고릅니다. 기본은 미국 트럭의 릴레이 녹음에 맞춘 딸깍입니다. 스카니아는 더 낮고 통통한 소리이고, MAN은 켜질 때만 나는 짧고 가벼운 틱입니다. 부드럽게는 딸깍 소리 없이 진동만 냅니다.":
         "Le camion dont les clignotants jouent le relais. Standard est le clic réglé sur des enregistrements de relais de camions nord-américains. Scania est un toc plus grave et plus plein ; MAN est un tic court et léger, seulement à l'allumage. Doux ne garde que la vibration, sans le clic.",
+    "└ 캐빈 흔들림": "└ Balancement de la cabine",
+    "캐빈이 출렁일 때 이어지는 낮은 '웅'의 세기입니다. 흙길이나 빠른 커브처럼 캐빈이 앞뒤·좌우로 기우는 동안 서서히 커졌다가 잦아들고, 요철의 충격과는 따로 조절합니다. 요철을 끄면 함께 꺼집니다.":
+        "Force du bourdonnement grave qui suit le balancement de la cabine. Tant que la cabine bascule d'avant en arrière ou d'un côté à l'autre, comme sur un chemin de terre ou dans un virage rapide, il enfle puis s'efface en douceur ; il se règle à part des chocs des bosses et se coupe avec elles.",
 }

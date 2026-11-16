@@ -63,6 +63,7 @@ ROUGH_TAU = 0.076  # s, smoothing of the road roughness estimate
 # usual pace came out weaker than the highway (grips 11 against 18 of 112), and every road
 # felt the same. ZAF's cab rattle grows with the square of the cab's acceleration, which was
 # 4-8 times as large on that dirt road as on pavement; so does this, full at ROUGH_FULL.
+# What counts as roughness is each game's own (Chassis).
 ROUGH_FULL = 0.12  # m/s of roughness that alone gives the texture its full strength
 ROUGH_POWER = 2.0
 ROUGH_NOVELTY = 1.5  # per m/s of roughness, what the steady fade takes for a change of ground
@@ -244,19 +245,96 @@ BUMP_RIDE_MAX = 0.5  # m/s, as high as it goes
 # within 0.5 s, settling in 0.16 s (median; 0.35 s at the 90th percentile). A knock struck once
 # cannot follow that, and band noise like the cab's recorded boom (2026-11-03: 26-62 Hz,
 # swelling for 0.10-0.15 s) felt grainy in the hand, its strength wobbling about 40% at random.
-# So one smooth tone follows the tilt acceleration frame by frame. It starts above pavement's
-# own shaking (99th percentile 0.05 rad/s^2, where dirt's median is 0.05-0.06), is at a lurch
-# (0.14, where a knock used to strike) as strong as the smallest knock was, and is full at the
-# dirt road's 99th percentile.
+# So one smooth tone follows the tilt acceleration. It starts above pavement's own shaking (99th
+# percentile 0.05 rad/s^2, where dirt's median is 0.05-0.06), is at a lurch (0.14, where a knock
+# used to strike) as strong as the smallest knock was, and is full at the dirt road's 99th
+# percentile. How closely it follows is each game's own (Chassis).
 CAB_SWAY_HZ = 45.0  # near the recorded boom's loudest pitch (41.5-47 Hz), where the grips still answer
 CAB_SWAY = ((0.06, 0.0), (0.14, 0.25), (0.6, 1.0))  # rad/s^2 of tilt acceleration, and strength
 CAB_SWAY_TAU = 0.025  # s: smooths the game's frame steps (18 ms), not the 2 Hz swing
+CAB_SWAY_ATTACK = 0.1  # s, where the sway is held (Chassis.sway_held)
+CAB_SWAY_RELEASE = 0.3  # s
+CAB_SWAY_STOP = 0.025  # s: with the telemetry gone
+CAB_LEAN_TAU = 0.025  # s: as CAB_SWAY_TAU, for the side a held sway leans to
 # The sway is a roll: in the same drives 94-98% of the tilt acceleration at a lurch was about
 # the roll axis, and it was positive when the left wheels had sprung more than the right (86-95%
 # of the lurches where they differed most; a larger deflection is a compressed spring). So the
 # tone leans to the side the roll pushes, the far grip getting CAB_FAR_SIDE of it, and crosses
 # over as the cab rocks back; a pitch lands on both alike.
 CAB_FAR_SIDE = 0.5
+
+
+# The two games' trucks do not ride alike, and what was set from one game's drives did not hold
+# in the other. All of the above was measured in ATS (2026-10-31 to 11-04) and gave no trouble
+# there; in ETS2 the same readings made a gravel road of fast bends on plain asphalt
+# (2026-11-14 to 11-17). So what is made of the suspension and the cab is kept per game (Chassis): a
+# change for one game's trucks is not a change for the other's.
+@dataclass(frozen=True)
+class Chassis:
+    rough_full: float = ROUGH_FULL
+    # roughness is a side's wheels moving against each other (_apart), not each wheel's own movement
+    rough_apart: bool = False
+    rough_paved_max: float | None = None  # m/s: pavement reads no rougher than this
+    # a knock stands this many times above the wheels' shaking of the moment (ROUGH_TAU); 0: not asked
+    bump_over_shake: float = 0.0
+    # m/s of a side's wheels shaking on pavement, and how strong the swing's tone is for it (SWING_*); None: no tone
+    swing: tuple[tuple[float, float], ...] | None = None
+    cab_sway: tuple[tuple[float, float], ...] = CAB_SWAY
+    cab_heading: bool = True  # the cab's heading acceleration is part of its tilt
+    # the sway swells and stays (CAB_SWAY_ATTACK, CAB_SWAY_RELEASE); else it follows each frame (CAB_SWAY_TAU)
+    sway_held: bool = False
+
+
+# ATS: each wheel's own movement is the road's roughness, the cab's whole tilt acceleration
+# sways it, frame by frame.
+ATS_CHASSIS = Chassis()
+# ETS2, each from a drive that felt wrong:
+# - Only the wheels of a side moving against each other count. When the body rolls, a side's
+#   wheels all move together, and that is no road: through an S-bend at 91 km/h on plain
+#   asphalt (2026-11-14 06:50:49) the left wheels went from 25 mm out to 34 mm in and the right
+#   ones the other way within half a second, each wheel's own movement read 0.085 m/s, and the
+#   road rose from 0.12 to 0.62 for it, the grips to 90 of 127. With what a side's wheels share
+#   taken out (_apart), the same bend reads 0.030 and the road stays at 0.21 or under.
+# - The sway followed the tilt frame by frame, so a rocking cab made the tone swell and die
+#   with every swing: in that S-bend it started four times in 5 s and peaked at 0.34. The cab's
+#   movement is one movement, so the tone rises over CAB_SWAY_ATTACK, as the recorded boom
+#   swells, and stays through the swings (CAB_SWAY_RELEASE).
+# - Tilt is pitch and roll only. The cab's heading acceleration is the truck's own turning:
+#   summed over each steering movement of that S-bend it gave the change of the chassis' yaw
+#   rate within 7-11%, half the tilt's power in the bend.
+# - In hard turns, and now and then on a straight road, every wheel of truck and trailer swings
+#   2.5-5 mm in and out at one frequency that follows the speed, a cycle per 0.85-0.97 m driven
+#   (11.5 Hz at 35 km/h, 17 Hz at 56; two trucks, four drives). Axle against axle, so _apart
+#   reads it in full: through a bend at 57 km/h (2026-11-17 03:03:45, asphalt) the roughness
+#   stood at 0.33 m/s, the road at full strength with its rattle, the grips at 126 of 127; that
+#   was the dirt road felt on pavement. Its length changes from one stretch to the next, so it
+#   cannot be told from the road by its pitch. But pavement itself reads 0.011-0.016 at the
+#   median and 0.03-0.04 nine moments in ten (36 min on asphalt, turning gently or not at all),
+#   so there the roughness stops at rough_paved_max: what is past it is the truck's own shaking
+#   (that bend's grips 126 -> 51 without the tone below). Off pavement nothing changes.
+# - The same swinging knocked: 29 times in that bend, each wheel passing the threshold on its
+#   own. A knock is a step that stands out, so on pavement it also has to stand bump_over_shake
+#   times above what the wheels have been doing for the last moment.
+# - The truck does shake on its springs there, and the hand should know it, only not as rough
+#   ground and knocks (the developer, 2026-11-17: rounded and unbroken rather than held down).
+#   What the wheels move past pavement's own is played as one round tone on the side that
+#   shakes (swing), swelling and fading with it over SWING_ATTACK and SWING_RELEASE. Unlike the
+#   cab's sway it is the wheels': its pitch follows the speed (SWING_HZ), it sits under the
+#   events as the road does, and it goes by the road's strength. In that bend it stands at
+#   0.36-0.45, three to four times the road's usual bed, in the milder ones at 0.07-0.15, and
+#   on a straight road it is silent. How strong it should be is not felt yet.
+ETS2_CHASSIS = Chassis(rough_apart=True, rough_paved_max=0.04, bump_over_shake=3.0, swing=((0.04, 0.0), (0.3, 1.0)),
+                       cab_heading=False, sway_held=True)
+SWING_HZ = (50.0, 70.0)  # at SWING_SPEED and slower, and faster
+SWING_SPEED = (8.0, 25.0)  # m/s
+SWING_ATTACK = 0.15  # s
+SWING_RELEASE = 0.4  # s
+CHASSIS = {"ATS": ATS_CHASSIS, "ETS2": ETS2_CHASSIS}
+
+
+def chassis_of(game: str | None) -> Chassis:
+    """The game's own; ATS's for a test drive or an unnamed game, which is what the scripted drives were set by."""
+    return CHASSIS.get(game or "", ATS_CHASSIS)
 # The game's wheel deflection now and then leaps 25-100 mm for a single frame
 # and is back on the next one, on one wheel, at any speed: in a 49 min drive
 # (2026-10-31) four in five bump knocks came from such a frame, and nearly
@@ -350,7 +428,17 @@ def surface_of(name: str) -> Surface | None:
     return DEFAULT_SURFACE
 
 
-_BLENDED = ("pitch", "stones", "crunch", "q", "swell", "swell_hz", "seam_share")
+PAVED = ("road_smooth", "rumble", "road", "asphalt", "concrete", "static")  # of SURFACES' names
+
+
+@functools.lru_cache(maxsize=256)
+def paved(name: str) -> bool:
+    """True for a substance that is made road, whatever its state (Chassis.rough_paved_max)."""
+    name = name.lower()
+    return next((key in PAVED for key, _ in SURFACES if key in name), False)
+
+
+_BLENDED =("pitch", "stones", "crunch", "q", "swell", "swell_hz", "seam_share")
 
 
 def side_surface(wheels: list[Wheel]) -> Surface:
@@ -469,6 +557,8 @@ class Gains:
     engine: float = 0.15
     road: float = 0.5
     bumps: float = 1.0
+    # the tone that follows the swaying cab (CAB_SWAY), apart from the knocks; switched off with them
+    cab: float = 1.0
     rumble: float = 0.8
     wheelspin: float = 0.7
     # Throttle/brake and its pulse are the developer's own after a 220 mile haul (2026-10-28).
@@ -730,6 +820,8 @@ def effective_gains(gains: Gains) -> Gains:
     for name in gains.disabled:
         if name in TOGGLEABLE:
             setattr(result, name, 0.0)
+    if "bumps" in gains.disabled:
+        result.cab = 0.0  # the bumps' sub-setting
     return result
 
 
@@ -1079,9 +1171,10 @@ class Levels:
 
 
 class Synth:
-    def __init__(self, gains: Gains, eq: Equalizer | None = None) -> None:
+    def __init__(self, gains: Gains, eq: Equalizer | None = None, game: str | None = None) -> None:
         self.g = gains
         self.eq = eq or Equalizer()
+        self.chassis = chassis_of(game)  # "ATS" or "ETS2": whose trucks these are
         self.cuts = (self.eq.cut("grip"), self.eq.cut("grip"), self.eq.cut("trigger"))  # left, right, trigger
         self.bed_filters = (LowPass(), LowPass(), LowPass())  # left, right, trigger (BED_LOWPASS_HZ)
         self._bed_shape = LowPass()  # a stateless copy for its magnitudes
@@ -1107,7 +1200,7 @@ class Synth:
         # previous-block state
         self.prev_amp = {"engine": 0.0, "road_l": 0.0, "road_r": 0.0, "rumble_l": 0.0, "rumble_r": 0.0,
                          "spin": 0.0, "retarder": 0.0, "jake": 0.0, "trigger": 0.0, "squeal": 0.0,
-                         "harsh": 0.0, "sway_l": 0.0, "sway_r": 0.0}
+                         "harsh": 0.0, "sway_l": 0.0, "sway_r": 0.0, "swing_l": 0.0, "swing_r": 0.0}
         self.prev_state: dict[str, object] = {}
         self.blinker_idle = 0.0
         self.brake_held = self.brake_peak = 0.0  # how long and how hard the service brake has been held
@@ -1123,6 +1216,10 @@ class Synth:
         # truck, trailer: m/s of sudden suspension travel on average (BUMP_RIDE_*), and over how many wheels
         self.ride = [0.0, 0.0]
         self.ride_wheels = [0, 0]
+        self.shake = [0.0, 0.0]  # truck, trailer: the same over the last moment (Chassis.bump_over_shake)
+        self.shaking = [0.0, 0.0]  # left, right: the roughness on pavement before its cap (Chassis.swing)
+        self.swing = [0.0, 0.0]  # and how strong the tone for it has got
+        self.swing_osc = Oscillator()
         self.rng = random.Random(7)
         self.roughness = [0.0, 0.0]
         self.rough_avg = [0.0, 0.0]  # roughness over the last DETAIL_TAU, each side
@@ -1135,8 +1232,10 @@ class Synth:
         self.gear_cooldown = 0.0
         self.prev_accel: tuple[float, float, float] | None = None
         self.impact_cooldown = 0.0
-        self.cab_sway = (0.0, 0.0)  # left, right: the sway's strength the last frame asked for
-        self.sway = [0.0, 0.0]  # and where it has got to, smoothed over CAB_SWAY_TAU
+        self.cab_sway = (0.0, 0.0)  # the sway's strength and its lean (-1 right..1 left) the last frame asked for
+        self.sway_level = 0.0  # where the strength has got to (CAB_SWAY_ATTACK, CAB_SWAY_RELEASE)
+        self.sway_lean = 0.0  # and the lean (CAB_LEAN_TAU)
+        self.sway = [0.0, 0.0]  # left, right: what each grip gets of it
         self.sway_osc = Oscillator()
         self.lock_phase = 0.0  # of the ABS-like chop, per sample
         self.was_locked = False
@@ -1241,9 +1340,10 @@ class Synth:
         if not dt:  # no rate across a gap: the travel since then is not one movement
             self.prev_deflection = deflections
             return
+        chassis = self.chassis
         avg_k = 1.0 - math.exp(-dt / RATE_AVG_TAU)
-        rough = [0.0, 0.0]
-        counts = [0, 0]
+        moved: tuple[list[float], list[float]] = ([], [])  # the truck's wheels, left and right
+        on_pavement = [True, True]  # every wheel of the truck's on that side
         thresholds = [max(self.g.bump_threshold, min(BUMP_RIDE_MAX, BUMP_OVER_RIDE * ride)) for ride in self.ride]
         ride, ride_counts = [0.0, 0.0], [0, 0]
         for i, wheel in enumerate(wheels):
@@ -1255,13 +1355,15 @@ class Synth:
             side = 0 if wheel.pos_x < 0 else 1
             trailer = i >= len(frame.wheels)
             if not trailer:  # road texture is what the truck's own tyres feel
-                rough[side] += high
-                counts[side] += 1
+                moved[side].append(rate - avg)
+                on_pavement[side] = on_pavement[side] and paved(wheel.substance)
             if not wheel.on_ground:
                 continue
             ride[trailer] += high
             ride_counts[trailer] += 1
             threshold = thresholds[trailer]
+            if chassis.bump_over_shake and paved(wheel.substance):
+                threshold = max(threshold, chassis.bump_over_shake * self.shake[trailer])
             if high > threshold:  # a step in suspension travel: pothole, kerb, joint
                 size = min(1.0, (high - self.g.bump_threshold) / 0.8)
                 strength = size * self.g.bumps * (TRAILER_FEEL if trailer else 1.0)
@@ -1294,8 +1396,20 @@ class Synth:
                 if ride_counts[group]:
                     self.ride[group] += (ride[group] / ride_counts[group] - self.ride[group]) * ride_k
         rough_k = 1.0 - math.exp(-dt / ROUGH_TAU)
+        for group in (0, 1):
+            now = ride[group] / ride_counts[group] if ride_counts[group] else 0.0
+            self.shake[group] += (now - self.shake[group]) * rough_k
         for side in (0, 1):
-            value = rough[side] / counts[side] if counts[side] else 0.0
+            if chassis.rough_apart:
+                value = _apart(moved[side])
+            else:
+                value = 0.0
+                for rate in moved[side]:
+                    value += abs(rate)
+                value = value / len(moved[side]) if moved[side] else 0.0
+            self.shaking[side] += ((value if on_pavement[side] else 0.0) - self.shaking[side]) * rough_k
+            if chassis.rough_paved_max is not None and on_pavement[side]:
+                value = min(value, chassis.rough_paved_max)
             self.roughness[side] += (value - self.roughness[side]) * rough_k
             self.rough_avg[side] += (self.roughness[side] - self.rough_avg[side]) * (1.0 - math.exp(-dt / DETAIL_TAU))
 
@@ -1360,11 +1474,13 @@ class Synth:
 
     def _cab_event(self, frame: Frame) -> None:
         """How the cab sways on its mounts now, each side (CAB_SWAY)."""
-        tilt = math.sqrt(sum(a * a for a in frame.cabin_accel))
-        strength = _ramp(tilt, CAB_SWAY) * self.g.bumps
-        lean = frame.cabin_accel[2] / tilt if tilt else 0.0  # the roll's share, positive pushing left
-        far = 1.0 - abs(lean) * (1.0 - CAB_FAR_SIDE)
-        self.cab_sway = (strength * (1.0 if lean >= 0 else far), strength * (far if lean >= 0 else 1.0))
+        pitch, _, roll = frame.cabin_accel
+        if self.chassis.cab_heading:
+            tilt = math.sqrt(sum(a * a for a in frame.cabin_accel))
+        else:
+            tilt = math.hypot(pitch, roll)
+        strength = _ramp(tilt, self.chassis.cab_sway) * self.g.cab
+        self.cab_sway = (strength, roll / tilt if tilt else 0.0)  # the roll's share, positive pushing left
 
     def _changed(self, key: str, value: object) -> bool:
         """True when value differs from the last frame's (never on the first frame)."""
@@ -1615,7 +1731,7 @@ class Synth:
                 surface = side_surface(wheels)
                 self.texture[side].tune(surface, speed, self.roughness[side])
                 rough = self.roughness[side]
-                texture = min(1.0, surface.level * speed_factor + min(1.0, (rough / ROUGH_FULL) ** ROUGH_POWER))
+                texture = min(1.0, surface.level * speed_factor + min(1.0, (rough / self.chassis.rough_full) ** ROUGH_POWER))
                 # what counts as rougher ground stays in proportion (ROUGH_NOVELTY): squared, the
                 # highway's every jolt took the road out of its fade
                 road_moved = max(road_moved, self._novelty(f"road_{side}", min(1.0, surface.level * speed_factor
@@ -1691,12 +1807,35 @@ class Synth:
         self.was_locked = lock > 0
         if trigger_mode != "-":  # after letting go, its tail stays on that pedal's trigger
             self.trigger_slot = BRAKE_TRIGGER if trigger_mode == "brake" else THROTTLE_TRIGGER
-        sway_k = 1.0 - math.exp(-DT / CAB_SWAY_TAU)
-        for side, want in enumerate(self.cab_sway if live else (0.0, 0.0)):
-            self.sway[side] += (want - self.sway[side]) * sway_k
-            if not want and self.sway[side] < 1e-4:
-                self.sway[side] = 0.0
+        want, lean = self.cab_sway if live else (0.0, 0.0)
+        if self.chassis.sway_held:
+            sway_tau = CAB_SWAY_ATTACK if want > self.sway_level else CAB_SWAY_RELEASE if live else CAB_SWAY_STOP
+            self.sway_level += (want - self.sway_level) * (1.0 - math.exp(-DT / sway_tau))
+            if not want and self.sway_level < 1e-4:
+                self.sway_level = 0.0
+            self.sway_lean += (lean - self.sway_lean) * (1.0 - math.exp(-DT / CAB_LEAN_TAU))
+            far = self.sway_level * (1.0 - abs(self.sway_lean) * (1.0 - CAB_FAR_SIDE))
+            self.sway = [self.sway_level, far] if self.sway_lean >= 0 else [far, self.sway_level]
+        else:
+            far = 1.0 - abs(lean) * (1.0 - CAB_FAR_SIDE)
+            sway_k = 1.0 - math.exp(-DT / CAB_SWAY_TAU)
+            for side, share in enumerate((1.0 if lean >= 0 else far, far if lean >= 0 else 1.0)):
+                self.sway[side] += (want * share - self.sway[side]) * sway_k
+                if not want and self.sway[side] < 1e-4:
+                    self.sway[side] = 0.0
         sway_l, sway_r = self.sway
+        swing_hz = SWING_HZ[0]
+        if self.chassis.swing is not None:
+            if live:
+                faster = (abs(frame.speed) - SWING_SPEED[0]) / (SWING_SPEED[1] - SWING_SPEED[0])
+                swing_hz += (SWING_HZ[1] - SWING_HZ[0]) * min(1.0, max(0.0, faster))
+            for side in (0, 1):
+                want = _ramp(self.shaking[side], self.chassis.swing) * g.road if live else 0.0
+                swing_tau = SWING_ATTACK if want > self.swing[side] else SWING_RELEASE if live else CAB_SWAY_STOP
+                self.swing[side] += (want - self.swing[side]) * (1.0 - math.exp(-DT / swing_tau))
+                if not want and self.swing[side] < 1e-4:
+                    self.swing[side] = 0.0
+        swing_l, swing_r = self.swing
         routes = {name: route_of(g, name) for name in TOGGLEABLE}
         # each vibration scaled for how strongly each motor gives back its frequency
         eq, bed_eq = self.eq.pair, self._bed_pair  # the bed's also makes up its low-pass
@@ -1705,7 +1844,9 @@ class Synth:
         eq_road = (bed_eq(self.texture[0].pitch), bed_eq(self.texture[1].pitch))
         eq_spin, eq_squeal, eq_sway = bed_eq(self.spin_noise.filter.center), eq(Squeal.HZ), eq(CAB_SWAY_HZ)
         eq_trigger = bed_eq(110.0 if trigger_mode == "brake" and lock > 0 else 100.0)
-        eq_bursts = [eq(burst.freq) for _, _, burst in self.bursts]
+        swinging = swing_l or swing_r or self.prev_amp["swing_l"] or self.prev_amp["swing_r"]
+        eq_swing = bed_eq(swing_hz) if swinging else FLAT
+        eq_bursts =[eq(burst.freq) for _, _, burst in self.bursts]
         trigger, left, right = [], [], []
         heard: set[int] = set()  # the TRIGGER_SLOTS something played in
         p = self.prev_amp
@@ -1724,6 +1865,8 @@ class Synth:
             sq = p["squeal"] + (squeal_amp - p["squeal"]) * k
             wl = p["sway_l"] + (sway_l - p["sway_l"]) * k
             wr = p["sway_r"] + (sway_r - p["sway_r"]) * k
+            gl = p["swing_l"] + (swing_l - p["swing_l"]) * k
+            gr = p["swing_r"] + (swing_r - p["swing_r"]) * k
 
             out = [0.0] * 5  # left grip, right grip, then the TRIGGER_SLOTS: events
             bed = [0.0] * 5  # continuous effects, ducked under the events
@@ -1746,6 +1889,10 @@ class Synth:
             (grip_l, trig_l), (grip_r, trig_r) = eq_road
             _mix(bed, routes["road"], noise_l * grip_l, noise_r * grip_r,
                  0.7 * (noise_l * trig_l + noise_r * trig_r))
+            if gl or gr:
+                # the truck shaking on its springs: one tone, on the side whose wheels shake
+                c = self.swing_osc.next(swing_hz)
+                _mix(bed, routes["road"], gl * c, gr * c, 0.7 * (gl + gr) * c, eq_swing)
             if ul or ur:
                 # the half-rate part takes the eq of its own frequency
                 (strip_l, half_l), (strip_r, half_r) = self._strip(0, rumble_freq), self._strip(1, rumble_freq)
@@ -1808,7 +1955,7 @@ class Synth:
         self.prev_amp = {"engine": engine_amp, "road_l": road_l, "road_r": road_r,
                          "rumble_l": rumble_l, "rumble_r": rumble_r, "spin": spin_amp, "retarder": retarder_amp,
                          "jake": jake_amp, "trigger": trigger_amp, "squeal": squeal_amp, "harsh": engine_harsh,
-                         "sway_l": sway_l, "sway_r": sway_r}
+                         "sway_l": sway_l, "sway_r": sway_r, "swing_l": swing_l, "swing_r": swing_r}
         self.bursts = [entry for entry in self.bursts if not entry[2].done]
 
         lv = self.levels
@@ -1890,6 +2037,22 @@ def _mix(out: list[float], route: str, left: float, right: float, trigger: float
         out[1] += right * eq[0]
     if route != GRIP:
         out[slot] += trigger * eq[1]
+
+
+def _apart(moved: list[float]) -> float:
+    """How fast one side's wheels move against each other, m/s: what they share is the body's.
+    Scaled so that wheels moving with no regard for each other read their own mean movement."""
+    count = len(moved)
+    if count < 2:
+        return abs(moved[0]) if moved else 0.0
+    together = 0.0
+    for rate in moved:
+        together += rate
+    together /= count
+    apart = 0.0
+    for rate in moved:
+        apart += abs(rate - together)
+    return apart / count * math.sqrt(count / (count - 1.0))
 
 
 def _ramp(x: float, points: tuple[tuple[float, float], ...]) -> float:

@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 from apex6 import MAX_SAMPLE, SAMPLE_RATE, Route
-from effects import (AMT, BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RATTLE_S, BUMP_RIDE_MAX, CAB_FAR_SIDE,
+from effects import (AMT, ETS2_CHASSIS, BUMP_HZ, BUMP_OVER_RIDE, BUMP_RATTLE_MAX, BUMP_RATTLE_S, BUMP_RIDE_MAX, CAB_FAR_SIDE,
                      CEILING, CONVERTER, DT, ENGINE_STANDING, RUMBLE_SPACING, TAU, TOGGLEABLE, Burst, Equalizer, Gains,
                      LowPass, NoiseBurst, ResonanceCut, Synth, Texture, Tick, effective_gains, side_surface,
                      surface_of)
@@ -20,9 +20,9 @@ from telemetry import Frame, SimulatedTelemetry, Wheel
 _render_time = itertools.count(0, 8000)  # us: one new game frame per 8 ms block unless a test says otherwise
 
 
-def wheels(count: int, deflection: float | list[float]) -> list[Wheel]:
+def wheels(count: int, deflection: float | list[float], substance: str = "road") -> list[Wheel]:
     depths = deflection if isinstance(deflection, list) else [deflection] * count
-    return [Wheel(deflection=depth, substance="road", pos_x=-1.0 if k % 2 == 0 else 1.0, velocity=7.0, radius=0.5)
+    return [Wheel(deflection=depth, substance=substance, pos_x=-1.0 if k % 2 == 0 else 1.0, velocity=7.0, radius=0.5)
             for k, depth in enumerate(depths)]
 
 
@@ -33,12 +33,13 @@ def frame(gear: int = 10, deflection: float | list[float] = 0.02, truck_wheels: 
     for key, value in (("rpm", 1300.0), ("speed", 22.0), ("game_throttle", 0.4), ("user_throttle", 0.4),
                        ("engine_on", True)):
         values.setdefault(key, value)
-    return Frame(active=True, paused=False, gear=gear, accel=accel, wheels=wheels(truck_wheels, deflection),
-                 trailer_wheels=wheels(trailer_wheels, 0.02), **values)
+    substance = values.pop("substance", "road")
+    return Frame(active=True, paused=False, gear=gear, accel=accel, wheels=wheels(truck_wheels, deflection, substance),
+                 trailer_wheels=wheels(trailer_wheels, 0.02, substance), **values)
 
 
-def synth() -> Synth:
-    return Synth(effective_gains(Gains()))
+def synth(game: str | None = None) -> Synth:
+    return Synth(effective_gains(Gains()), game=game)
 
 
 def effects_of(s: Synth) -> list[str]:
@@ -317,6 +318,18 @@ class BumpTest(unittest.TestCase):
         self.assertGreater(max(right[31:63]), 1.5 * max(left[31:63]))  # the next one right
         self.assertLess(max(abs(b - a) for a, b in zip(left, left[1:])), 0.15)  # a block moves it a little at a time
 
+    def test_the_cabs_heading_is_part_of_its_tilt(self) -> None:
+        self.assertGreater(self.sway([(0.0, 0.5, 0.0)] * 30).sway[0], 0.5)
+
+    def test_the_sway_has_its_own_strength(self) -> None:
+        for game in (None, "ETS2"):
+            def swayed(**gains) -> float:
+                return self.sway([0.6] * 100, Synth(effective_gains(Gains(**gains)), game=game)).sway[0]
+            self.assertAlmostEqual(swayed(cab=0.5), 0.5 * swayed(), places=3)
+            self.assertEqual(swayed(bumps=0.0), swayed())  # the knocks' strength is not the sway's
+            self.assertEqual(swayed(cab=0.0), 0.0)
+            self.assertEqual(swayed(disabled=["bumps"]), 0.0)  # but it is switched off with them
+
     def test_the_sway_stops_with_the_telemetry(self) -> None:
         s = self.sway([0.6] * 30)
         for _ in range(40):
@@ -381,6 +394,130 @@ class BumpTest(unittest.TestCase):
             self.assertTrue(-BUMP_RATTLE_S <= knock.age < 0)
             self.assertLess(knock.amplitude, 0.5 * pothole.bump_bursts[0][1].amplitude)
         self.assertEqual(joint.bump_rattles, [])
+
+
+class Ets2ChassisTest(unittest.TestCase):
+    """What ETS2's trucks are read by, apart from ATS's (effects.Chassis)."""
+
+    @staticmethod
+    def roughest(game: str | None, moving: tuple[int, ...]) -> float:
+        # these wheels swing 25 mm in and out once a second, left against right; the others hold still
+        s, worst = synth(game), 0.0
+        for n in range(125):
+            swing = 0.025 * math.sin(TAU * n * DT)
+            s.render(frame(deflection=[0.02 + (swing * (-1) ** k if k in moving else 0.0) for k in range(6)],
+                           substance="dirt"))
+            worst = max(worst, *s.roughness)
+        return worst
+
+    def test_a_rolling_body_is_no_rough_road(self) -> None:
+        self.assertLess(self.roughest("ETS2", (0, 1, 2, 3, 4, 5)), 0.005)  # the body leaning through a bend
+        self.assertGreater(self.roughest("ETS2", (0, 1)), 0.05)  # one axle alone is the road under it
+        self.assertGreater(self.roughest(None, (0, 1, 2, 3, 4, 5)), 0.05)  # ATS takes each wheel's own movement
+
+    @staticmethod
+    def shaken(game: str | None, substance: str) -> tuple[float, bool]:
+        """The roughest reading, and whether it knocked, with every wheel swinging 3 mm at 15 Hz, axle against
+        axle, the swing growing over 0.8 s: the truck's own shaking in a hard turn."""
+        s, worst, knocked = synth(game), 0.0, False
+        for n in range(250):
+            swing = 0.003 * min(1.0, n / 100) * math.sin(TAU * 15.0 * n * DT)
+            s.render(frame(deflection=[0.02 + swing * (-1) ** (k // 2) for k in range(6)], substance=substance))
+            worst = max(worst, *s.roughness)
+            knocked = knocked or "bumps" in effects_of(s)
+        return worst, knocked
+
+    def test_pavement_reads_no_rougher_than_its_cap(self) -> None:
+        self.assertGreater(self.shaken(None, "road")[0], 0.1)  # in ATS it is the road
+        self.assertLessEqual(self.shaken("ETS2", "road")[0], ETS2_CHASSIS.rough_paved_max)
+        self.assertGreater(self.shaken("ETS2", "dirt")[0], 0.1)  # off pavement it is the ground
+
+    def test_the_trucks_own_shaking_does_not_knock_on_pavement(self) -> None:
+        self.assertTrue(self.shaken(None, "road")[1])
+        self.assertFalse(self.shaken("ETS2", "road")[1])
+        self.assertTrue(self.shaken("ETS2", "dirt")[1])
+
+    def test_the_trucks_shaking_on_pavement_is_one_round_tone_on_its_side(self) -> None:
+        def after(game: str | None, substance: str, sides: tuple[int, ...] = (0, 1)) -> tuple[Synth, float]:
+            s, step = synth(game), 0.0
+            for n in range(250):
+                swing = 0.003 * min(1.0, n / 100) * math.sin(TAU * 15.0 * n * DT)
+                before = s.swing[0]
+                s.render(frame(deflection=[0.02 + (swing * (-1) ** (k // 2) if k % 2 in sides else 0.0)
+                                           for k in range(6)], substance=substance))
+                step = max(step, abs(s.swing[0] - before))
+            return s, step
+        both, step = after("ETS2", "road")
+        self.assertGreater(min(both.swing), 0.1)
+        self.assertLess(step, 0.03)  # it swells, a block moving it a little at a time
+        left, _ = after("ETS2", "road", sides=(0,))
+        self.assertGreater(left.swing[0], 0.1)
+        self.assertEqual(left.swing[1], 0.0)  # only the side whose wheels shake
+        self.assertEqual(after("ETS2", "dirt")[0].swing, [0.0, 0.0])  # off pavement the ground's texture has it
+        self.assertEqual(after(None, "road")[0].swing, [0.0, 0.0])  # ATS's trucks are not read so
+        quiet = Synth(effective_gains(Gains(disabled=["road"])), game="ETS2")
+        for n in range(250):
+            swing = 0.003 * math.sin(TAU * 15.0 * n * DT)
+            quiet.render(frame(deflection=[0.02 + swing * (-1) ** (k // 2) for k in range(6)]))
+        self.assertEqual(quiet.swing, [0.0, 0.0])  # it is the road's: off with it
+        for _ in range(60):
+            both.render(None)
+        self.assertEqual(both.swing, [0.0, 0.0])  # and stops with the telemetry
+
+    def test_a_step_on_calm_pavement_still_knocks(self) -> None:
+        s = synth("ETS2")
+        for n in range(50):
+            s.render(frame(deflection=0.02 + 0.0001 * (n % 2), truck_wheels=1))
+        s.render(frame(deflection=0.032, truck_wheels=1))
+        s.render(frame(deflection=0.031, truck_wheels=1))
+        self.assertIn("bumps", effects_of(s))
+
+    @staticmethod
+    def sway(accels: list[float | tuple[float, float, float]], s: Synth | None = None) -> Synth:
+        return BumpTest.sway(accels, s or synth("ETS2"))
+
+    def test_the_sway_swells_and_settles_after_the_cab(self) -> None:
+        self.assertEqual(self.sway([0.05, -0.05] * 20).sway, [0.0, 0.0])
+        lurch, top = self.sway([0.14] * 100).sway[0], self.sway([0.6] * 100).sway[0]
+        self.assertAlmostEqual(lurch, 0.25, places=2)  # as strong as the smallest knock was
+        self.assertAlmostEqual(top, 1.0, places=2)
+        jolt = self.sway([0.0] * 10 + [0.6, 0.6])  # two frames of it have only begun to swell
+        self.assertLess(jolt.sway[0], 0.2)
+        self.assertEqual(self.sway([0.0] * 400, jolt).sway, [0.0, 0.0])  # and it settles after the cab has
+
+    def test_the_cab_sways_to_the_side_it_rolls(self) -> None:
+        s = self.sway([0.4] * 60)  # rolled positive: the left wheels sprang
+        self.assertAlmostEqual(s.sway[1], CAB_FAR_SIDE * s.sway[0], places=3)
+        self.sway([-0.4] * 60, s)  # and back as the cab rocks
+        self.assertAlmostEqual(s.sway[0], CAB_FAR_SIDE * s.sway[1], places=3)
+        pitch = self.sway([(0.4, 0.0, 0.0)] * 30).sway
+        self.assertAlmostEqual(pitch[0], pitch[1])
+
+    def test_the_sway_holds_through_a_rocking_cabs_swings(self) -> None:
+        # a 2 Hz rock, read at the game's ~55 frames a second: one tone through the swings, no steps
+        s, left, right = synth("ETS2"), [], []
+        for n in range(250):
+            accel = 0.4 * math.sin(TAU * 2.0 * round(n * DT / 0.018) * 0.018)
+            s.render(frame(deflection=0.02 + 0.0001 * (n % 2), cabin_accel=(0.0, 0.0, accel)))
+            left.append(s.sway[0])
+            right.append(s.sway[1])
+        self.assertGreater(left[25], 1.5 * right[25])  # the first quarter second leans left
+        self.assertGreater(right[56], 1.5 * left[56])  # the next one right
+        self.assertLess(max(abs(b - a) for a, b in zip(left, left[1:])), 0.15)  # a block moves it a little at a time
+        level = [max(pair) for pair in zip(left, right)][63:]  # once it has swelled
+        self.assertGreater(min(level), 0.6 * max(level))  # it does not die with every swing and come back
+        self.assertLess(max(level), 0.674)  # nor reach what the swing's peak alone would give
+
+    def test_turning_the_truck_does_not_sway_the_cab(self) -> None:
+        # the cab's heading acceleration is the truck's own: steering into a bend
+        self.assertEqual(self.sway([(0.0, 0.5, 0.0)] * 60).sway, [0.0, 0.0])
+        self.assertEqual(self.sway([(0.0, 0.5, 0.2)] * 60).sway, self.sway([(0.0, 0.0, 0.2)] * 60).sway)
+
+    def test_the_sway_stops_with_the_telemetry(self) -> None:
+        s = self.sway([0.6] * 30)
+        for _ in range(40):
+            s.render(None)
+        self.assertEqual(s.sway, [0.0, 0.0])
 
 
 class LockChopTest(unittest.TestCase):

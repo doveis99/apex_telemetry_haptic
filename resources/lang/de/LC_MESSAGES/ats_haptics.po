@@ -90,6 +90,9 @@ msgstr "↻ Wiederholen"
 msgid "└ 엔진 박자"
 msgstr "└ Motortakt"
 
+msgid "└ 캐빈 흔들림"
+msgstr "└ Kabinenschwanken"
+
 msgid "■  정지"
 msgstr "■  Stopp"
 
@@ -677,6 +680,9 @@ msgstr "Aufprall {accel} m/s²"
 
 msgid "충돌 감지 기준"
 msgstr "Schwelle Aufprall"
+
+msgid "캐빈이 출렁일 때 이어지는 낮은 '웅'의 세기입니다. 흙길이나 빠른 커브처럼 캐빈이 앞뒤·좌우로 기우는 동안 서서히 커졌다가 잦아들고, 요철의 충격과는 따로 조절합니다. 요철을 끄면 함께 꺼집니다."
+msgstr "Wie stark das tiefe Brummen ist, das der schwankenden Kabine folgt. Solange die Kabine nach vorn und hinten oder zur Seite kippt, etwa auf einem Feldweg oder in einer schnellen Kurve, schwillt es sanft an und klingt wieder ab; es wird getrennt von den Stößen der Unebenheiten eingestellt und schaltet sich mit ihnen aus."
 
 msgid "컨트롤러 미사용"
 msgstr "Controller nicht belegt"

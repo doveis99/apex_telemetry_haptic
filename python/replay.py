@@ -187,6 +187,12 @@ def settings_of(log: Path) -> tuple[Gains, Equalizer, str]:
     return gains, Equalizer(curves or None), info.get("version", "?")
 
 
+def game_of(log: Path) -> str | None:
+    """The game a log was recorded in, "ATS" or "ETS2"; None for a test drive, or a log from before it was noted."""
+    info_path = log.with_suffix(".json")
+    return json.loads(info_path.read_text(encoding="utf-8")).get("game") if info_path.exists() else None
+
+
 class Tally:
     """What one side of the comparison did: knocks, fade resets, how loud each channel ran.
 
@@ -226,8 +232,8 @@ class Tally:
 
 def replay(path: Path, gains: Gains, eq: Equalizer, start: str | None = None, end: str | None = None,
            knocks: float | None = None) -> tuple[Tally, Tally, int]:
-    """Run the log through a fresh synth; (the log's tally, the replay's, blocks)."""
-    synth = Synth(effective_gains(gains), eq)
+    """Run the log through a fresh synth, as its game's trucks are read; (the log's tally, the replay's, blocks)."""
+    synth = Synth(effective_gains(gains), eq, game_of(path))
     logged, replayed = Tally(), Tally()
     seen: set[int] = set()
     blocks = 0

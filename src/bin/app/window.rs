@@ -57,7 +57,7 @@ const TEST_TIP: &str = "이 효과만 몇 초 동안 울려 봅니다. 지금 �
 
 fn level_color(key: &str) -> u32 {
     match key {
-        "grip_level" => GRIP,
+        "grip_level" | "cab" => GRIP,
         "trigger_level" | "throttle_pulse" => TRIGGER,
         _ => ACCENT,
     }

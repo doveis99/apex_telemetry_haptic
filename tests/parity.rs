@@ -37,6 +37,9 @@ struct Header {
     scenario: Option<String>,
     #[serde(default)]
     log_path: Option<String>,
+    /// whose trucks the run is read as (effects::Chassis); absent: ATS's
+    #[serde(default)]
+    game: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -102,6 +105,7 @@ fn check(path: &Path) -> Report {
     let header: Header = serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
     let eq = Equalizer::new(&header.eq_curves);
     let mut synth = Synth::with_seeds(header.gains.effective(), eq, PyRandom::new(header.seed));
+    synth.set_game(header.game.as_deref());
     let mut report = Report {
         name: header.name.clone(),
         blocks: 0,
@@ -303,6 +307,7 @@ fn block_log_matches_python_row_for_row() {
         let (header, frames) = golden_frames(&path);
         let info: Value = serde_json::from_str(&std::fs::read_to_string(path.with_extension("blocks.json")).unwrap()).unwrap();
         let mut synth = Synth::with_seeds(header.gains.effective(), Equalizer::new(&header.eq_curves), PyRandom::new(header.seed));
+        synth.set_game(header.game.as_deref());
         let _ = std::fs::remove_dir_all(&dir);
         let mut log = BlockLog::new(&dir, Some(&info)).unwrap();
         for frame in &frames {

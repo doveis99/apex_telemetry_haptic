@@ -29,8 +29,8 @@ use ats_haptics::telemetry::SIMULATED_FPS;
 
 const USAGE: &str = "usage: scs_haptics [--simulate] [--sim-fps FPS] [--dry-run] [--monitor] [--seconds S]
                    [--exit-with-game] [--gain G] [--grip-level G] [--trigger-level G]
-                   [--engine G] [--road G] [--bumps G] [--rumble G] [--wheelspin G] [--gear G]
-                   [--retarder G] [--impact G] [--trigger G] [--throttle-pulse P] [--steady-fade F]
+                   [--engine G] [--road G] [--bumps G] [--cab G] [--rumble G] [--wheelspin G]
+                   [--gear G] [--retarder G] [--impact G] [--trigger G] [--throttle-pulse P] [--steady-fade F]
                    [--pedal G] [--squeal G] [--trailer G] [--park-brake G] [--engine-start G]
                    [--shifter G] [--air-brake G] [--blinker G] [--game-events G] [--ducking D]
                    [--bump-threshold M/S] [--impact-threshold M/S2]

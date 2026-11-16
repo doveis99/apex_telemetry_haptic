@@ -411,4 +411,7 @@ MESSAGES = {
         "De qual caminhão soa a troca de marcha de uma caixa AMT / manual. Padrão é o 'clac' ajustado a gravações da caixa Eaton de caminhões norte-americanos. Scania segue o clique com um empurrão longo e pesado enquanto o ar engata a marcha; MAN dá dois cliques agudos e secos. Suave deixa só a vibração, sem o clique. Não é usado com conversor.",
     "방향지시등 릴레이를 누구의 소리로 울릴지 고릅니다. 기본은 미국 트럭의 릴레이 녹음에 맞춘 딸깍입니다. 스카니아는 더 낮고 통통한 소리이고, MAN은 켜질 때만 나는 짧고 가벼운 틱입니다. 부드럽게는 딸깍 소리 없이 진동만 냅니다.":
         "De qual caminhão soa o relé das setas. Padrão é o clique ajustado a gravações de relés de caminhões norte-americanos. Scania é um toc mais grave e cheio; MAN é um tique curto e leve só quando a luz acende. Suave deixa só a vibração, sem o clique.",
+    "└ 캐빈 흔들림": "└ Balanço da cabine",
+    "캐빈이 출렁일 때 이어지는 낮은 '웅'의 세기입니다. 흙길이나 빠른 커브처럼 캐빈이 앞뒤·좌우로 기우는 동안 서서히 커졌다가 잦아들고, 요철의 충격과는 따로 조절합니다. 요철을 끄면 함께 꺼집니다.":
+        "Força do zumbido grave que acompanha o balanço da cabine. Enquanto a cabine se inclina para a frente e para trás ou de um lado para o outro, como numa estrada de terra ou numa curva rápida, ele cresce e se apaga suavemente; é ajustado à parte das pancadas das irregularidades e desliga com elas.",
 }

@@ -5,6 +5,7 @@
   "engine": 0.15,
   "road": 0.5,
   "bumps": 1.0,
+  "cab": 1.0,
   "rumble": 0.8,
   "wheelspin": 0.7,
   "gear": 0.35,

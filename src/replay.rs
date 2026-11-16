@@ -414,6 +414,13 @@ fn format_6g(x: f64) -> String {
     }
 }
 
+/// The game a log was recorded in, "ATS" or "ETS2"; None for a test drive, or a log from before it was noted.
+pub fn game_of(log: &Path) -> Option<String> {
+    let info: Map<String, Value> =
+        std::fs::read_to_string(log.with_extension("json")).ok().and_then(|text| serde_json::from_str(&text).ok())?;
+    info.get("game").and_then(Value::as_str).map(str::to_string)
+}
+
 /// The gains and motor curves a log was recorded with, and its version; defaults where it has none.
 pub fn settings_of(log: &Path) -> (Gains, Equalizer, String) {
     let info: Map<String, Value> = std::fs::read_to_string(log.with_extension("json"))
@@ -507,11 +514,12 @@ impl Tally {
     }
 }
 
-/// Run the log through a fresh synth; (the log's tally, the replay's, blocks). With `knocks`,
-/// every bump knock at least that strong is reported to `out`.
+/// Run the log through a fresh synth, as its game's trucks are read; (the log's tally, the
+/// replay's, blocks). With `knocks`, every bump knock at least that strong is reported to `out`.
 pub fn replay(path: &Path, gains: &Gains, eq: Equalizer, start: Option<&str>, end: Option<&str>, knocks: Option<f64>,
               seeds: PyRandom, out: &mut dyn FnMut(String)) -> std::io::Result<(Tally, Tally, usize)> {
     let mut synth = Synth::with_seeds(gains.effective(), eq, seeds);
+    synth.set_game(game_of(path).as_deref());
     let (mut logged, mut replayed) = (Tally::default(), Tally::default());
     let mut seen: HashSet<u64> = HashSet::new();
     let mut blocks = 0;

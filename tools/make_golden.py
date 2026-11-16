@@ -11,7 +11,12 @@ a few internals to find where a difference starts. The Rust test (tests/parity.r
 feeds the same frames to its synth and compares.
 
 Debug logs (blocks-*.csv beside a .json) under %APPDATA%\\ATSHaptics\\logs give real drives:
-the first LOG_BLOCKS rows of the newest LOGS of them, with the settings they were recorded with.
+the first LOG_BLOCKS rows of the newest LOGS of them, with the settings they were recorded with
+and read as their game's trucks are (effects.Chassis; "game" in the header). The app keeps only
+its newest few logs, so drives worth keeping stay under tests/drives (gitignored) as their
+frames alone, <game>_<log>.frames.jsonl: a header line with the game and the settings, then one
+line per block with the "f" above. Each is a run of its own (drive_...), whatever the logs
+folder holds by then; that is where the ATS drives are.
 
 Also, for the debug log and the replay tool:
   <run>.blocks.csv/.json    the runs in BLOCKLOG_RUNS written through blocklog.BlockLog as well
@@ -26,7 +31,7 @@ import json
 import random
 import shutil
 import sys
-from dataclasses import asdict, replace
+from dataclasses import asdict, fields, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,11 +41,12 @@ import i18n  # noqa: E402
 from apex6 import FRAME_PERIOD  # noqa: E402
 from blocklog import LOG_DIR, BlockLog  # noqa: E402
 from effects import DEFAULT_ROUTES, Equalizer, Gains, Synth, effective_gains  # noqa: E402
-from replay import LogReader, replay, settings_of  # noqa: E402
+from replay import LogReader, game_of, replay, settings_of  # noqa: E402
 from scenarios import SCENARIOS, ScenarioTelemetry  # noqa: E402
-from telemetry import Frame, SimulatedTelemetry  # noqa: E402
+from telemetry import Frame, SimulatedTelemetry, Wheel  # noqa: E402
 
 OUT = ROOT / "tests" / "golden-data"
+DRIVES = ROOT / "tests" / "drives"
 SEED = 20261108  # the global random module's, which NoiseBurst draws its seeds from
 LOGS = 4
 OLD_LOGS = 2  # logs from before 0.16.0, which the reader fills in differently
@@ -66,12 +72,23 @@ def frame_dict(frame: Frame | None):
     return data
 
 
+def frame_of(data):
+    """frame_dict() back as the frame."""
+    if data is None:
+        return None
+    data = dict(data, wheels=[Wheel(**w) for w in data["wheels"]],
+                trailer_wheels=[Wheel(**w) for w in data["trailer_wheels"]], game_events=frozenset(data["game_events"]))
+    for key in ("accel", "velocity", "cabin_accel", "cabin_offset", "shifter_toggle"):
+        data[key] = tuple(data[key])
+    return Frame(**data)
+
+
 def write_run(name: str, frames, gains: Gains, eq: Equalizer, extra: dict | None = None,
               blocklog: bool = False) -> None:
-    """frames yields (frame or None); each one is rendered as one block."""
+    """frames yields (frame or None); each one is rendered as one block. extra["game"] says whose trucks."""
     gains = effective_gains(gains)
     random.seed(SEED)
-    synth = Synth(gains, eq)
+    synth = Synth(gains, eq, (extra or {}).get("game"))
     path = OUT / f"{name}.jsonl"
     blocks = 0
     log = None
@@ -160,11 +177,31 @@ def runs():
                    steady_fade=0.3)
     yield ("sim60_custom", lambda: scripted(lambda c: SimulatedTelemetry(60.0, c), 62.0), louder, custom,
            {"sim_fps": 60.0, "seconds": 62.0})
+    yield ("sim60_ets2", lambda: scripted(lambda c: SimulatedTelemetry(60.0, c), 62.0), Gains(), default_eq,
+           {"sim_fps": 60.0, "seconds": 62.0, "game": "ETS2"})
     for name, scenario in SCENARIOS.items():
         seconds = scenario.seconds + 2.0
-        yield (f"scenario_{name}", lambda s=scenario, sec=seconds: scripted(lambda c: ScenarioTelemetry(s, 60.0, c),
-                                                                              sec),
-               Gains(), default_eq, {"scenario": name, "seconds": seconds})
+        for game in (None, "ETS2") if name == "mountain" else (None,):
+            yield (f"scenario_{name}" + ("_ets2" if game else ""),
+                   lambda s=scenario, sec=seconds: scripted(lambda c: ScenarioTelemetry(s, 60.0, c), sec),
+                   Gains(), default_eq, {"scenario": name, "seconds": seconds, **({"game": game} if game else {})})
+    for path in sorted(DRIVES.glob("*.frames.jsonl")):
+        with path.open(encoding="utf-8") as file:
+            header = json.loads(file.readline())
+        known = {f.name for f in fields(Gains)}
+        gains = Gains(**{k: v for k, v in header["gains"].items() if k in known})
+
+        def kept(path=path):
+            with path.open(encoding="utf-8") as file:
+                file.readline()
+                frame = None
+                for line in file:
+                    data = json.loads(line)["f"]
+                    frame = frame if data == 1 else frame_of(data)
+                    yield frame
+
+        yield (f"drive_{path.name.removesuffix('.frames.jsonl')}", kept, gains, Equalizer(header["eq_curves"] or None),
+               {"drive": path.name, "game": header["game"]})
     logs = sorted(LOG_DIR.glob("blocks-*.csv"), reverse=True)
 
     def columns(log: Path) -> str:
@@ -186,7 +223,7 @@ def runs():
                     return
                 yield frame
 
-        yield (f"log_{log.stem}", rows, gains, eq, {"log": log.name, "log_path": str(log)})
+        yield (f"log_{log.stem}", rows, gains, eq, {"log": log.name, "log_path": str(log), "game": game_of(log)})
 
 
 def write_previews() -> None:

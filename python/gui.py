@@ -69,6 +69,7 @@ EFFECT_SLIDERS = (
     ("engine", N_("엔진"), 0, 200, 100, "%"),
     ("road", N_("노면"), 0, 200, 100, "%"),
     ("bumps", N_("요철"), 0, 200, 100, "%"),
+    ("cab", N_("└ 캐빈 흔들림"), 0, 200, 100, "%"),
     ("rumble", N_("차선 요철"), 0, 200, 100, "%"),
     ("wheelspin", N_("휠스핀"), 0, 200, 100, "%"),
     ("gear", N_("변속"), 0, 200, 100, "%"),
@@ -120,6 +121,8 @@ SLIDER_TIPS = {
                 "작은 이음매는 짧고 높은 '톡', 큰 포트홀은 낮고 묵직한 '쿵'이고, 큰 충격 뒤에는 캡이 잠깐 덜컹거립니다. "
                 "민감도는 '요철 감지 기준'에서 정합니다. "
                 "흙길처럼 캐빈이 출렁이면 그 흔들림을 따라 낮은 '웅'이 이어지고, 캐빈이 기우는 쪽 그립이 더 셉니다."),
+    "cab": N_("캐빈이 출렁일 때 이어지는 낮은 '웅'의 세기입니다. 흙길이나 빠른 커브처럼 캐빈이 앞뒤·좌우로 기우는 동안 "
+              "서서히 커졌다가 잦아들고, 요철의 충격과는 따로 조절합니다. 요철을 끄면 함께 꺼집니다."),
     "rumble": N_("중앙선이나 갓길의 차선 요철(럼블 스트립)을 밟은 쪽 그립에 '드르르륵'. "
                  "게임이 알려 주는 노면 재질로 감지하고, 빠를수록 촘촘해집니다."),
     "wheelspin": N_("엑셀을 밟는데 구동 바퀴가 트럭보다 빨리 헛돌면(얼음, 눈, 진흙, 급출발) 양쪽 그립에 거칠게 긁히는 "
@@ -169,7 +172,7 @@ ROUTE_OPTIONS = ((GRIP, N_("그립"), GRIP_COLOR), (TRIGGER, N_("트리거"), TR
                  (BOTH, N_("둘 다"), BOTH_COLOR))
 ROUTE_COLORS = {route: color for route, _, color in ROUTE_OPTIONS}
 LEVEL_COLORS = {"master": ACCENT, "grip_level": GRIP_COLOR, "trigger_level": TRIGGER_COLOR,
-                "throttle_pulse": TRIGGER_COLOR}
+                "throttle_pulse": TRIGGER_COLOR, "cab": GRIP_COLOR}
 # not translated: whoever cannot read the current language still finds the menu
 # what 테스트 주행 plays, besides a debug log: the 60 s drive of telemetry.py and the scenarios
 DRIVES = {"": N_("기본 60초"), "highway": N_("고속도로 4분"), "city": N_("시내 2분 30초"), "mountain": N_("산길 3분")}

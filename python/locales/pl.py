@@ -403,4 +403,7 @@ MESSAGES = {
         "Czyją zmianę biegu odtwarza skrzynia AMT / manualna. Standard to „klak” dopasowany do nagrań skrzyni Eaton z ciężarówek północnoamerykańskich. Scania po kliknięciu daje długie, ciężkie pchnięcie, gdy powietrze wsuwa bieg; MAN daje dwa wysokie, suche kliknięcia. Miękko zostawia samą wibrację, bez kliknięcia. Nie działa ze skrzynią hydrokinetyczną.",
     "방향지시등 릴레이를 누구의 소리로 울릴지 고릅니다. 기본은 미국 트럭의 릴레이 녹음에 맞춘 딸깍입니다. 스카니아는 더 낮고 통통한 소리이고, MAN은 켜질 때만 나는 짧고 가벼운 틱입니다. 부드럽게는 딸깍 소리 없이 진동만 냅니다.":
         "Czyj przekaźnik odtwarzają kierunkowskazy. Standard to kliknięcie dopasowane do nagrań przekaźników ciężarówek północnoamerykańskich. Scania brzmi niżej i pełniej; MAN to krótkie, lekkie tyknięcie tylko przy zapaleniu lampki. Miękko zostawia samą wibrację, bez kliknięcia.",
+    "└ 캐빈 흔들림": "└ Kołysanie kabiny",
+    "캐빈이 출렁일 때 이어지는 낮은 '웅'의 세기입니다. 흙길이나 빠른 커브처럼 캐빈이 앞뒤·좌우로 기우는 동안 서서히 커졌다가 잦아들고, 요철의 충격과는 따로 조절합니다. 요철을 끄면 함께 꺼집니다.":
+        "Siła niskiego buczenia, które towarzyszy kołysaniu kabiny. Gdy kabina przechyla się w przód i w tył lub na boki, jak na drodze gruntowej albo w szybkim zakręcie, łagodnie narasta i cichnie; ustawia się je osobno od uderzeń nierówności i wyłącza razem z nimi.",
 }

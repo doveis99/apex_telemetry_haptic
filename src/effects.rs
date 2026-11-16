@@ -152,7 +152,68 @@ const BUMP_RIDE_MAX: f64 = 0.5;
 const CAB_SWAY_HZ: f64 = 45.0;
 const CAB_SWAY: [(f64, f64); 3] = [(0.06, 0.0), (0.14, 0.25), (0.6, 1.0)];
 const CAB_SWAY_TAU: f64 = 0.025;
+const CAB_SWAY_ATTACK: f64 = 0.1;
+const CAB_SWAY_RELEASE: f64 = 0.3;
+const CAB_SWAY_STOP: f64 = 0.025;
+const CAB_LEAN_TAU: f64 = 0.025;
 const CAB_FAR_SIDE: f64 = 0.5;
+
+/// What is made of one game's suspension and cab: the two games' trucks do not ride alike, so a
+/// change for one game's trucks is not a change for the other's (effects.py's Chassis, where
+/// the drive behind each value is told).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Chassis {
+    pub rough_full: f64,
+    /// roughness is a side's wheels moving against each other (apart), not each wheel's own movement
+    pub rough_apart: bool,
+    /// m/s: pavement reads no rougher than this
+    pub rough_paved_max: Option<f64>,
+    /// a knock stands this many times above the wheels' shaking of the moment (ROUGH_TAU); 0: not asked
+    pub bump_over_shake: f64,
+    /// m/s of a side's wheels shaking on pavement, and how strong the swing's tone is for it (SWING_*); None: no tone
+    pub swing: Option<[(f64, f64); 2]>,
+    pub cab_sway: [(f64, f64); 3],
+    /// the cab's heading acceleration is part of its tilt
+    pub cab_heading: bool,
+    /// the sway swells and stays (CAB_SWAY_ATTACK, CAB_SWAY_RELEASE); else it follows each frame (CAB_SWAY_TAU)
+    pub sway_held: bool,
+}
+
+pub const ATS_CHASSIS: Chassis = Chassis {
+    rough_full: ROUGH_FULL,
+    rough_apart: false,
+    rough_paved_max: None,
+    bump_over_shake: 0.0,
+    swing: None,
+    cab_sway: CAB_SWAY,
+    cab_heading: true,
+    sway_held: false,
+};
+pub const ETS2_CHASSIS: Chassis = Chassis {
+    rough_apart: true,
+    rough_paved_max: Some(0.04),
+    bump_over_shake: 3.0,
+    swing: Some([(0.04, 0.0), (0.3, 1.0)]),
+    cab_heading: false,
+    sway_held: true,
+    ..ATS_CHASSIS
+};
+/// the swing's pitch at SWING_SPEED (m/s) and slower, and faster
+const SWING_HZ: (f64, f64) = (50.0, 70.0);
+const SWING_SPEED: (f64, f64) = (8.0, 25.0);
+const SWING_ATTACK: f64 = 0.15;
+const SWING_RELEASE: f64 = 0.4;
+
+/// The game's own ("ATS", "ETS2"); ATS's for a test drive or an unnamed game.
+pub fn chassis_of(game: Option<&str>) -> Chassis {
+    match game {
+        Some("ETS2") => ETS2_CHASSIS,
+        _ => ATS_CHASSIS,
+    }
+}
+
+/// of SURFACES' names
+const PAVED: [&str; 6] = ["road_smooth", "rumble", "road", "asphalt", "concrete", "static"];
 const SPIKE_MIN: f64 = 0.004;
 const SPIKE_BACK: f64 = 0.3;
 const LEAP_SLOPE: f64 = 0.5;
@@ -426,6 +487,12 @@ pub fn surface_of(name: &str) -> Option<Surface> {
     Some(SURFACES.iter().find(|(key, _)| name.contains(key)).map(|(_, s)| *s).unwrap_or(DEFAULT_SURFACE))
 }
 
+/// True for a substance that is made road, whatever its state (Chassis::rough_paved_max).
+pub fn paved(name: &str) -> bool {
+    let name = name.to_lowercase();
+    SURFACES.iter().find(|(key, _)| name.contains(key)).is_some_and(|(key, _)| PAVED.contains(key))
+}
+
 /// One side's mix of surfaces: mean strength, the rest weighted by strength; seams are the
 /// strongest seamed surface's, not averaged.
 pub fn side_surface(wheels: &[&Wheel]) -> Surface {
@@ -592,6 +659,8 @@ pub struct Gains {
     pub engine: f64,
     pub road: f64,
     pub bumps: f64,
+    /// the tone that follows the swaying cab, apart from the knocks; switched off with them
+    pub cab: f64,
     pub rumble: f64,
     pub wheelspin: f64,
     pub gear: f64,
@@ -633,6 +702,7 @@ impl Default for Gains {
             engine: 0.15,
             road: 0.5,
             bumps: 1.0,
+            cab: 1.0,
             rumble: 0.8,
             wheelspin: 0.7,
             gear: 0.35,
@@ -664,10 +734,10 @@ impl Default for Gains {
 }
 
 /// The float fields by name, in the dataclass's order.
-pub const FLOAT_FIELDS: [&str; 26] = [
-    "master", "grip_level", "trigger_level", "engine", "road", "bumps", "rumble", "wheelspin", "gear", "retarder",
-    "impact", "trigger", "throttle_pulse", "steady_fade", "bump_threshold", "impact_threshold", "pedal", "squeal",
-    "trailer", "park_brake", "engine_start", "shifter", "air_brake", "blinker", "game_events", "ducking",
+pub const FLOAT_FIELDS: [&str; 27] = [
+    "master", "grip_level", "trigger_level", "engine", "road", "bumps", "cab", "rumble", "wheelspin", "gear",
+    "retarder", "impact", "trigger", "throttle_pulse", "steady_fade", "bump_threshold", "impact_threshold", "pedal",
+    "squeal", "trailer", "park_brake", "engine_start", "shifter", "air_brake", "blinker", "game_events", "ducking",
 ];
 
 impl Gains {
@@ -679,6 +749,7 @@ impl Gains {
             "engine" => &mut self.engine,
             "road" => &mut self.road,
             "bumps" => &mut self.bumps,
+            "cab" => &mut self.cab,
             "rumble" => &mut self.rumble,
             "wheelspin" => &mut self.wheelspin,
             "gear" => &mut self.gear,
@@ -744,6 +815,9 @@ impl Gains {
                     *value = 0.0;
                 }
             }
+        }
+        if self.disabled.iter().any(|name| name == Effect::Bumps.name()) {
+            result.cab = 0.0; // the bumps' sub-setting
         }
         result
     }
@@ -1803,6 +1877,8 @@ struct Amps {
     harsh: f64,
     sway_l: f64,
     sway_r: f64,
+    swing_l: f64,
+    swing_r: f64,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1827,6 +1903,8 @@ const BED_TRIGGER: usize = 2;
 pub struct Synth {
     pub g: Gains,
     pub eq: Equalizer,
+    /// whose trucks these are (set_game)
+    pub chassis: Chassis,
     cuts: [Option<ResonanceCut>; 3], // left, right, trigger
     bed_filters: [LowPass; 3],
     bed_shape: LowPass,
@@ -1864,6 +1942,13 @@ pub struct Synth {
     bump_rattles: Vec<u64>,
     ride: [f64; 2],
     ride_wheels: [usize; 2],
+    /// truck, trailer: the same over the last moment (Chassis::bump_over_shake)
+    shake: [f64; 2],
+    /// left, right: the roughness on pavement before its cap (Chassis::swing)
+    shaking: [f64; 2],
+    /// and how strong the tone for it has got
+    pub swing: [f64; 2],
+    swing_osc: Oscillator,
     rng: PyRandom,
     /// where NoiseBursts draw their seeds, as the Python app's global random module
     seeds: PyRandom,
@@ -1877,7 +1962,10 @@ pub struct Synth {
     gear_cooldown: f64,
     prev_accel: Option<[f64; 3]>,
     impact_cooldown: f64,
+    /// the sway's strength and its lean (-1 right..1 left) the last frame asked for
     cab_sway: (f64, f64),
+    sway_level: f64,
+    sway_lean: f64,
     sway: [f64; 2],
     sway_osc: Oscillator,
     lock_phase: f64,
@@ -1917,12 +2005,18 @@ impl Synth {
         Synth::with_seeds(gains, eq, PyRandom::from_entropy())
     }
 
+    /// Read the suspension and the cab as this game's trucks are ("ATS", "ETS2"; None: ATS's).
+    pub fn set_game(&mut self, game: Option<&str>) {
+        self.chassis = chassis_of(game);
+    }
+
     /// A synth whose noise bursts draw their seeds from `seeds` (the Python app's global random).
     pub fn with_seeds(gains: Gains, eq: Equalizer, seeds: PyRandom) -> Synth {
         let cuts = [eq.cut(0), eq.cut(0), eq.cut(1)];
         Synth {
             g: gains,
             eq,
+            chassis: ATS_CHASSIS,
             cuts,
             bed_filters: [LowPass::default(), LowPass::default(), LowPass::default()],
             bed_shape: LowPass::default(),
@@ -1959,6 +2053,10 @@ impl Synth {
             bump_bursts: Vec::new(),
             bump_rattles: Vec::new(),
             ride: [0.0; 2],
+            shake: [0.0; 2],
+            shaking: [0.0; 2],
+            swing: [0.0; 2],
+            swing_osc: Oscillator::default(),
             ride_wheels: [0; 2],
             rng: PyRandom::new(7),
             seeds,
@@ -1973,6 +2071,8 @@ impl Synth {
             prev_accel: None,
             impact_cooldown: 0.0,
             cab_sway: (0.0, 0.0),
+            sway_level: 0.0,
+            sway_lean: 0.0,
             sway: [0.0; 2],
             sway_osc: Oscillator::default(),
             lock_phase: 0.0,
@@ -2179,9 +2279,10 @@ impl Synth {
             self.prev_deflection = deflections;
             return;
         }
+        let chassis = self.chassis;
         let avg_k = 1.0 - m::exp(-dt / RATE_AVG_TAU);
-        let mut rough = [0.0; 2];
-        let mut counts = [0usize; 2];
+        let mut moved: [Vec<f64>; 2] = [Vec::new(), Vec::new()]; // the truck's wheels, left and right
+        let mut on_pavement = [true; 2]; // every wheel of the truck's on that side
         let bump_threshold = self.g.bump_threshold;
         let thresholds = self.ride.map(|ride| m::max(bump_threshold, m::min(BUMP_RIDE_MAX, BUMP_OVER_RIDE * ride)));
         let mut ride = [0.0; 2];
@@ -2197,8 +2298,8 @@ impl Synth {
             let trailer = i >= frame.wheels.len();
             if !trailer {
                 // road texture is what the truck's own tyres feel
-                rough[side] += high;
-                counts[side] += 1;
+                moved[side].push(rate - avg);
+                on_pavement[side] = on_pavement[side] && paved(&wheel.substance);
             }
             if !wheel.on_ground {
                 continue;
@@ -2206,7 +2307,11 @@ impl Synth {
             let group = trailer as usize;
             ride[group] += high;
             ride_counts[group] += 1;
-            if high > thresholds[group] {
+            let mut threshold = thresholds[group];
+            if chassis.bump_over_shake != 0.0 && paved(&wheel.substance) {
+                threshold = m::max(threshold, chassis.bump_over_shake * self.shake[group]);
+            }
+            if high > threshold {
                 // a step in suspension travel: pothole, kerb, joint
                 let size = m::min(1.0, (high - bump_threshold) / 0.8);
                 let strength = size * self.g.bumps * if trailer { TRAILER_FEEL } else { 1.0 };
@@ -2251,8 +2356,26 @@ impl Synth {
             }
         }
         let rough_k = 1.0 - m::exp(-dt / ROUGH_TAU);
+        for group in 0..2 {
+            let now = if ride_counts[group] != 0 { ride[group] / ride_counts[group] as f64 } else { 0.0 };
+            self.shake[group] += (now - self.shake[group]) * rough_k;
+        }
         for side in 0..2 {
-            let value = if counts[side] != 0 { rough[side] / counts[side] as f64 } else { 0.0 };
+            let mut value = if chassis.rough_apart {
+                apart(&moved[side])
+            } else {
+                let mut sum = 0.0;
+                for rate in &moved[side] {
+                    sum += rate.abs();
+                }
+                if moved[side].is_empty() { 0.0 } else { sum / moved[side].len() as f64 }
+            };
+            self.shaking[side] += ((if on_pavement[side] { value } else { 0.0 }) - self.shaking[side]) * rough_k;
+            if let Some(most) = chassis.rough_paved_max {
+                if on_pavement[side] {
+                    value = m::min(value, most);
+                }
+            }
             self.roughness[side] += (value - self.roughness[side]) * rough_k;
             self.rough_avg[side] += (self.roughness[side] - self.rough_avg[side]) * (1.0 - m::exp(-dt / DETAIL_TAU));
         }
@@ -2344,11 +2467,14 @@ impl Synth {
 
     /// How the cab sways on its mounts now, each side.
     fn cab_event(&mut self, frame: &Frame) {
-        let tilt = m::sum(frame.cabin_accel.iter().map(|a| a * a)).sqrt();
-        let strength = ramp(tilt, &CAB_SWAY) * self.g.bumps;
-        let lean = if tilt != 0.0 { frame.cabin_accel[2] / tilt } else { 0.0 }; // the roll's share, positive pushing left
-        let far = 1.0 - lean.abs() * (1.0 - CAB_FAR_SIDE);
-        self.cab_sway = if lean >= 0.0 { (strength * 1.0, strength * far) } else { (strength * far, strength * 1.0) };
+        let [pitch, _, roll] = frame.cabin_accel;
+        let tilt = if self.chassis.cab_heading {
+            m::sum(frame.cabin_accel.iter().map(|a| a * a)).sqrt()
+        } else {
+            m::hypot(pitch, roll)
+        };
+        let strength = ramp(tilt, &self.chassis.cab_sway) * self.g.cab;
+        self.cab_sway = (strength, if tilt != 0.0 { roll / tilt } else { 0.0 }); // the roll's share, positive pushing left
     }
 
     /// True when value differs from the last frame's (never on the first frame).
@@ -2676,7 +2802,7 @@ impl Synth {
                 self.texture[side].tune(&surface, speed, rough);
                 textures[side] = m::min(
                     1.0,
-                    surface.level * speed_factor + m::min(1.0, m::pow(rough / ROUGH_FULL, ROUGH_POWER)),
+                    surface.level * speed_factor + m::min(1.0, m::pow(rough / self.chassis.rough_full, ROUGH_POWER)),
                 );
                 let ground = m::min(1.0, surface.level * speed_factor + ROUGH_NOVELTY * rough);
                 road_moved = m::max(road_moved, self.novelty(REF_ROAD[side], ground, 0.15, 0.05));
@@ -2771,15 +2897,56 @@ impl Synth {
             // after letting go, its tail stays on that pedal's trigger
             self.trigger_slot = if trigger_mode == TriggerMode::Brake { BRAKE_TRIGGER } else { THROTTLE_TRIGGER };
         }
-        let sway_k = 1.0 - m::exp(-DT / CAB_SWAY_TAU);
-        let wants = if live { [self.cab_sway.0, self.cab_sway.1] } else { [0.0, 0.0] };
-        for (side, want) in wants.into_iter().enumerate() {
-            self.sway[side] += (want - self.sway[side]) * sway_k;
-            if want == 0.0 && self.sway[side] < 1e-4 {
-                self.sway[side] = 0.0;
+        let (want, lean) = if live { self.cab_sway } else { (0.0, 0.0) };
+        if self.chassis.sway_held {
+            let sway_tau = if want > self.sway_level {
+                CAB_SWAY_ATTACK
+            } else if live {
+                CAB_SWAY_RELEASE
+            } else {
+                CAB_SWAY_STOP
+            };
+            self.sway_level += (want - self.sway_level) * (1.0 - m::exp(-DT / sway_tau));
+            if want == 0.0 && self.sway_level < 1e-4 {
+                self.sway_level = 0.0;
+            }
+            self.sway_lean += (lean - self.sway_lean) * (1.0 - m::exp(-DT / CAB_LEAN_TAU));
+            let far = self.sway_level * (1.0 - self.sway_lean.abs() * (1.0 - CAB_FAR_SIDE));
+            self.sway = if self.sway_lean >= 0.0 { [self.sway_level, far] } else { [far, self.sway_level] };
+        } else {
+            let far = 1.0 - lean.abs() * (1.0 - CAB_FAR_SIDE);
+            let sway_k = 1.0 - m::exp(-DT / CAB_SWAY_TAU);
+            let shares = if lean >= 0.0 { [1.0, far] } else { [far, 1.0] };
+            for side in 0..2 {
+                self.sway[side] += (want * shares[side] - self.sway[side]) * sway_k;
+                if want == 0.0 && self.sway[side] < 1e-4 {
+                    self.sway[side] = 0.0;
+                }
             }
         }
         let [sway_l, sway_r] = self.sway;
+        let mut swing_hz = SWING_HZ.0;
+        if let Some(points) = self.chassis.swing {
+            if let Some(frame) = live_frame {
+                let faster = (frame.speed.abs() - SWING_SPEED.0) / (SWING_SPEED.1 - SWING_SPEED.0);
+                swing_hz += (SWING_HZ.1 - SWING_HZ.0) * m::min(1.0, m::max(0.0, faster));
+            }
+            for side in 0..2 {
+                let want = if live { ramp(self.shaking[side], &points) * self.g.road } else { 0.0 };
+                let swing_tau = if want > self.swing[side] {
+                    SWING_ATTACK
+                } else if live {
+                    SWING_RELEASE
+                } else {
+                    CAB_SWAY_STOP
+                };
+                self.swing[side] += (want - self.swing[side]) * (1.0 - m::exp(-DT / swing_tau));
+                if want == 0.0 && self.swing[side] < 1e-4 {
+                    self.swing[side] = 0.0;
+                }
+            }
+        }
+        let [swing_l, swing_r] = self.swing;
         let g = self.g.clone();
         let routes: [Channel; 18] = TOGGLEABLE.map(|e| g.route_of(e));
         // each vibration scaled for how strongly each motor gives back its frequency
@@ -2793,6 +2960,8 @@ impl Synth {
         let eq_sway = self.eq.pair(CAB_SWAY_HZ);
         let eq_trigger =
             self.bed_pair(if trigger_mode == TriggerMode::Brake && lock > 0.0 { 110.0 } else { 100.0 });
+        let swinging = swing_l != 0.0 || swing_r != 0.0 || self.prev_amp.swing_l != 0.0 || self.prev_amp.swing_r != 0.0;
+        let eq_swing = if swinging { self.bed_pair(swing_hz) } else { FLAT };
         let freqs: Vec<Option<f64>> = self.bursts.iter().map(|e| (!e.burst.flat).then_some(e.burst.freq)).collect();
         let eq_bursts: Vec<(f64, f64)> = freqs.into_iter().map(|f| f.map_or(FLAT, |f| self.eq.pair(f))).collect();
         let jake_mean = jake_mean();
@@ -2818,6 +2987,8 @@ impl Synth {
             let sq = p.squeal + (squeal_amp - p.squeal) * k;
             let wl = p.sway_l + (sway_l - p.sway_l) * k;
             let wr = p.sway_r + (sway_r - p.sway_r) * k;
+            let gl = p.swing_l + (swing_l - p.swing_l) * k;
+            let gr = p.swing_r + (swing_r - p.swing_r) * k;
 
             let mut out = [0.0; 5]; // left grip, right grip, then the TRIGGER_SLOTS: events
             let mut bed = [0.0; 5]; // continuous effects, ducked under the events
@@ -2859,6 +3030,11 @@ impl Synth {
                 FLAT,
                 BOTH_TRIGGERS,
             );
+            if gl != 0.0 || gr != 0.0 {
+                // the truck shaking on its springs: one tone, on the side whose wheels shake
+                let c = self.swing_osc.next(swing_hz);
+                mix(&mut bed, routes[Effect::Road.index()], gl * c, gr * c, 0.7 * (gl + gr) * c, eq_swing, BOTH_TRIGGERS);
+            }
             if ul != 0.0 || ur != 0.0 {
                 // the half-rate part takes the eq of its own frequency
                 let (strip_l, half_l) = self.strip(0, rumble_freq);
@@ -3021,6 +3197,8 @@ impl Synth {
             harsh: engine_harsh,
             sway_l,
             sway_r,
+            swing_l,
+            swing_r,
         };
         self.bursts.retain(|e| !e.burst.done());
 
@@ -3133,6 +3311,25 @@ fn mix(out: &mut [f64; 5], route: Channel, left: f64, right: f64, trigger: f64, 
 }
 
 /// Straight lines through (x, y) points: the first y below them, the last above.
+/// How fast one side's wheels move against each other, m/s: what they share is the body's.
+/// Scaled so that wheels moving with no regard for each other read their own mean movement.
+fn apart(moved: &[f64]) -> f64 {
+    let count = moved.len() as f64;
+    if moved.len() < 2 {
+        return moved.first().map_or(0.0, |rate| rate.abs());
+    }
+    let mut together = 0.0;
+    for rate in moved {
+        together += rate;
+    }
+    together /= count;
+    let mut apart = 0.0;
+    for rate in moved {
+        apart += (rate - together).abs();
+    }
+    apart / count * (count / (count - 1.0)).sqrt()
+}
+
 fn ramp(x: f64, points: &[(f64, f64)]) -> f64 {
     if x <= points[0].0 {
         return points[0].1;

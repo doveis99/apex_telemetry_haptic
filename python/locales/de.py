@@ -110,6 +110,10 @@ MESSAGES = {
     "브레이크": "Bremse",
     "감지 기준": "Erkennung",
     "요철 감지 기준": "Schwelle Unebenheit",
+    "앞축 스트로크": "Federweg Vorderachse",
+    "뒤축 스트로크": "Federweg Hinterachse",
+    "게임이 요철을 재는 방식대로, 바퀴가 움직인 속도를 그 축의 서스펜션 스트로크에 견주어 봅니다. 스트로크가 길수록 같은 움직임이 약한 요철로 잡힙니다. 기본값은 게임 기본 트럭의 값입니다. 서스펜션을 바꾸는 물리 모드를 쓰면 그 모드의 섀시 파일에 있는 residual_travel 값을 넣으세요.":
+        "Wie das Spiel selbst Unebenheiten misst, wird die Geschwindigkeit eines Rads am Federweg seiner Achse gemessen. Je länger der Federweg, desto schwächer zählt dieselbe Bewegung als Stoß. Die Standardwerte sind die der Lkw des Spiels. Bei einem Physik-Mod, der die Federung ändert, den Wert residual_travel aus der Chassis-Datei des Mods eintragen.",
     "충돌 감지 기준": "Schwelle Aufprall",
     "엔진 기통 수": "Zylinderzahl",
     "변속기": "Getriebe",

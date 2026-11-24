@@ -228,6 +228,22 @@ BUMP_OVER_RIDE = 12.0  # threshold as a multiple of that average: 35 knocks a mi
 # picks which movements knock: how hard is still measured from Gains.bump_threshold, so a rut
 # lands as hard on any truck.
 BUMP_RIDE_MAX = 0.5  # m/s, as high as it goes
+# The game's own pad vibration measures a bump the same way but over the axle's travel: the mean
+# of a wheel's suspension speed over 28 ms, divided by twice that axle's `residual_travel` (the
+# chassis file's; eurotrucks2.exe 1.62 read 2026-11-24, and its memory beside the telemetry: the
+# wheel's position is 0.5 - deflection / (2 * residual_travel), correlation -1.000 on six wheels).
+# So the same movement counts for more on an axle with less room. Every truck of both games has
+# 0.1 m at the front axle and 0.088 m at the others (380 chassis files; a few of ETS2's have 0.08
+# or 0.088 all round), and a physics mod changes it: the developer's has 0.18 at the front, where
+# a wheel's movement is then 0.56 of what it is without the mod. A truck wheel's movement is
+# taken as its axle's vanilla travel / the travel it has (Gains.travel_front, the first axle, and
+# Gains.travel_rear) times itself, so a vanilla truck reads to the bit as it did before this and
+# only a changed travel changes anything. Measured against one travel for both axles, as the game
+# does, a vanilla truck's front wheels would count 0.88 of its rear ones; that was tried first
+# and dropped a 20 mm step of the city test drive (tests.test_scenarios) under the threshold at
+# the cab, where the thresholds were set by feel on m/s. Trailers' wheels the game's vibration
+# does not look at; they stay in m/s. The road's roughness is not a bump and is not touched.
+TRAVEL_VANILLA = (0.1, 0.088)  # m: the first axle, the others
 # The cab on its mounts is what the driver sits in, and its tilt acceleration (Frame.cabin_accel)
 # tells a dirt road from pavement far better than the wheels do: in a 10 min drive without a
 # trailer (2026-11-02) its square had a median 30-100 times as large on dirt, and passed 0.02
@@ -587,6 +603,9 @@ class Gains:
     # frame can straddle, close to what a continuous clock sees at 0.25
     bump_threshold: float = 0.2
     impact_threshold: float = 12.0  # m/s^2 change from one game frame to the next
+    # m: the chassis file's residual_travel of the first axle and of the others (TRAVEL_VANILLA)
+    travel_front: float = 0.1
+    travel_rear: float = 0.088
     # event effects
     pedal: float = 0.6
     squeal: float = 0.4
@@ -1345,6 +1364,8 @@ class Synth:
         moved: tuple[list[float], list[float]] = ([], [])  # the truck's wheels, left and right
         on_pavement = [True, True]  # every wheel of the truck's on that side
         thresholds = [max(self.g.bump_threshold, min(BUMP_RIDE_MAX, BUMP_OVER_RIDE * ride)) for ride in self.ride]
+        travel = [vanilla / t if t > 0.0 else 1.0
+                  for vanilla, t in zip(TRAVEL_VANILLA, (self.g.travel_front, self.g.travel_rear))]
         ride, ride_counts = [0.0, 0.0], [0, 0]
         for i, wheel in enumerate(wheels):
             rate = (deflections[i] - self.prev_deflection[i]) / dt  # m/s
@@ -1359,13 +1380,15 @@ class Synth:
                 on_pavement[side] = on_pavement[side] and paved(wheel.substance)
             if not wheel.on_ground:
                 continue
-            ride[trailer] += high
+            # as the game measures a bump: over the axle's travel (TRAVEL_VANILLA)
+            felt = high if trailer else high * travel[i >= 2]
+            ride[trailer] += felt
             ride_counts[trailer] += 1
             threshold = thresholds[trailer]
             if chassis.bump_over_shake and paved(wheel.substance):
                 threshold = max(threshold, chassis.bump_over_shake * self.shake[trailer])
-            if high > threshold:  # a step in suspension travel: pothole, kerb, joint
-                size = min(1.0, (high - self.g.bump_threshold) / 0.8)
+            if felt > threshold:  # a step in suspension travel: pothole, kerb, joint
+                size = min(1.0, (felt - self.g.bump_threshold) / 0.8)
                 strength = size * self.g.bumps * (TRAILER_FEEL if trailer else 1.0)
                 small_hz, big_hz = BUMP_HZ
                 freq = small_hz + (big_hz - small_hz) * size + (TRAILER_BUMP_HZ if trailer else 0.0)

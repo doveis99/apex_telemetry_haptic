@@ -159,6 +159,9 @@ msgstr "Läuft das Spiel, wirkt es ab dem nächsten Start."
 msgid "게임이 실행 중입니다. 게임을 끝낸 뒤 업데이트하세요."
 msgstr "Das Spiel läuft. Bitte erst nach dem Beenden aktualisieren."
 
+msgid "게임이 요철을 재는 방식대로, 바퀴가 움직인 속도를 그 축의 서스펜션 스트로크에 견주어 봅니다. 스트로크가 길수록 같은 움직임이 약한 요철로 잡힙니다. 기본값은 게임 기본 트럭의 값입니다. 서스펜션을 바꾸는 물리 모드를 쓰면 그 모드의 섀시 파일에 있는 residual_travel 값을 넣으세요."
+msgstr "Wie das Spiel selbst Unebenheiten misst, wird die Geschwindigkeit eines Rads am Federweg seiner Achse gemessen. Je länger der Federweg, desto schwächer zählt dieselbe Bewegung als Stoß. Die Standardwerte sind die der Lkw des Spiels. Bei einem Physik-Mod, der die Federung ändert, den Wert residual_travel aus der Chassis-Datei des Mods eintragen."
+
 msgid "고속도로 4분"
 msgstr "Autobahn 4 min"
 
@@ -239,6 +242,9 @@ msgstr "Zweiter ▶"
 
 msgid "둘 다"
 msgstr "Beide"
+
+msgid "뒤축 스트로크"
+msgstr "Federweg Hinterachse"
 
 msgid "디버그 기록"
 msgstr "Debug-Protokoll"
@@ -446,6 +452,9 @@ msgstr "Asphalt"
 
 msgid "아스팔트 → 자갈"
 msgstr "Asphalt → Schotter"
+
+msgid "앞축 스트로크"
+msgstr "Federweg Vorderachse"
 
 msgid "약 14km/h 이하에서 브레이크를 밟으며 서서히 멈출 때 '끼익, 끽' 하고 끊어지며 우는 가는 진동입니다."
 msgstr "Ein feines Quietschen in einzelnen Stößen beim sanften Abbremsen bis zum Stillstand unter etwa 14 km/h."

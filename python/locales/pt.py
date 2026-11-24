@@ -111,6 +111,10 @@ MESSAGES = {
     "브레이크": "Freio",
     "감지 기준": "Detecção",
     "요철 감지 기준": "Limite de buracos",
+    "앞축 스트로크": "Curso do eixo dianteiro",
+    "뒤축 스트로크": "Curso do eixo traseiro",
+    "게임이 요철을 재는 방식대로, 바퀴가 움직인 속도를 그 축의 서스펜션 스트로크에 견주어 봅니다. 스트로크가 길수록 같은 움직임이 약한 요철로 잡힙니다. 기본값은 게임 기본 트럭의 값입니다. 서스펜션을 바꾸는 물리 모드를 쓰면 그 모드의 섀시 파일에 있는 residual_travel 값을 넣으세요.":
+        "Assim como o próprio jogo mede as irregularidades, a velocidade de uma roda é comparada com o curso da suspensão do seu eixo. Quanto maior o curso, mais fraco o mesmo movimento conta como irregularidade. Os valores padrão são os dos caminhões do jogo. Com um mod de física que altere a suspensão, insira o valor residual_travel do arquivo de chassi desse mod.",
     "충돌 감지 기준": "Limite de impacto",
     "엔진 기통 수": "Cilindros",
     "변속기": "Caixa de câmbio",

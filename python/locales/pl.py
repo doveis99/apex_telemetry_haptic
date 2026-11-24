@@ -110,6 +110,10 @@ MESSAGES = {
     "브레이크": "Hamulec",
     "감지 기준": "Wykrywanie",
     "요철 감지 기준": "Próg nierówności",
+    "앞축 스트로크": "Skok zawieszenia osi przedniej",
+    "뒤축 스트로크": "Skok zawieszenia osi tylnej",
+    "게임이 요철을 재는 방식대로, 바퀴가 움직인 속도를 그 축의 서스펜션 스트로크에 견주어 봅니다. 스트로크가 길수록 같은 움직임이 약한 요철로 잡힙니다. 기본값은 게임 기본 트럭의 값입니다. 서스펜션을 바꾸는 물리 모드를 쓰면 그 모드의 섀시 파일에 있는 residual_travel 값을 넣으세요.":
+        "Tak jak sama gra mierzy nierówności, prędkość koła odnosi się do skoku zawieszenia jego osi. Im dłuższy skok, tym słabiej ten sam ruch liczy się jako nierówność. Wartości domyślne są takie jak w ciężarówkach z gry. Przy modzie fizyki zmieniającym zawieszenie wpisz wartość residual_travel z pliku podwozia tego moda.",
     "충돌 감지 기준": "Próg uderzenia",
     "엔진 기통 수": "Liczba cylindrów",
     "변속기": "Skrzynia biegów",

@@ -44,14 +44,16 @@ pub const EVENT_SLIDERS: [Spec; 10] = [
     Spec { key: "game_events", label: n_("게임 알림"), low: 0.0, high: 200.0, scale: 100.0, unit: "%" },
     Spec { key: "ducking", label: n_("주행 진동 양보"), low: 0.0, high: 100.0, scale: 100.0, unit: "%" },
 ];
-pub const THRESHOLD_SLIDERS: [Spec; 2] = [
+pub const THRESHOLD_SLIDERS: [Spec; 4] = [
     Spec { key: "bump_threshold", label: n_("요철 감지 기준"), low: 5.0, high: 100.0, scale: 100.0, unit: "cm/s" },
     Spec { key: "impact_threshold", label: n_("충돌 감지 기준"), low: 4.0, high: 40.0, scale: 1.0, unit: "m/s²" },
+    Spec { key: "travel_front", label: n_("앞축 스트로크"), low: 50.0, high: 300.0, scale: 1000.0, unit: "mm" },
+    Spec { key: "travel_rear", label: n_("뒤축 스트로크"), low: 50.0, high: 300.0, scale: 1000.0, unit: "mm" },
 ];
 
 pub const CARD_WIDE: [&str; 2] = ["steady_fade", "ducking"];
 
-pub const SLIDER_TIPS: [(&str, &str); 27] = [
+pub const SLIDER_TIPS: [(&str, &str); 29] = [
     ("master", n_("컨트롤러로 나가는 최종 세기입니다. 효과별 세기를 모두 섞은 다음 그립과 트리거 모두에 적용됩니다. 100%를 넘기면 약한 효과는 세지고 이미 센 효과는 거의 그대로입니다.")),
     ("grip_level", n_("좌우 그립 모터에만 적용되는 최종 세기입니다.")),
     ("trigger_level", n_("트리거 모터에만 적용되는 최종 세기입니다. 0%면 트리거 진동이 완전히 꺼집니다. 손가락이 부담스러우면 여기서 낮추세요. 효과별 비율은 그대로 유지됩니다.")),
@@ -78,6 +80,8 @@ pub const SLIDER_TIPS: [(&str, &str); 27] = [
     ("game_events", n_("톨게이트, 벌금, 주유, 배송 완료, 페리, 기차 이벤트 때 '톡톡' 두 번.")),
     ("ducking", n_("변속과 충돌을 포함한 모든 이벤트 효과가 울리는 순간, 같은 위치의 주행 진동을 잠깐 줄여 이벤트가 묻히지 않게 하는 정도입니다. 0%면 줄이지 않습니다.")),
     ("bump_threshold", n_("서스펜션이 이 속도보다 갑자기 빨리 움직이면 요철 펄스를 냅니다. 낮추면 작은 요철에도, 높이면 큰 충격에만 반응합니다. 트럭이 평소에 많이 흔들리면 기준이 저절로 그만큼 올라갑니다.")),
+    ("travel_front", n_("게임이 요철을 재는 방식대로, 바퀴가 움직인 속도를 그 축의 서스펜션 스트로크에 견주어 봅니다. 스트로크가 길수록 같은 움직임이 약한 요철로 잡힙니다. 기본값은 게임 기본 트럭의 값입니다. 서스펜션을 바꾸는 물리 모드를 쓰면 그 모드의 섀시 파일에 있는 residual_travel 값을 넣으세요.")),
+    ("travel_rear", n_("게임이 요철을 재는 방식대로, 바퀴가 움직인 속도를 그 축의 서스펜션 스트로크에 견주어 봅니다. 스트로크가 길수록 같은 움직임이 약한 요철로 잡힙니다. 기본값은 게임 기본 트럭의 값입니다. 서스펜션을 바꾸는 물리 모드를 쓰면 그 모드의 섀시 파일에 있는 residual_travel 값을 넣으세요.")),
     ("impact_threshold", n_("게임 화면 한 프레임 사이의 가속도 변화가 이 값을 넘으면 충돌 펄스를 냅니다. 평소 주행 중 '가속도 최대' 값보다 충분히 높게 두세요.")),
 ];
 

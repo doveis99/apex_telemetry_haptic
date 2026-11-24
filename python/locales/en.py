@@ -110,6 +110,10 @@ MESSAGES = {
     "브레이크": "Brake",
     "감지 기준": "Detection",
     "요철 감지 기준": "Bump threshold",
+    "앞축 스트로크": "Front axle travel",
+    "뒤축 스트로크": "Rear axle travel",
+    "게임이 요철을 재는 방식대로, 바퀴가 움직인 속도를 그 축의 서스펜션 스트로크에 견주어 봅니다. 스트로크가 길수록 같은 움직임이 약한 요철로 잡힙니다. 기본값은 게임 기본 트럭의 값입니다. 서스펜션을 바꾸는 물리 모드를 쓰면 그 모드의 섀시 파일에 있는 residual_travel 값을 넣으세요.":
+        "As the game itself measures bumps, a wheel's speed is set against the suspension travel of its axle. The longer the travel, the weaker the same movement counts as a bump. The defaults are those of the game's own trucks. With a physics mod that changes the suspension, enter the residual_travel value from that mod's chassis file.",
     "충돌 감지 기준": "Impact threshold",
     "엔진 기통 수": "Engine cylinders",
     "변속기": "Gearbox",

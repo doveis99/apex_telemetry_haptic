@@ -149,6 +149,11 @@ const BUMP_RIDE_TAU: f64 = 20.0;
 const BUMP_RIDE_SPEED: f64 = 3.0;
 const BUMP_OVER_RIDE: f64 = 12.0;
 const BUMP_RIDE_MAX: f64 = 0.5;
+/// m: the `residual_travel` of a vanilla truck's first axle and of its others. The game's own pad
+/// vibration measures a bump over the axle's travel (effects.py tells how it was read), so a
+/// truck wheel's movement counts as this over the travel its axle has (Gains::travel_front,
+/// travel_rear): a vanilla truck reads as before, a physics mod's longer travel softens its axle.
+const TRAVEL_VANILLA: [f64; 2] = [0.1, 0.088];
 const CAB_SWAY_HZ: f64 = 45.0;
 const CAB_SWAY: [(f64, f64); 3] = [(0.06, 0.0), (0.14, 0.25), (0.6, 1.0)];
 const CAB_SWAY_TAU: f64 = 0.025;
@@ -677,6 +682,9 @@ pub struct Gains {
     pub blinker_sound: String,
     pub bump_threshold: f64,
     pub impact_threshold: f64,
+    /// m: the chassis file's residual_travel of the first axle and of the others (TRAVEL_VANILLA)
+    pub travel_front: f64,
+    pub travel_rear: f64,
     pub pedal: f64,
     pub squeal: f64,
     pub trailer: f64,
@@ -717,6 +725,8 @@ impl Default for Gains {
             blinker_sound: SOUND_DEFAULT.to_string(),
             bump_threshold: 0.2,
             impact_threshold: 12.0,
+            travel_front: 0.1,
+            travel_rear: 0.088,
             pedal: 0.6,
             squeal: 0.4,
             trailer: 0.25,
@@ -734,10 +744,11 @@ impl Default for Gains {
 }
 
 /// The float fields by name, in the dataclass's order.
-pub const FLOAT_FIELDS: [&str; 27] = [
+pub const FLOAT_FIELDS: [&str; 29] = [
     "master", "grip_level", "trigger_level", "engine", "road", "bumps", "cab", "rumble", "wheelspin", "gear",
-    "retarder", "impact", "trigger", "throttle_pulse", "steady_fade", "bump_threshold", "impact_threshold", "pedal",
-    "squeal", "trailer", "park_brake", "engine_start", "shifter", "air_brake", "blinker", "game_events", "ducking",
+    "retarder", "impact", "trigger", "throttle_pulse", "steady_fade", "bump_threshold", "impact_threshold",
+    "travel_front", "travel_rear", "pedal", "squeal", "trailer", "park_brake", "engine_start", "shifter", "air_brake",
+    "blinker", "game_events", "ducking",
 ];
 
 impl Gains {
@@ -760,6 +771,8 @@ impl Gains {
             "steady_fade" => &mut self.steady_fade,
             "bump_threshold" => &mut self.bump_threshold,
             "impact_threshold" => &mut self.impact_threshold,
+            "travel_front" => &mut self.travel_front,
+            "travel_rear" => &mut self.travel_rear,
             "pedal" => &mut self.pedal,
             "squeal" => &mut self.squeal,
             "trailer" => &mut self.trailer,
@@ -2285,6 +2298,8 @@ impl Synth {
         let mut on_pavement = [true; 2]; // every wheel of the truck's on that side
         let bump_threshold = self.g.bump_threshold;
         let thresholds = self.ride.map(|ride| m::max(bump_threshold, m::min(BUMP_RIDE_MAX, BUMP_OVER_RIDE * ride)));
+        let travel = [(TRAVEL_VANILLA[0], self.g.travel_front), (TRAVEL_VANILLA[1], self.g.travel_rear)]
+            .map(|(vanilla, t)| if t > 0.0 { vanilla / t } else { 1.0 });
         let mut ride = [0.0; 2];
         let mut ride_counts = [0usize; 2];
         for (i, wheel) in wheels.iter().enumerate() {
@@ -2305,15 +2320,17 @@ impl Synth {
                 continue;
             }
             let group = trailer as usize;
-            ride[group] += high;
+            // as the game measures a bump: over the axle's travel (TRAVEL_VANILLA)
+            let felt = if trailer { high } else { high * travel[(i >= 2) as usize] };
+            ride[group] += felt;
             ride_counts[group] += 1;
             let mut threshold = thresholds[group];
             if chassis.bump_over_shake != 0.0 && paved(&wheel.substance) {
                 threshold = m::max(threshold, chassis.bump_over_shake * self.shake[group]);
             }
-            if high > threshold {
+            if felt > threshold {
                 // a step in suspension travel: pothole, kerb, joint
-                let size = m::min(1.0, (high - bump_threshold) / 0.8);
+                let size = m::min(1.0, (felt - bump_threshold) / 0.8);
                 let strength = size * self.g.bumps * if trailer { TRAILER_FEEL } else { 1.0 };
                 let (small_hz, big_hz) = BUMP_HZ;
                 let freq = small_hz + (big_hz - small_hz) * size + if trailer { TRAILER_BUMP_HZ } else { 0.0 };

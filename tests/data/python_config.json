@@ -20,6 +20,8 @@
   "blinker_sound": "default",
   "bump_threshold": 0.2,
   "impact_threshold": 12.0,
+  "travel_front": 0.1,
+  "travel_rear": 0.088,
   "pedal": 0.6,
   "squeal": 0.4,
   "trailer": 0.25,

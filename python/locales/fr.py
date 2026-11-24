@@ -112,6 +112,10 @@ MESSAGES = {
     "브레이크": "Frein",
     "감지 기준": "Détection",
     "요철 감지 기준": "Seuil des bosses",
+    "앞축 스트로크": "Débattement essieu avant",
+    "뒤축 스트로크": "Débattement essieu arrière",
+    "게임이 요철을 재는 방식대로, 바퀴가 움직인 속도를 그 축의 서스펜션 스트로크에 견주어 봅니다. 스트로크가 길수록 같은 움직임이 약한 요철로 잡힙니다. 기본값은 게임 기본 트럭의 값입니다. 서스펜션을 바꾸는 물리 모드를 쓰면 그 모드의 섀시 파일에 있는 residual_travel 값을 넣으세요.":
+        "Comme le jeu mesure lui-même les bosses, la vitesse d'une roue est rapportée au débattement de la suspension de son essieu. Plus le débattement est long, plus le même mouvement compte comme une bosse faible. Les valeurs par défaut sont celles des camions du jeu. Avec un mod de physique qui modifie la suspension, saisissez la valeur residual_travel du fichier de châssis de ce mod.",
     "충돌 감지 기준": "Seuil de choc",
     "엔진 기통 수": "Cylindres",
     "변속기": "Boîte de vitesses",

@@ -60,8 +60,11 @@ msgstr "Wybierz folder gry zawierający bin\\win_x64\\amtrucks.exe lub eurotruck
 msgid "{error} · {seconds}초 후 재시도"
 msgstr "{error} · ponowna próba za {seconds} s"
 
-msgid "{game}의 plugins 폴더에 RenCloud scs-telemetry.dll(v1.12.1, MIT)을 복사합니다."
-msgstr "Kopiuje RenCloud scs-telemetry.dll (v1.12.1, MIT) do folderu plugins gry {game}."
+msgid "{game}의 plugins 폴더에 동봉한 scs-telemetry.dll을 복사합니다. (RenCloud V.1.12.1 기반, SCS SDK 1.16, MIT)"
+msgstr "Kopiuje dołączony scs-telemetry.dll do folderu plugins gry {game}. (Na podstawie RenCloud V.1.12.1, SCS SDK 1.16, MIT)"
+
+msgid "{names} (새 빌드 있음)"
+msgstr "{names} (dostępna nowsza kompilacja)"
 
 msgid "{names} (호환 미확인)"
 msgstr "{names} (zgodność niepotwierdzona)"
@@ -752,6 +755,9 @@ msgstr "Wtyczka telemetrii"
 
 msgid "텔레메트리 플러그인 없음"
 msgstr "Brak wtyczki telemetrii"
+
+msgid "텔레메트리 플러그인의 새 빌드가 있습니다 → '텔레메트리 플러그인'"
+msgstr "Dostępna nowsza kompilacja wtyczki telemetrii → „Wtyczka telemetrii”"
 
 msgid "토크컨버터"
 msgstr "Hydrokinetyczna"

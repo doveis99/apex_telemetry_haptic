@@ -190,11 +190,13 @@ Vibration is built from the data exported by the telemetry plugin installed in t
 
 | Shown | Meaning |
 |---|---|
+| `SCS Haptics build 2` | The build bundled with this program (the number is its build number). Nothing to do. |
 | `RenCloud`, `TruckDash` | Compatible. Nothing to do. |
+| `… (newer build available)` | RenCloud's own release or an earlier build is installed. It works as it is; **Update** replaces it with the bundled build. The status line also says so once at startup. |
 | `SimHub` | The SimHub plugin. Its data layout is not verified, so it is shown as "compatibility unknown". |
 | `No telemetry plugin` | Press **Install**. |
 
-- **Install / Reinstall:** copies the bundled RenCloud `scs-telemetry.dll` (v1.12.1, MIT) into the game's `plugins` folder. Other plugins are left alone. If the game is running, it takes effect from the next launch.
+- **Install / Reinstall / Update:** copies the bundled `scs-telemetry.dll` into the game's `plugins` folder. It is this project's build of RenCloud V.1.12.1 (MIT) against SCS SDK 1.16: the same data layout (rev 12), with a few problems fixed ([plugin/README.md](plugin/README.md)). Other plugins are left alone. If the game is running, it takes effect from the next launch.
 - **Choose game folder…:** for installs outside Steam or ones that were not found, point to the game folder (the one containing `bin\win_x64\amtrucks.exe` or `eurotrucks2.exe`).
 - If the game folder is not writable, the error dialog names the file to copy and where. Run as administrator or copy it yourself.
 - With a plugin present, the game may show an "Advanced SDK features" notice at startup. It means the telemetry plugin loaded correctly.

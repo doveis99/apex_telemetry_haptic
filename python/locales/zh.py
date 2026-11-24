@@ -41,6 +41,7 @@ MESSAGES = {
     "방향지시등 우": "右转向灯",
     "텔레메트리 플러그인 없음": "无遥测插件",
     "{names} (호환 미확인)": "{names}（兼容性未知）",
+    "{names} (새 빌드 있음)": "{names}（有新构建）",
     "번들 플러그인이 없습니다: {path}": "缺少随附的插件：{path}",
     "{name} 플러그인 버전 {revision} (지원: {supported})": "{name} 插件版本 {revision}（支持：{supported}）",
     "다운로드한 파일의 해시가 릴리스와 다릅니다": "下载文件的哈希值与发布版本不符",
@@ -115,6 +116,7 @@ MESSAGES = {
     "토크컨버터": "液力变矩器",
     "이벤트": "事件",
     "호환되는 텔레메트리 플러그인이 없습니다 → '텔레메트리 플러그인'": "没有兼容的遥测插件 → “遥测插件”",
+    "텔레메트리 플러그인의 새 빌드가 있습니다 → '텔레메트리 플러그인'": "遥测插件有新构建 → “遥测插件”",
     "바뀐 설정을 저장할까요?": "要保存更改的设置吗？",
     "업데이트": "更新",
     "업데이트 {version}": "更新 {version}",
@@ -136,8 +138,8 @@ MESSAGES = {
     "bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 게임 폴더를 선택하세요.":
         "请选择包含 bin\\win_x64\\amtrucks.exe 或 eurotrucks2.exe 的游戏文件夹。",
     "플러그인 설치": "安装插件",
-    "{game}의 plugins 폴더에 RenCloud scs-telemetry.dll(v1.12.1, MIT)을 복사합니다.":
-        "将 RenCloud scs-telemetry.dll（v1.12.1，MIT）复制到 {game} 的 plugins 文件夹。",
+    "{game}의 plugins 폴더에 동봉한 scs-telemetry.dll을 복사합니다. (RenCloud V.1.12.1 기반, SCS SDK 1.16, MIT)":
+        "将随附的 scs-telemetry.dll 复制到 {game} 的 plugins 文件夹。（基于 RenCloud V.1.12.1，SCS SDK 1.16，MIT）",
     "게임이 실행 중이면 다음 실행부터 적용됩니다.": "如果游戏正在运行，将在下次启动时生效。",
     "폴더에 쓸 권한이 없습니다. 프로그램을 관리자 권한으로 실행하거나 아래 파일을 직접 복사하세요.": "没有写入该文件夹的权限。请以管理员身份运行程序，或手动复制下面的文件。",
     "복사하지 못했습니다: {error}": "复制失败：{error}",

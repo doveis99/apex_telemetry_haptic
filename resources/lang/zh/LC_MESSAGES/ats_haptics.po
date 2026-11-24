@@ -60,8 +60,11 @@ msgstr "请选择包含 bin\\win_x64\\amtrucks.exe 或 eurotrucks2.exe 的游戏
 msgid "{error} · {seconds}초 후 재시도"
 msgstr "{error} · {seconds} 秒后重试"
 
-msgid "{game}의 plugins 폴더에 RenCloud scs-telemetry.dll(v1.12.1, MIT)을 복사합니다."
-msgstr "将 RenCloud scs-telemetry.dll（v1.12.1，MIT）复制到 {game} 的 plugins 文件夹。"
+msgid "{game}의 plugins 폴더에 동봉한 scs-telemetry.dll을 복사합니다. (RenCloud V.1.12.1 기반, SCS SDK 1.16, MIT)"
+msgstr "将随附的 scs-telemetry.dll 复制到 {game} 的 plugins 文件夹。（基于 RenCloud V.1.12.1，SCS SDK 1.16，MIT）"
+
+msgid "{names} (새 빌드 있음)"
+msgstr "{names}（有新构建）"
 
 msgid "{names} (호환 미확인)"
 msgstr "{names}（兼容性未知）"
@@ -752,6 +755,9 @@ msgstr "遥测插件"
 
 msgid "텔레메트리 플러그인 없음"
 msgstr "无遥测插件"
+
+msgid "텔레메트리 플러그인의 새 빌드가 있습니다 → '텔레메트리 플러그인'"
+msgstr "遥测插件有新构建 → “遥测插件”"
 
 msgid "토크컨버터"
 msgstr "液力变矩器"

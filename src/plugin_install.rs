@@ -4,8 +4,10 @@
 //! The haptics read the shared memory of a RenCloud scs-sdk-plugin (revision 12) build.
 //! TruckDash ships such a build under its own mapping name; SimHub's plugin uses another
 //! layout revision that has not been verified. When no compatible plugin is found, the
-//! bundled RenCloud scs-telemetry.dll (MIT, V.1.12.1, embedded in the exe) can be copied
-//! into the game's plugins folder.
+//! bundled scs-telemetry.dll (embedded in the exe) can be copied into the game's plugins
+//! folder. The bundled one is this project's build of RenCloud's V.1.12.1 (MIT) against SCS
+//! SDK 1.16, with fixes and the same memory layout: source and changes in plugin/, built by
+//! tools/build_plugin.ps1.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -19,7 +21,10 @@ pub const PLUGIN_FILE: &str = "scs-telemetry.dll";
 const PROVIDERS: [(&str, &str); 3] =
     [("SCSTelemetry", "RenCloud"), ("TruckDashTelemetry", "TruckDash"), ("SHSCSTelemetry", "SimHub")];
 const COMPATIBLE: [&str; 2] = ["RenCloud", "TruckDash"];
-/// The unmodified Win64 build from RenCloud's release V.1.12.1 (resources/scs-sdk-plugin).
+/// What this project's build of the plugin carries (PLUGIN_BUILD_NAME in its source), followed
+/// by its build number. Looked for first: it uses RenCloud's mapping name too.
+const OWN_BUILD: &str = "SCS Haptics build ";
+/// The Win64 build of plugin/ (tools/build_plugin.ps1 puts it in resources/scs-sdk-plugin).
 pub const BUNDLED_PLUGIN: &[u8] = include_bytes!("../resources/scs-sdk-plugin/scs-telemetry.dll");
 
 #[derive(Clone, Debug)]
@@ -38,7 +43,18 @@ impl GameInstall {
     }
 
     pub fn compatible(&self) -> bool {
-        self.plugins.values().any(|p| COMPATIBLE.contains(&p.as_str()))
+        self.plugins.values().any(|p| COMPATIBLE.contains(&p.as_str()) || p.starts_with(OWN_BUILD))
+    }
+
+    /// The game has the plugin file this program installs, in an older build than the one it
+    /// carries: RenCloud's own release, or an earlier build of this project's.
+    pub fn updatable(&self) -> bool {
+        let Some(installed) = self.plugins.get(PLUGIN_FILE) else { return false };
+        match (build_number(installed), own_build(BUNDLED_PLUGIN).as_deref().and_then(build_number)) {
+            (Some(installed), Some(bundled)) => installed < bundled,
+            (None, Some(_)) => installed == "RenCloud",
+            _ => false,
+        }
     }
 
     pub fn describe(&self) -> String {
@@ -47,7 +63,9 @@ impl GameInstall {
         }
         let names: std::collections::BTreeSet<&str> = self.plugins.values().map(String::as_str).collect();
         let names = names.into_iter().collect::<Vec<_>>().join(", ");
-        if self.compatible() {
+        if self.updatable() {
+            t!("{names} (새 빌드 있음)", names = names)
+        } else if self.compatible() {
             names
         } else {
             t!("{names} (호환 미확인)", names = names)
@@ -117,6 +135,19 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     haystack.windows(needle.len()).any(|w| w == needle)
 }
 
+/// 1 for "SCS Haptics build 1"; None for another provider's name.
+fn build_number(provider: &str) -> Option<u32> {
+    provider.strip_prefix(OWN_BUILD)?.parse().ok()
+}
+
+/// "SCS Haptics build 1" when the DLL is this project's build of the plugin.
+fn own_build(data: &[u8]) -> Option<String> {
+    let marker = OWN_BUILD.as_bytes();
+    let at = data.windows(marker.len()).position(|w| w == marker)? + marker.len();
+    let digits: String = data[at..].iter().take_while(|b| b.is_ascii_digit()).map(|&b| b as char).collect();
+    (!digits.is_empty()).then(|| format!("{OWN_BUILD}{digits}"))
+}
+
 pub fn scan_plugins(plugins_dir: &Path) -> BTreeMap<String, String> {
     let mut found = BTreeMap::new();
     let Ok(entries) = std::fs::read_dir(plugins_dir) else { return found };
@@ -126,6 +157,10 @@ pub fn scan_plugins(plugins_dir: &Path) -> BTreeMap<String, String> {
             continue;
         }
         let Ok(data) = std::fs::read(&path) else { continue };
+        if let Some(build) = own_build(&data) {
+            found.insert(entry.file_name().to_string_lossy().into_owned(), build);
+            continue;
+        }
         for (mapping, provider) in PROVIDERS {
             let needle: Vec<u8> = format!("Local\\{mapping}").encode_utf16().flat_map(u16::to_le_bytes).collect();
             if contains(&data, &needle) {
@@ -183,7 +218,20 @@ pub fn install(game: &mut GameInstall) -> std::io::Result<PathBuf> {
     let dir = game.plugins_dir();
     std::fs::create_dir_all(&dir)?;
     let target = dir.join(PLUGIN_FILE);
-    std::fs::write(&target, BUNDLED_PLUGIN)?;
+    // the plugin an earlier install moved aside, which no game holds any more
+    let aside = dir.join(format!("{PLUGIN_FILE}.old"));
+    let _ = std::fs::remove_file(&aside);
+    if let Err(error) = std::fs::write(&target, BUNDLED_PLUGIN) {
+        // A running game holds its plugin: Windows will not write into a loaded DLL, but lets
+        // it be renamed. The game keeps the one it loaded and takes the new one next time.
+        if !target.is_file() || std::fs::rename(&target, &aside).is_err() {
+            return Err(error);
+        }
+        if let Err(error) = std::fs::write(&target, BUNDLED_PLUGIN) {
+            let _ = std::fs::rename(&aside, &target);
+            return Err(error);
+        }
+    }
     game.plugins = scan_plugins(&dir);
     Ok(target)
 }
@@ -193,13 +241,58 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_bundled_plugin_is_a_rencloud_build() {
+    fn the_bundled_plugin_is_this_projects_build() {
         let dir = std::env::temp_dir().join(format!("ats_haptics_plugin_{}", std::process::id()));
         let mut game = GameInstall { key: "ATS".into(), name: "ATS".into(), path: dir.clone(), plugins: BTreeMap::new() };
         let target = install(&mut game).unwrap();
         assert!(target.ends_with(PLUGIN_FILE));
-        assert_eq!(game.plugins.get(PLUGIN_FILE).map(String::as_str), Some("RenCloud"));
+        let provider = game.plugins.get(PLUGIN_FILE).cloned().unwrap_or_default();
+        assert!(provider.starts_with(OWN_BUILD) && provider.len() > OWN_BUILD.len(), "{provider}");
         assert!(game.compatible());
+        // it serves RenCloud's mapping name, which is what tells RenCloud's own release
+        let name: Vec<u8> = r"Local\SCSTelemetry".encode_utf16().flat_map(u16::to_le_bytes).collect();
+        assert!(contains(BUNDLED_PLUGIN, &name));
+        assert_eq!(own_build(&name), None);
+        // what was just installed is the build this program carries: nothing newer to offer
+        assert!(!game.updatable());
+        assert!(!game.describe().contains('('), "{}", game.describe());
+        // RenCloud's own release, or an earlier build of ours, is one this program can replace
+        for older in ["RenCloud", "SCS Haptics build 0"] {
+            game.plugins.insert(PLUGIN_FILE.into(), older.into());
+            assert!(game.updatable() && game.compatible(), "{older}");
+            assert!(game.describe().starts_with(older) && game.describe().len() > older.len(), "{}", game.describe());
+        }
+        // a build newer than this program's, another provider, another file: left alone
+        game.plugins.insert(PLUGIN_FILE.into(), "SCS Haptics build 9999".into());
+        assert!(!game.updatable());
+        game.plugins.insert(PLUGIN_FILE.into(), "TruckDash".into());
+        assert!(!game.updatable());
+        game.plugins = BTreeMap::from([("other.dll".to_string(), "RenCloud".to_string())]);
+        assert!(!game.updatable());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_plugin_the_running_game_holds_is_moved_aside() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = std::env::temp_dir().join(format!("ats_haptics_plugin_held_{}", std::process::id()));
+        let mut game = GameInstall { key: "ATS".into(), name: "ATS".into(), path: dir.clone(), plugins: BTreeMap::new() };
+        std::fs::create_dir_all(game.plugins_dir()).unwrap();
+        let target = game.plugins_dir().join(PLUGIN_FILE);
+        std::fs::write(&target, b"an older plugin").unwrap();
+        // as a loaded DLL is held: others may read and rename it, not write it
+        let (share_read, share_delete) = (1, 4);
+        let held = std::fs::OpenOptions::new().read(true).share_mode(share_read | share_delete).open(&target).unwrap();
+        assert!(std::fs::write(&target, b"x").is_err());
+        assert_eq!(install(&mut game).unwrap(), target);
+        assert_eq!(std::fs::read(&target).unwrap(), BUNDLED_PLUGIN);
+        let aside = game.plugins_dir().join(format!("{PLUGIN_FILE}.old"));
+        assert!(aside.is_file());
+        assert_eq!(game.plugins.len(), 1, "the one moved aside is no plugin the game loads");
+        // the game has quit: the next install clears it away
+        drop(held);
+        install(&mut game).unwrap();
+        assert!(!aside.exists());
         let _ = std::fs::remove_dir_all(dir);
     }
 

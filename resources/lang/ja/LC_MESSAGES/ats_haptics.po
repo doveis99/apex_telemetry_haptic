@@ -60,8 +60,11 @@ msgstr "bin\\win_x64\\amtrucks.exe または eurotrucks2.exe があるゲーム�
 msgid "{error} · {seconds}초 후 재시도"
 msgstr "{error} · {seconds} 秒後に再試行"
 
-msgid "{game}의 plugins 폴더에 RenCloud scs-telemetry.dll(v1.12.1, MIT)을 복사합니다."
-msgstr "{game} の plugins フォルダーに RenCloud scs-telemetry.dll（v1.12.1、MIT）をコピーします。"
+msgid "{game}의 plugins 폴더에 동봉한 scs-telemetry.dll을 복사합니다. (RenCloud V.1.12.1 기반, SCS SDK 1.16, MIT)"
+msgstr "{game} の plugins フォルダーに同梱の scs-telemetry.dll をコピーします。（RenCloud V.1.12.1 ベース、SCS SDK 1.16、MIT）"
+
+msgid "{names} (새 빌드 있음)"
+msgstr "{names}（新しいビルドあり）"
 
 msgid "{names} (호환 미확인)"
 msgstr "{names}（互換性未確認）"
@@ -752,6 +755,9 @@ msgstr "テレメトリープラグイン"
 
 msgid "텔레메트리 플러그인 없음"
 msgstr "テレメトリープラグインなし"
+
+msgid "텔레메트리 플러그인의 새 빌드가 있습니다 → '텔레메트리 플러그인'"
+msgstr "テレメトリープラグインの新しいビルドがあります →「テレメトリープラグイン」"
 
 msgid "토크컨버터"
 msgstr "トルコン"

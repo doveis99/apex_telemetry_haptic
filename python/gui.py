@@ -650,6 +650,9 @@ class App:
         if games and not any(game.compatible for game in games):
             self.status.set(t("호환되는 텔레메트리 플러그인이 없습니다 → '텔레메트리 플러그인'"))
             self.open_plugin_dialog()
+        elif any(game.updatable for game in games):
+            # nothing is broken: say so once, in the status line, and leave the window alone
+            self.status.set(t("텔레메트리 플러그인의 새 빌드가 있습니다 → '텔레메트리 플러그인'"))
 
     def _on_auto_start(self) -> None:
         # An app option, not a tuning value: saved right away.
@@ -1062,7 +1065,7 @@ class PluginDialog:
         for row, game in enumerate(self.games, start=1):
             tip(ttk.Label(self.body, text=game.name, width=24), str(game.path)).grid(row=row, column=0, sticky="w")
             ttk.Label(self.body, text=game.describe(), width=34).grid(row=row, column=1, sticky="w", padx=px(8))
-            text = t("재설치") if game.compatible else t("설치")
+            text = t("업데이트") if game.updatable else t("재설치") if game.compatible else t("설치")
             tip(ttk.Button(self.body, text=text, command=lambda g=game: self._install(g)),
                 t("동봉한 RenCloud scs-telemetry.dll을 이 게임의 plugins 폴더에 복사합니다. "
                   "다른 플러그인은 건드리지 않습니다.")).grid(row=row, column=2, pady=px(2))
@@ -1088,7 +1091,7 @@ class PluginDialog:
     def _install(self, game: plugin_install.GameInstall) -> None:
         if not messagebox.askokcancel(
                 t("플러그인 설치"),
-                t("{game}의 plugins 폴더에 RenCloud scs-telemetry.dll(v1.12.1, MIT)을 복사합니다.", game=game.name)
+                t("{game}의 plugins 폴더에 동봉한 scs-telemetry.dll을 복사합니다. (RenCloud V.1.12.1 기반, SCS SDK 1.16, MIT)", game=game.name)
                 + f"\n\n{game.plugins_dir}\n\n" + t("게임이 실행 중이면 다음 실행부터 적용됩니다."), parent=self.top):
             return
         try:

@@ -60,8 +60,11 @@ msgstr "Выберите папку игры, в которой есть bin\\wi
 msgid "{error} · {seconds}초 후 재시도"
 msgstr "{error} · повтор через {seconds} с"
 
-msgid "{game}의 plugins 폴더에 RenCloud scs-telemetry.dll(v1.12.1, MIT)을 복사합니다."
-msgstr "Копирует RenCloud scs-telemetry.dll (v1.12.1, MIT) в папку plugins игры {game}."
+msgid "{game}의 plugins 폴더에 동봉한 scs-telemetry.dll을 복사합니다. (RenCloud V.1.12.1 기반, SCS SDK 1.16, MIT)"
+msgstr "Копирует прилагаемый scs-telemetry.dll в папку plugins игры {game}. (На основе RenCloud V.1.12.1, SCS SDK 1.16, MIT)"
+
+msgid "{names} (새 빌드 있음)"
+msgstr "{names} (доступна более новая сборка)"
 
 msgid "{names} (호환 미확인)"
 msgstr "{names} (совместимость не проверена)"
@@ -752,6 +755,9 @@ msgstr "Плагин телеметрии"
 
 msgid "텔레메트리 플러그인 없음"
 msgstr "Нет плагина телеметрии"
+
+msgid "텔레메트리 플러그인의 새 빌드가 있습니다 → '텔레메트리 플러그인'"
+msgstr "Доступна более новая сборка плагина телеметрии → «Плагин телеметрии»"
 
 msgid "토크컨버터"
 msgstr "Гидроавтомат"

@@ -91,7 +91,14 @@ impl Plugins {
                 name: game.name.as_str().into(),
                 path: game.path.display().to_string().into(),
                 describe: game.describe().into(),
-                button: if game.compatible() { t!("재설치") } else { t!("설치") }.into(),
+                button: if game.updatable() {
+                    t!("업데이트")
+                } else if game.compatible() {
+                    t!("재설치")
+                } else {
+                    t!("설치")
+                }
+                .into(),
             })
             .collect();
         inner.dialog.set_ui_font(ats_haptics::i18n::ui_font().into());
@@ -131,7 +138,7 @@ impl Plugins {
         let Some(mut game) = self.0.borrow().games.iter().find(|g| g.key == key).cloned() else { return };
         let text = format!(
             "{}\n\n{}\n\n{}",
-            t!("{game}의 plugins 폴더에 RenCloud scs-telemetry.dll(v1.12.1, MIT)을 복사합니다.", game = game.name),
+            t!("{game}의 plugins 폴더에 동봉한 scs-telemetry.dll을 복사합니다. (RenCloud V.1.12.1 기반, SCS SDK 1.16, MIT)", game = game.name),
             game.plugins_dir().display(),
             t!("게임이 실행 중이면 다음 실행부터 적용됩니다.")
         );

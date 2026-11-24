@@ -45,6 +45,7 @@ function Add-Text([string]$Path, [string]$From) {
 }
 
 Add-Text (Join-Path $repo "resources\scs-sdk-plugin\LICENSE") "scs-sdk-plugin V.1.12.1, scs-telemetry.dll (LICENSE)"
+Add-Text (Join-Path $repo "plugin\scs_sdk\sdk_license.txt") "SCS SDK 1.16, headers scs-telemetry.dll is built with (sdk_license.txt)"
 
 foreach ($crate in $crates) {
     $dir = $registries | ForEach-Object { Join-Path $_ "$($crate.Name)-$($crate.Version)" } |

@@ -26,6 +26,7 @@ STRING_SIZE = 64
 # offset, struct format
 _FIELDS = {
     "sdk_active": (0, "?"),
+    "plugin_build": (452, "I"),  # this project's build of the plugin; 0 from any other
     "paused": (4, "?"),
     "render_time": (24, "Q"),
     "revision": (40, "I"),
@@ -85,10 +86,14 @@ _ARRAYS = {
     "wheel_pos_x": (1676, "16f"),  # negative = left side of the truck
     "wheel_pos_z": (1804, "16f"),  # negative = ahead of the truck's origin
     "shifter_toggle": (1606, "2?"),  # H-shifter range / splitter switches
-    # Gameplay event flags; the plugin raises them briefly when the event fires.
+    # Gameplay event flags: the first five flip at each event and stay, refuel is held (see EventPulses).
     "game_events": (4303, "6?"),
 }
 GAME_EVENT_NAMES = ("delivered", "fined", "tollgate", "ferry", "train", "refuel")
+# The first of GAME_EVENT_NAMES are flags the plugin flips at each event and then leaves
+# (`^= true` in its telemetry_gameplay, since its revision 11); refuel it holds while fuel rises.
+FLIPPED_EVENTS = 5
+EVENT_PULSE_S = 0.3  # how long a flipped flag reads as its event
 _SUBSTANCES_OFFSET = 4400
 _TRAILERS_OFFSET = 6000
 _TRAILER_SIZE = 1560
@@ -156,6 +161,41 @@ class Frame:
         return self.active and not self.paused
 
 
+class EventPulses:
+    """Turns the plugin's flipping event flags into the short pulse the synth, the logs and the replays read.
+
+    A flag that is on says nothing about now: after one tollgate it stays on until the next one turns it
+    off. So an event is a flag changing, in either direction, and the state found on the first read of a
+    game session is no event.
+    """
+
+    def __init__(self, pulse_s: float = EVENT_PULSE_S) -> None:
+        self.pulse_s = pulse_s
+        self._flags: tuple[bool, ...] | None = None
+        self._until = [0.0] * FLIPPED_EVENTS
+        self._render_time = 0
+
+    def forget(self) -> None:
+        self._flags = None
+        self._until = [0.0] * FLIPPED_EVENTS
+
+    def read(self, active: bool, render_time: int, flags: tuple[bool, ...], now: float) -> list[bool]:
+        """Which events are sounding at `now`, given the flags just read."""
+        # the plugin clears its memory as a game starts: flags going back to off then are no events.
+        # The game clock starting over catches a restart nobody read in between.
+        if not active or render_time < self._render_time:
+            self.forget()
+        self._render_time = render_time
+        if not active:
+            return [False] * FLIPPED_EVENTS
+        if self._flags is not None:
+            for i in range(FLIPPED_EVENTS):
+                if flags[i] != self._flags[i]:
+                    self._until[i] = now + self.pulse_s
+        self._flags = tuple(flags)
+        return [now < until for until in self._until]
+
+
 class SharedMemoryTelemetry:
     """Poll the plugin's shared memory. read() returns None until the game runs."""
 
@@ -167,6 +207,7 @@ class SharedMemoryTelemetry:
         self._substances_read_at = 0.0
         self._next_open_attempt = 0.0
         self.problem: str | None = None  # why no usable mapping was found, for the UI
+        self.events = EventPulses()
 
     def _open(self) -> bool:
         if time.monotonic() < self._next_open_attempt:
@@ -190,7 +231,7 @@ class SharedMemoryTelemetry:
                 self.problem = t("{name} 플러그인 버전 {revision} (지원: {supported})", name=name.split(chr(92))[-1],
                                  revision=revision, supported=SUPPORTED_REVISION)
                 continue
-            self._mem, self.name = mem, name
+            self._mem, self.name, self._mapping = mem, name, name
             return True
         return False
 
@@ -199,6 +240,7 @@ class SharedMemoryTelemetry:
             self._mem.close()
             self._mem = None
         self._substances_read_at = 0.0  # another game names its substances differently
+        self.events.forget()
 
     def _read_substances(self, buf) -> None:
         names = []
@@ -219,6 +261,10 @@ class SharedMemoryTelemetry:
             return None
         buf = self._mem.buf
         values = {key: struct.unpack_from(fmt, buf, off)[0] for key, (off, fmt) in _FIELDS.items()}
+        # which build of this project's plugin fills the mapping: the status line and the debug log's
+        # settings file say what fed a drive
+        build = values["plugin_build"]
+        self.name = f"{self._mapping}, build {build}" if build else self._mapping
         arrays = {key: struct.unpack_from(fmt, buf, off) for key, (off, fmt) in _ARRAYS.items()}
         if time.monotonic() - self._substances_read_at > 2.0:
             self._read_substances(buf)
@@ -242,6 +288,9 @@ class SharedMemoryTelemetry:
                 ("I", _TRAILER_WHEEL_SUBSTANCE), ("f", _TRAILER_WHEEL_DEFLECTION), ("?", _TRAILER_WHEEL_ON_GROUND),
                 ("f", _TRAILER_WHEEL_POS_X), ("f", _TRAILER_WHEEL_VELOCITY), ("f", _TRAILER_WHEEL_RADIUS)))
             trailer_wheels += [self._wheel(*wheel, powered=False) for wheel in zip(*columns)]
+        flags = arrays["game_events"]
+        sounding = self.events.read(values["sdk_active"], values["render_time"], flags[:FLIPPED_EVENTS],
+                                    time.monotonic()) + list(flags[FLIPPED_EVENTS:])
         return Frame(
             active=values["sdk_active"], paused=values["paused"], render_time=values["render_time"],
             rpm=values["rpm"], rpm_max=values["rpm_max"] or 2100.0, speed=values["speed"],
@@ -260,7 +309,7 @@ class SharedMemoryTelemetry:
             blinker_left=values["blinker_left"], blinker_right=values["blinker_right"],
             shifter_toggle=arrays["shifter_toggle"],
             trailer_attached=trailer_attached,
-            game_events=frozenset(name for name, flag in zip(GAME_EVENT_NAMES, arrays["game_events"]) if flag),
+            game_events=frozenset(name for name, flag in zip(GAME_EVENT_NAMES, sounding) if flag),
         )
 
 

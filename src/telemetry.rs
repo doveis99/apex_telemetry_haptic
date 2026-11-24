@@ -23,6 +23,7 @@ mod offset {
     pub const RENDER_TIME: usize = 24;
     pub const REVISION: usize = 40;
     pub const GAME: usize = 52; // 1 ETS2, 2 ATS, 0 unknown
+    pub const PLUGIN_BUILD: usize = 452; // this project's build of the plugin; 0 from any other
     pub const RETARDER_STEPS: usize = 76;
     pub const WHEEL_COUNT: usize = 80;
     pub const MAX_TRAILERS: usize = 92;
@@ -72,6 +73,60 @@ mod offset {
 }
 
 pub const GAME_EVENT_NAMES: [&str; 6] = ["delivered", "fined", "tollgate", "ferry", "train", "refuel"];
+/// The first of GAME_EVENT_NAMES are flags the plugin flips at each event and then leaves
+/// (`^= true` in its telemetry_gameplay, since its revision 11); refuel it holds while fuel rises.
+const FLIPPED_EVENTS: usize = 5;
+/// how long a flipped flag reads as its event
+const EVENT_PULSE_S: f64 = 0.3;
+
+/// Turns the plugin's flipping event flags into the short pulse the synth, the logs and the
+/// replays read. A flag that is on says nothing about now: after one tollgate it stays on until
+/// the next one turns it off. So an event is a flag changing, in either direction, and the
+/// state found on the first read of a game session is no event.
+struct EventPulses {
+    flags: Option<[bool; FLIPPED_EVENTS]>,
+    until: [Option<Instant>; FLIPPED_EVENTS],
+    render_time: i64,
+    pulse: std::time::Duration,
+}
+
+impl EventPulses {
+    fn new() -> Self {
+        EventPulses {
+            flags: None,
+            until: [None; FLIPPED_EVENTS],
+            render_time: 0,
+            pulse: std::time::Duration::from_secs_f64(EVENT_PULSE_S),
+        }
+    }
+
+    fn forget(&mut self) {
+        self.flags = None;
+        self.until = [None; FLIPPED_EVENTS];
+    }
+
+    /// Which events are sounding at `now`, given the flags just read.
+    fn read(&mut self, active: bool, render_time: i64, flags: [bool; FLIPPED_EVENTS], now: Instant) -> [bool; FLIPPED_EVENTS] {
+        // the plugin clears its memory as a game starts: flags going back to off then are no
+        // events. The game clock starting over catches a restart nobody read in between.
+        if !active || render_time < self.render_time {
+            self.forget();
+        }
+        self.render_time = render_time;
+        if !active {
+            return [false; FLIPPED_EVENTS];
+        }
+        if let Some(before) = self.flags {
+            for i in 0..FLIPPED_EVENTS {
+                if flags[i] != before[i] {
+                    self.until[i] = Some(now + self.pulse);
+                }
+            }
+        }
+        self.flags = Some(flags);
+        std::array::from_fn(|i| self.until[i].is_some_and(|until| now < until))
+    }
+}
 pub const MAX_TRAILERS: usize = 10;
 const MAPPING_NEEDED: usize = offset::TRAILERS + MAX_TRAILERS * offset::TRAILER_SIZE;
 /// Game frame rate the test drive holds its frames at.
@@ -307,6 +362,9 @@ pub struct SharedMemoryTelemetry {
     buf: Vec<u8>,
     /// the running game's number in the plugin's terms, when known
     expected_game: Option<u32>,
+    events: EventPulses,
+    /// PLUGIN_BUILD of this project's plugin build, 0 while another plugin feeds the mapping
+    plugin_build: u32,
 }
 
 impl Default for SharedMemoryTelemetry {
@@ -327,6 +385,8 @@ impl SharedMemoryTelemetry {
             problem: None,
             buf: Vec::new(),
             expected_game: None,
+            events: EventPulses::new(),
+            plugin_build: 0,
         }
     }
 
@@ -462,10 +522,16 @@ impl TelemetrySource for SharedMemoryTelemetry {
             }
         }
         let rpm_max = b.f32(offset::RPM_MAX);
+        let active = b.bool(offset::SDK_ACTIVE);
+        let plugin_build = b.u32(offset::PLUGIN_BUILD);
+        let render_time = b.u64(offset::RENDER_TIME) as i64;
+        let flipped = std::array::from_fn(|i| b.bool(offset::GAME_EVENTS + i));
+        let sounding = self.events.read(active, render_time, flipped, Instant::now());
+        self.plugin_build = plugin_build;
         Some(Frame {
-            active: b.bool(offset::SDK_ACTIVE),
+            active,
             paused: b.bool(offset::PAUSED),
-            render_time: b.u64(offset::RENDER_TIME) as i64,
+            render_time,
             rpm: b.f32(offset::RPM),
             rpm_max: if rpm_max != 0.0 { rpm_max } else { 2100.0 },
             speed: b.f32(offset::SPEED),
@@ -495,7 +561,7 @@ impl TelemetrySource for SharedMemoryTelemetry {
             game_events: GAME_EVENT_NAMES
                 .iter()
                 .enumerate()
-                .filter(|(i, _)| b.bool(offset::GAME_EVENTS + i))
+                .filter(|&(i, _)| if i < FLIPPED_EVENTS { sounding[i] } else { b.bool(offset::GAME_EVENTS + i) })
                 .map(|(_, name)| name.to_string())
                 .collect(),
         })
@@ -503,11 +569,18 @@ impl TelemetrySource for SharedMemoryTelemetry {
 
     fn close(&mut self) {
         self.mem = None;
+        self.events.forget();
         self.substances_read_at = None; // another game names its substances differently
     }
 
+    /// The mapping, and which build of this project's plugin fills it: the status line and the
+    /// debug log's settings file say what fed a drive.
     fn name(&self) -> String {
-        self.mapping_name.clone().unwrap_or_default()
+        let mapping = self.mapping_name.clone().unwrap_or_default();
+        match self.plugin_build {
+            0 => mapping,
+            build => format!("{mapping}, build {build}"),
+        }
     }
 
     fn problem(&self) -> Option<String> {
@@ -739,5 +812,64 @@ mod tests {
         assert_eq!(opened(&names[..1], Some("ETS2")), Some(names[0].clone()));
         // a mapping the game cleared on quitting is not read
         assert_eq!(opened(&names[2..], Some("ETS2")), None);
+    }
+
+    fn poke(mapping: &Mapping, at: usize, bytes: &[u8]) {
+        // SAFETY: plant() mapped MAPPING_NEEDED writable bytes; every offset used is inside.
+        unsafe { std::slice::from_raw_parts_mut(mapping.view.Value as *mut u8, MAPPING_NEEDED)[at..at + bytes.len()].copy_from_slice(bytes) }
+    }
+
+    #[test]
+    fn the_name_says_which_build_of_the_plugin_feeds_it() {
+        let name = format!("Local\\ats_haptics_test_{}_build", std::process::id());
+        let plugin = plant(&name, SUPPORTED_REVISION, 1);
+        let mut source = SharedMemoryTelemetry::new(vec![name.clone()]);
+        source.read().unwrap();
+        assert_eq!(source.name(), name, "RenCloud's own release leaves the build at 0");
+        poke(&plugin, offset::PLUGIN_BUILD, &2u32.to_le_bytes());
+        source.read().unwrap();
+        assert_eq!(source.name(), format!("{name}, build 2"));
+    }
+
+    #[test]
+    fn a_flipped_event_flag_is_one_event_whichever_way_it_flips() {
+        let name = format!("Local\\ats_haptics_test_{}_events", std::process::id());
+        let plugin = plant(&name, SUPPORTED_REVISION, 1);
+        let tollgate = offset::GAME_EVENTS + 2;
+        let ferry = offset::GAME_EVENTS + 3;
+        poke(&plugin, offset::SDK_ACTIVE, &[1]);
+        poke(&plugin, ferry, &[1]); // left on by a ferry earlier in this game session
+        let mut source = SharedMemoryTelemetry::new(vec![name]);
+        source.events.pulse = std::time::Duration::from_millis(40);
+        let mut events = |plugin: &Mapping, render_time: u64| {
+            poke(plugin, offset::RENDER_TIME, &render_time.to_le_bytes());
+            source.read().unwrap().game_events.into_iter().collect::<Vec<_>>().join(" ")
+        };
+        assert_eq!(events(&plugin, 1000), "", "a flag found on is no event");
+        poke(&plugin, tollgate, &[1]);
+        assert_eq!(events(&plugin, 2000), "tollgate", "first tollgate: the flag goes on");
+        assert_eq!(events(&plugin, 3000), "tollgate", "and reads as the event for a moment");
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        assert_eq!(events(&plugin, 4000), "", "then no longer, though the flag stays on");
+        poke(&plugin, tollgate, &[0]);
+        assert_eq!(events(&plugin, 5000), "tollgate", "second tollgate: the flag goes off");
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        // refuelling is a state the plugin holds, not a flip
+        poke(&plugin, offset::GAME_EVENTS + 5, &[1]);
+        assert_eq!(events(&plugin, 6000), "refuel");
+        poke(&plugin, offset::GAME_EVENTS + 5, &[0]);
+        assert_eq!(events(&plugin, 7000), "");
+        // the game quits and starts again: the plugin's memory starts from zero, the ferry flag with it
+        poke(&plugin, offset::SDK_ACTIVE, &[0]);
+        assert_eq!(events(&plugin, 7000), "");
+        poke(&plugin, ferry, &[0]);
+        poke(&plugin, offset::SDK_ACTIVE, &[1]);
+        assert_eq!(events(&plugin, 100), "", "a flag cleared by a restart is no event");
+        // ... also when nothing was read while it was down
+        poke(&plugin, ferry, &[1]);
+        assert_eq!(events(&plugin, 8000), "ferry");
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        poke(&plugin, ferry, &[0]);
+        assert_eq!(events(&plugin, 50), "", "the game clock starting over is a restart");
     }
 }

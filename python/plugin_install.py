@@ -3,8 +3,10 @@
 The haptics read the shared memory of a RenCloud scs-sdk-plugin (revision
 12) build. TruckDash ships such a build under its own mapping name; SimHub's
 plugin uses yet another layout revision that has not been verified. When no
-compatible plugin is found, the bundled RenCloud scs-telemetry.dll (MIT,
-V.1.12.1) can be copied into the game's plugins folder.
+compatible plugin is found, the bundled scs-telemetry.dll can be copied into
+the game's plugins folder. The bundled one is this project's build of
+RenCloud's V.1.12.1 (MIT) against SCS SDK 1.16, with fixes and the same memory
+layout: source and changes in plugin/, built by tools/build_plugin.ps1.
 """
 
 from __future__ import annotations
@@ -22,6 +24,9 @@ PLUGIN_FILE = "scs-telemetry.dll"
 # shared-memory name inside the DLL (UTF-16) -> provider
 PROVIDERS = {"SCSTelemetry": "RenCloud", "TruckDashTelemetry": "TruckDash", "SHSCSTelemetry": "SimHub"}
 COMPATIBLE = {"RenCloud", "TruckDash"}
+# What this project's build of the plugin carries (PLUGIN_BUILD_NAME in its source), followed by its
+# build number. Looked for first: it uses RenCloud's mapping name too.
+OWN_BUILD = "SCS Haptics build "
 
 
 def resource_dir() -> Path:
@@ -46,13 +51,45 @@ class GameInstall:
 
     @property
     def compatible(self) -> bool:
-        return any(provider in COMPATIBLE for provider in self.plugins.values())
+        return any(provider in COMPATIBLE or provider.startswith(OWN_BUILD) for provider in self.plugins.values())
+
+    @property
+    def updatable(self) -> bool:
+        """The game has the plugin file this program installs, in an older build than the bundled one:
+        RenCloud's own release, or an earlier build of this project's."""
+        installed = self.plugins.get(PLUGIN_FILE)
+        bundled = _build_number(bundled_build())
+        if installed is None or bundled is None:
+            return False
+        number = _build_number(installed)
+        return installed == "RenCloud" if number is None else number < bundled
 
     def describe(self) -> str:
         if not self.plugins:
             return t("텔레메트리 플러그인 없음")
         names = ", ".join(sorted(set(self.plugins.values())))
+        if self.updatable:
+            return t("{names} (새 빌드 있음)", names=names)
         return names if self.compatible else t("{names} (호환 미확인)", names=names)
+
+
+def _own_build(data: bytes) -> str | None:
+    """'SCS Haptics build 1' when the DLL is this project's build of the plugin."""
+    own = re.search(re.escape(OWN_BUILD.encode()) + rb"\d+", data)
+    return own.group().decode() if own else None
+
+
+def _build_number(provider: str | None) -> int | None:
+    if provider and provider.startswith(OWN_BUILD) and provider[len(OWN_BUILD):].isdigit():
+        return int(provider[len(OWN_BUILD):])
+    return None
+
+
+def bundled_build() -> str | None:
+    try:
+        return _own_build(bundled_plugin().read_bytes())
+    except OSError:
+        return None
 
 
 def _steam_root() -> Path | None:
@@ -88,6 +125,10 @@ def scan_plugins(plugins_dir: Path) -> dict[str, str]:
         try:
             data = dll.read_bytes()
         except OSError:
+            continue
+        own = _own_build(data)
+        if own:
+            found[dll.name] = own
             continue
         for mapping, provider in PROVIDERS.items():
             if ("Local\\" + mapping).encode("utf-16-le") in data:
@@ -135,6 +176,23 @@ def install(game: GameInstall) -> Path:
         raise FileNotFoundError(t("번들 플러그인이 없습니다: {path}", path=source))
     game.plugins_dir.mkdir(parents=True, exist_ok=True)
     target = game.plugins_dir / PLUGIN_FILE
-    shutil.copyfile(source, target)
+    # the plugin an earlier install moved aside, which no game holds any more
+    aside = game.plugins_dir / (PLUGIN_FILE + ".old")
+    try:
+        aside.unlink()
+    except OSError:
+        pass
+    try:
+        shutil.copyfile(source, target)
+    except OSError:
+        # A running game holds its plugin: Windows will not write into a loaded DLL, but lets it be
+        # renamed. The game keeps the one it loaded and takes the new one next time.
+        if not target.is_file():
+            raise
+        try:
+            target.replace(aside)
+        except OSError:
+            pass
+        shutil.copyfile(source, target)  # raises the same error again when nothing could be moved
     game.plugins = scan_plugins(game.plugins_dir)
     return target

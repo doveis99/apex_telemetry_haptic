@@ -60,8 +60,11 @@ msgstr "Escolha a pasta do jogo que contém bin\\win_x64\\amtrucks.exe ou eurotr
 msgid "{error} · {seconds}초 후 재시도"
 msgstr "{error} · nova tentativa em {seconds} s"
 
-msgid "{game}의 plugins 폴더에 RenCloud scs-telemetry.dll(v1.12.1, MIT)을 복사합니다."
-msgstr "Copia o RenCloud scs-telemetry.dll (v1.12.1, MIT) para a pasta plugins de {game}."
+msgid "{game}의 plugins 폴더에 동봉한 scs-telemetry.dll을 복사합니다. (RenCloud V.1.12.1 기반, SCS SDK 1.16, MIT)"
+msgstr "Copia o scs-telemetry.dll incluído para a pasta plugins de {game}. (Baseado no RenCloud V.1.12.1, SCS SDK 1.16, MIT)"
+
+msgid "{names} (새 빌드 있음)"
+msgstr "{names} (há uma compilação mais recente)"
 
 msgid "{names} (호환 미확인)"
 msgstr "{names} (compatibilidade não confirmada)"
@@ -752,6 +755,9 @@ msgstr "Plugin de telemetria"
 
 msgid "텔레메트리 플러그인 없음"
 msgstr "Sem plugin de telemetria"
+
+msgid "텔레메트리 플러그인의 새 빌드가 있습니다 → '텔레메트리 플러그인'"
+msgstr "Há uma compilação mais recente do plugin de telemetria → \"Plugin de telemetria\""
 
 msgid "토크컨버터"
 msgstr "Conversor"

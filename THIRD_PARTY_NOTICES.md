@@ -20,14 +20,24 @@ Public License v3.0 or later.
 
 <https://github.com/RenCloud/scs-sdk-plugin>
 
-`resources/scs-sdk-plugin/scs-telemetry.dll` is the unmodified Win64 build from release
-V.1.12.1 (`release_v_1_12_1.zip`, SHA-256
-`3679ec81407de0ebfb45241e496e2ad31e30a6e409ef0246fc86195bfee9c9a5`; DLL SHA-256
-`1d03dbc7a975e72203c60a7b9998021ceb8800b836bf28a131279979ad386cd4`). `SCSHaptics.exe` carries
-it inside and copies it into the game's `plugins` folder from its plugin window. The
-shared-memory layout read by `src/telemetry.rs` and `python/telemetry.py` follows that plugin's
-`scs-telemetry-common.hpp` (revision 12). Its MIT license is in
-`resources/scs-sdk-plugin/LICENSE` and in `THIRD_PARTY_LICENSES.txt`.
+`plugin/src` and `plugin/inc` are the plugin's source at release V.1.12.1 (commit `d7216cb`), with
+this project's changes: each is marked `SCS Haptics build` in the source and listed in
+`plugin/README.md`. `resources/scs-sdk-plugin/scs-telemetry.dll` is the Win64 build of it that
+`tools/build_plugin.ps1` makes. `SCSHaptics.exe` carries it inside and copies it into the game's
+`plugins` folder from its plugin window. Releases up to 0.23.0 carried RenCloud's own unmodified
+build instead (`release_v_1_12_1.zip`, DLL SHA-256
+`1d03dbc7a975e72203c60a7b9998021ceb8800b836bf28a131279979ad386cd4`). The shared-memory layout read
+by `src/telemetry.rs` and `python/telemetry.py` follows the plugin's `scs-telemetry-common.hpp`
+(revision 12). Its MIT license is in `plugin/LICENSE`, `resources/scs-sdk-plugin/LICENSE` and
+`THIRD_PARTY_LICENSES.txt`.
+
+## SCS SDK (SCS Software) — MIT
+
+<https://modding.scssoft.com/wiki/Documentation/Engine/SDK/Telemetry>
+
+`plugin/scs_sdk/include` holds the headers of the SCS Telemetry SDK 1.16, unchanged, which the
+plugin is compiled against. Their license is in `plugin/scs_sdk/sdk_license.txt` and in
+`THIRD_PARTY_LICENSES.txt`.
 
 ## truck-telemetry — layout reference
 

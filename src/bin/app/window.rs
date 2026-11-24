@@ -908,6 +908,10 @@ impl App {
             self.status = t!("호환되는 텔레메트리 플러그인이 없습니다 → '텔레메트리 플러그인'");
             self.show_status();
             self.open_plugins();
+        } else if games.iter().any(|g| g.updatable()) {
+            // nothing is broken: say so once, in the status line, and leave the window alone
+            self.status = t!("텔레메트리 플러그인의 새 빌드가 있습니다 → '텔레메트리 플러그인'");
+            self.show_status();
         }
     }
 

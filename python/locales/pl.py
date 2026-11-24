@@ -42,6 +42,7 @@ MESSAGES = {
     "방향지시등 우": "Kierunkowskaz prawy",
     "텔레메트리 플러그인 없음": "Brak wtyczki telemetrii",
     "{names} (호환 미확인)": "{names} (zgodność niepotwierdzona)",
+    "{names} (새 빌드 있음)": "{names} (dostępna nowsza kompilacja)",
     "번들 플러그인이 없습니다: {path}": "Brak dołączonej wtyczki: {path}",
     "{name} 플러그인 버전 {revision} (지원: {supported})": "wtyczka {name} w wersji {revision} (obsługiwana: {supported})",
     "다운로드한 파일의 해시가 릴리스와 다릅니다": "Skrót pobranego pliku nie zgadza się z wydaniem",
@@ -116,6 +117,7 @@ MESSAGES = {
     "토크컨버터": "Hydrokinetyczna",
     "이벤트": "Zdarzenia",
     "호환되는 텔레메트리 플러그인이 없습니다 → '텔레메트리 플러그인'": "Brak zgodnej wtyczki telemetrii → „Wtyczka telemetrii”",
+    "텔레메트리 플러그인의 새 빌드가 있습니다 → '텔레메트리 플러그인'": "Dostępna nowsza kompilacja wtyczki telemetrii → „Wtyczka telemetrii”",
     "바뀐 설정을 저장할까요?": "Zapisać zmienione ustawienia?",
     "업데이트": "Aktualizacja",
     "업데이트 {version}": "Aktualizuj do {version}",
@@ -138,8 +140,8 @@ MESSAGES = {
     "bin\\win_x64\\amtrucks.exe 또는 eurotrucks2.exe가 있는 게임 폴더를 선택하세요.":
         "Wybierz folder gry zawierający bin\\win_x64\\amtrucks.exe lub eurotrucks2.exe.",
     "플러그인 설치": "Instalacja wtyczki",
-    "{game}의 plugins 폴더에 RenCloud scs-telemetry.dll(v1.12.1, MIT)을 복사합니다.":
-        "Kopiuje RenCloud scs-telemetry.dll (v1.12.1, MIT) do folderu plugins gry {game}.",
+    "{game}의 plugins 폴더에 동봉한 scs-telemetry.dll을 복사합니다. (RenCloud V.1.12.1 기반, SCS SDK 1.16, MIT)":
+        "Kopiuje dołączony scs-telemetry.dll do folderu plugins gry {game}. (Na podstawie RenCloud V.1.12.1, SCS SDK 1.16, MIT)",
     "게임이 실행 중이면 다음 실행부터 적용됩니다.": "Jeśli gra działa, zmiana zadziała od następnego uruchomienia.",
     "폴더에 쓸 권한이 없습니다. 프로그램을 관리자 권한으로 실행하거나 아래 파일을 직접 복사하세요.":
         "Brak uprawnień do zapisu w folderze. Uruchom program jako administrator lub skopiuj plik poniżej ręcznie.",
